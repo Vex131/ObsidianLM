@@ -1,0 +1,39 @@
+@"
+# Environment
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build output
+dist/
+build/
+.svelte-kit/
+.next/
+out/
+
+# Logs / temp
+logs/
+*.log
+tmp/
+.cache/
+
+# Local AI assets - do not commit models or runtime builds
+models/
+model/
+*.gguf
+*.safetensors
+*.ckpt
+runtimes/
+builds/
+llama.cpp/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+"@ | Set-Content .\.gitignore -Encoding UTF8
