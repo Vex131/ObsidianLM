@@ -1,0 +1,2 @@
+export const DEFAULT_OBSIDIANLM_PORT = 8090;
+export const DEFAULT_LLAMA_CPP_PORT = 8085;

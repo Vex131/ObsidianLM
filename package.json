@@ -1,0 +1,20 @@
+{
+  "name": "obsidianlm",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n service,web -c cyan,magenta \"npm --workspace @obsidianlm/service run dev\" \"npm --workspace @obsidianlm/web run dev\"",
+    "build": "npm --workspace @obsidianlm/shared run build && npm --workspace @obsidianlm/web run build && npm --workspace @obsidianlm/service run build",
+    "start": "npm --workspace @obsidianlm/service run start",
+    "typecheck": "npm --workspace @obsidianlm/shared run build && npm --workspace @obsidianlm/service run typecheck && npm --workspace @obsidianlm/web run typecheck && npm --workspace @obsidianlm/shared run typecheck",
+    "lint": "npm --workspace @obsidianlm/shared run build && npm --workspace @obsidianlm/service run lint && npm --workspace @obsidianlm/web run lint && npm --workspace @obsidianlm/shared run lint",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

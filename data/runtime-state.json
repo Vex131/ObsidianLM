@@ -1,0 +1,10 @@
+{
+  "activeRuntimeId": null,
+  "activeProfileId": null,
+  "pid": null,
+  "port": null,
+  "startedByObsidianLM": false,
+  "startedAt": null,
+  "commandHash": null,
+  "status": "stopped"
+}
