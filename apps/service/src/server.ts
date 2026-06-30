@@ -4,6 +4,8 @@ import fastifyStatic from "@fastify/static";
 import { registerStatusRoutes } from "./api/status.js";
 import { registerProfileRoutes } from "./api/profiles.js";
 import { registerRuntimeRoutes } from "./api/runtime.js";
+import { registerDiscoveryRoutes } from "./api/discovery.js";
+import { registerSettingsRoutes } from "./api/settings.js";
 import { ensureStorageFiles } from "./config/storage.js";
 import { webDistDir } from "./config/paths.js";
 import { RuntimeManager } from "./runtime/manager.js";
@@ -31,8 +33,10 @@ export async function createServer(): Promise<FastifyInstance> {
   });
 
   await registerStatusRoutes(app, runtimeManager);
+  await registerSettingsRoutes(app);
   await registerProfileRoutes(app, runtimeManager);
   await registerRuntimeRoutes(app, runtimeManager);
+  await registerDiscoveryRoutes(app);
 
   if (existsSync(webDistDir)) {
     await app.register(fastifyStatic, {

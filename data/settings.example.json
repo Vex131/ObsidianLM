@@ -1,0 +1,12 @@
+{
+  "uiPort": 8090,
+  "managedLlamaPort": 8085,
+  "startupMode": "service_only",
+  "staleProcessPolicy": "auto_stop_previous_managed_only",
+  "modelFolders": [
+    "C:\\path\\to\\models"
+  ],
+  "llamaCppFolders": [
+    "C:\\path\\to\\llama.cpp-builds"
+  ]
+}

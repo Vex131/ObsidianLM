@@ -1,11 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { defaultRuntimeState, defaultSettings, type AppSettings, type RuntimeProfile, type RuntimeState } from "@obsidianlm/shared";
-import { dataDir } from "./paths.js";
+import { getDataDir } from "./paths.js";
 
 const jsonIndent = 2;
 
 async function ensureJsonFile<T>(fileName: string, defaultValue: T): Promise<T> {
+  const dataDir = getDataDir();
   await mkdir(dataDir, { recursive: true });
 
   const filePath = path.join(dataDir, fileName);
@@ -23,8 +24,17 @@ async function ensureJsonFile<T>(fileName: string, defaultValue: T): Promise<T> 
   }
 }
 
+function normalizeStoredSettings(settings: Partial<AppSettings>): AppSettings {
+  return {
+    ...defaultSettings,
+    ...settings,
+    modelFolders: Array.isArray(settings.modelFolders) ? settings.modelFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.modelFolders,
+    llamaCppFolders: Array.isArray(settings.llamaCppFolders) ? settings.llamaCppFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.llamaCppFolders
+  };
+}
+
 export async function loadSettings(): Promise<AppSettings> {
-  return ensureJsonFile("settings.json", defaultSettings);
+  return normalizeStoredSettings(await ensureJsonFile<Partial<AppSettings>>("settings.json", defaultSettings));
 }
 
 export async function loadProfiles(): Promise<RuntimeProfile[]> {
@@ -36,8 +46,21 @@ export async function loadRuntimeState(): Promise<RuntimeState> {
 }
 
 export async function saveRuntimeState(state: RuntimeState): Promise<void> {
+  const dataDir = getDataDir();
   await mkdir(dataDir, { recursive: true });
   await writeFile(path.join(dataDir, "runtime-state.json"), `${JSON.stringify(state, null, jsonIndent)}\n`, "utf8");
+}
+
+export async function saveSettings(settings: AppSettings): Promise<void> {
+  const dataDir = getDataDir();
+  await mkdir(dataDir, { recursive: true });
+  await writeFile(path.join(dataDir, "settings.json"), `${JSON.stringify(settings, null, jsonIndent)}\n`, "utf8");
+}
+
+export async function saveProfiles(profiles: RuntimeProfile[]): Promise<void> {
+  const dataDir = getDataDir();
+  await mkdir(dataDir, { recursive: true });
+  await writeFile(path.join(dataDir, "profiles.json"), `${JSON.stringify(profiles, null, jsonIndent)}\n`, "utf8");
 }
 
 export async function ensureStorageFiles(): Promise<void> {

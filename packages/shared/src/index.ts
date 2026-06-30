@@ -15,3 +15,15 @@ export type {
 } from "./types/runtime-state.js";
 export type { AppSettings, StartupMode, StaleProcessPolicy } from "./types/settings.js";
 export type { ActiveRuntimeStatus, StatusResponse } from "./types/status.js";
+export type {
+  CreateProfileFromDiscoveryRequest,
+  CreateProfileFromDiscoveryResponse,
+  DiscoveredLlamaCppBuild,
+  DiscoveredLlamaCppTool,
+  DiscoveredLlamaCppToolKind,
+  DiscoveredModel,
+  DiscoverySettingsUpdate,
+  DiscoveryWarning,
+  LlamaBuildDiscoveryResponse,
+  ModelDiscoveryResponse
+} from "./types/discovery.js";
