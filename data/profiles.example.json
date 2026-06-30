@@ -1,0 +1,31 @@
+[
+  {
+    "id": "example-local-llama-server",
+    "name": "Example local llama.cpp server",
+    "runtimeType": "llama.cpp",
+    "providerKind": "server",
+    "buildPath": "C:\\path\\to\\llama-server.exe",
+    "modelPath": "D:\\Models\\path\\to\\model.gguf",
+    "host": "0.0.0.0",
+    "port": 8085,
+    "llamaArgs": {
+      "ctxSize": 8192,
+      "gpuLayers": 0,
+      "devices": [],
+      "splitMode": "layer",
+      "tensorSplit": "1",
+      "cacheTypeK": "q8_0",
+      "cacheTypeV": "q8_0",
+      "flashAttention": true,
+      "batchSize": 512,
+      "ubatchSize": 128,
+      "parallel": 1,
+      "threads": 4,
+      "threadsBatch": 4,
+      "contBatching": true,
+      "metrics": true,
+      "webui": true
+    },
+    "extraArgs": ["--timeout", "3600"]
+  }
+]

@@ -19,5 +19,9 @@ export const defaultRuntimeState: RuntimeState = {
   startedByObsidianLM: false,
   startedAt: null,
   commandHash: null,
-  status: "stopped"
+  status: "stopped",
+  exitedAt: null,
+  exitCode: null,
+  signal: null,
+  message: null
 };

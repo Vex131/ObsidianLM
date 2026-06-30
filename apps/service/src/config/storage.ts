@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { defaultRuntimeState, defaultSettings, type AppSettings, type RuntimeState } from "@obsidianlm/shared";
+import { defaultRuntimeState, defaultSettings, type AppSettings, type RuntimeProfile, type RuntimeState } from "@obsidianlm/shared";
 import { dataDir } from "./paths.js";
 
 const jsonIndent = 2;
@@ -27,10 +27,23 @@ export async function loadSettings(): Promise<AppSettings> {
   return ensureJsonFile("settings.json", defaultSettings);
 }
 
+export async function loadProfiles(): Promise<RuntimeProfile[]> {
+  return ensureJsonFile<RuntimeProfile[]>("profiles.json", []);
+}
+
+export async function loadRuntimeState(): Promise<RuntimeState> {
+  return ensureJsonFile<RuntimeState>("runtime-state.json", defaultRuntimeState);
+}
+
+export async function saveRuntimeState(state: RuntimeState): Promise<void> {
+  await mkdir(dataDir, { recursive: true });
+  await writeFile(path.join(dataDir, "runtime-state.json"), `${JSON.stringify(state, null, jsonIndent)}\n`, "utf8");
+}
+
 export async function ensureStorageFiles(): Promise<void> {
   await Promise.all([
     ensureJsonFile<AppSettings>("settings.json", defaultSettings),
-    ensureJsonFile<unknown[]>("profiles.json", []),
+    ensureJsonFile<RuntimeProfile[]>("profiles.json", []),
     ensureJsonFile<RuntimeState>("runtime-state.json", defaultRuntimeState),
     ensureJsonFile<unknown[]>("jobs.json", [])
   ]);

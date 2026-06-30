@@ -14,6 +14,7 @@ out/
 
 # Logs and temporary files
 logs/*.log
+logs/runtimes/*.log
 tmp/
 temp/
 .cache/

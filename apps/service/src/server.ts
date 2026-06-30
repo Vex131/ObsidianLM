@@ -2,8 +2,11 @@ import { existsSync } from "node:fs";
 import fastify, { type FastifyInstance } from "fastify";
 import fastifyStatic from "@fastify/static";
 import { registerStatusRoutes } from "./api/status.js";
+import { registerProfileRoutes } from "./api/profiles.js";
+import { registerRuntimeRoutes } from "./api/runtime.js";
 import { ensureStorageFiles } from "./config/storage.js";
 import { webDistDir } from "./config/paths.js";
+import { RuntimeManager } from "./runtime/manager.js";
 
 export async function createServer(): Promise<FastifyInstance> {
   const app = fastify({
@@ -21,7 +24,15 @@ export async function createServer(): Promise<FastifyInstance> {
   });
 
   await ensureStorageFiles();
-  await registerStatusRoutes(app);
+  const runtimeManager = new RuntimeManager();
+  await runtimeManager.initialize();
+  app.addHook("onClose", async () => {
+    await runtimeManager.shutdown();
+  });
+
+  await registerStatusRoutes(app, runtimeManager);
+  await registerProfileRoutes(app, runtimeManager);
+  await registerRuntimeRoutes(app, runtimeManager);
 
   if (existsSync(webDistDir)) {
     await app.register(fastifyStatic, {
