@@ -1,9 +1,18 @@
 <script lang="ts">
   import type { StatusResponse } from "@obsidianlm/shared";
+  import MetricRow from "./lib/components/MetricRow.svelte";
+  import Panel from "./lib/components/Panel.svelte";
+  import StatusPill from "./lib/components/StatusPill.svelte";
+  import TerminalBlock from "./lib/components/TerminalBlock.svelte";
+  import ToolbarButton from "./lib/components/ToolbarButton.svelte";
+
+  const navItems = ["Overview", "Runtime", "Profiles", "Models", "Builds", "Logs", "Settings"];
 
   let status = $state<StatusResponse | null>(null);
   let errorMessage = $state<string | null>(null);
   let isLoading = $state(true);
+
+  const runtimeControlsPlanned = "Runtime controls are planned for the next phase and are not wired to backend actions yet.";
 
   async function loadStatus(): Promise<void> {
     isLoading = true;
@@ -19,96 +28,155 @@
       status = (await response.json()) as StatusResponse;
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : "Unable to load service status.";
+      status = null;
     } finally {
       isLoading = false;
     }
   }
+
+  const serviceState = $derived(errorMessage ? "offline" : status ? "online" : isLoading ? "unknown" : "warning");
+  const serviceLabel = $derived(errorMessage ? "Service unreachable" : status ? "Service online" : isLoading ? "Checking service" : "Status unknown");
+  const runtimeState = $derived(status?.activeRuntime ? "running" : "stopped");
+  const runtimeLabel = $derived(status?.activeRuntime ? "Runtime active" : "No managed runtime active");
+  const activeRuntimeTitle = $derived(status?.activeRuntime ? "Managed runtime" : "No runtime active yet");
+  const warnings = $derived(status?.warnings ?? []);
+  const commandPreview = $derived([
+    "# Command preview will appear here after a runtime profile is configured.",
+    "# ObsidianLM will show the llama-server.exe launch command before it starts a managed process."
+  ]);
+  const logPreview = $derived([
+    "No runtime logs yet.",
+    "Start a managed runtime in a future phase to stream llama.cpp output here."
+  ]);
 
   $effect(() => {
     void loadStatus();
   });
 </script>
 
-<main class="shell">
+<main class="app-shell">
   <aside class="sidebar" aria-label="Primary navigation">
-    <div class="brand-mark">OLM</div>
-    <nav>
-      <a class="nav-item active" href="/">Dashboard</a>
-      <span class="nav-item disabled">Profiles</span>
-      <span class="nav-item disabled">Runtime</span>
-      <span class="nav-item disabled">Settings</span>
+    <div class="brand-block">
+      <div class="brand-mark" aria-hidden="true">OLM</div>
+      <div>
+        <strong>ObsidianLM</strong>
+        <span>Local runtime control</span>
+      </div>
+    </div>
+
+    <nav class="nav-list">
+      {#each navItems as item}
+        {#if item === "Overview"}
+          <a class="nav-item active" href="/" aria-current="page">
+            <span class="nav-dot" aria-hidden="true"></span>
+            {item}
+          </a>
+        {:else}
+          <span class="nav-item disabled" title="Coming soon">
+            <span class="nav-dot muted" aria-hidden="true"></span>
+            {item}
+            <small>soon</small>
+          </span>
+        {/if}
+      {/each}
     </nav>
   </aside>
 
-  <section class="content">
-    <header class="hero">
+  <section class="workspace">
+    <header class="topbar">
       <div>
-        <p class="eyebrow">Phase 0 Foundation</p>
-        <h1>ObsidianLM Control Plane</h1>
-        <p class="lede">
-          Lightweight dashboard shell for the local AI runtime manager. Runtime management is intentionally not implemented yet.
-        </p>
+        <p class="eyebrow">Runtime cockpit</p>
+        <h1>ObsidianLM</h1>
+        <p class="subtitle">A lightweight local control plane for llama.cpp and future runtime adapters.</p>
       </div>
 
-      <button class="refresh" type="button" onclick={loadStatus} disabled={isLoading}>
-        {isLoading ? "Checking..." : "Refresh Status"}
-      </button>
+      <div class="topbar-status" aria-live="polite">
+        <StatusPill tone={serviceState} label={serviceLabel} />
+        <ToolbarButton variant="secondary" onclick={loadStatus} disabled={isLoading} title="Refresh service status">
+          {isLoading ? "Checking..." : "Refresh"}
+        </ToolbarButton>
+      </div>
     </header>
 
     {#if errorMessage}
-      <section class="panel error" aria-live="polite">
-        <h2>Service Unreachable</h2>
-        <p>{errorMessage}</p>
-      </section>
-    {:else}
-      <section class="grid" aria-live="polite">
-        <article class="panel status-card">
-          <span class="label">Service</span>
-          <strong>{status?.service ?? "checking"}</strong>
-          <p>{status?.app ?? "ObsidianLM"} API status endpoint</p>
-        </article>
+      <Panel tone="danger" eyebrow="Connection" title="Service API is unreachable" class="offline-panel">
+        <p>
+          The web UI could not reach <code>/api/status</code>. Start the ObsidianLM service or check the development proxy, then refresh.
+        </p>
+        <p class="error-detail">{errorMessage}</p>
+      </Panel>
+    {/if}
 
-        <article class="panel">
-          <span class="label">ObsidianLM Port</span>
-          <strong>{status?.uiPort ?? "--"}</strong>
-          <p>UI and API service port</p>
-        </article>
-
-        <article class="panel">
-          <span class="label">Managed llama.cpp Port</span>
-          <strong>{status?.managedLlamaPort ?? "--"}</strong>
-          <p>Reserved for future llama.cpp runtime API</p>
-        </article>
-
-        <article class="panel">
-          <span class="label">Active Runtime</span>
-          <strong>{status?.activeRuntime ?? "none"}</strong>
-          <p>No runtime is started or managed in Phase 0.</p>
-        </article>
-      </section>
-
-      <section class="panel placeholder">
-        <div>
-          <span class="label">Runtime Management</span>
-          <h2>Not implemented yet</h2>
-          <p>
-            Phase 0 does not start, stop, scan, kill, or manage llama.cpp processes. Port 8085 remains reserved for a future managed runtime.
-          </p>
+    <section class="dashboard-grid" aria-live="polite">
+      <Panel tone={serviceState === "online" ? "live" : errorMessage ? "danger" : "warning"} eyebrow="Runtime status" title={runtimeLabel} class="runtime-status-card">
+        <div class="runtime-summary">
+          <div class={`runtime-orb runtime-${runtimeState}`} aria-hidden="true"></div>
+          <div>
+            <StatusPill tone={runtimeState === "running" ? "online" : "offline"} label={runtimeState === "running" ? "Running" : "Stopped"} />
+            <p>
+              {errorMessage
+                ? "Service is unreachable; runtime state cannot be verified."
+                : status?.activeRuntime
+                  ? "A managed runtime is reported by the service."
+                  : "The service is reachable, but no llama.cpp runtime is currently managed by ObsidianLM."}
+            </p>
+          </div>
         </div>
-      </section>
 
-      <section class="panel warnings">
-        <h2>Warnings</h2>
-        {#if status?.warnings?.length}
-          <ul>
-            {#each status.warnings as warning}
+        <div class="metric-grid compact">
+          <MetricRow label="Service API" value={status ? status.service : errorMessage ? "offline" : "checking"} />
+          <MetricRow label="App" value={status?.app ?? "ObsidianLM"} />
+          <MetricRow label="Version" value={status?.version ?? "--"} />
+          <MetricRow label="Runtime type" value="llama.cpp" />
+        </div>
+      </Panel>
+
+      <Panel eyebrow="Ports" title="Local endpoints" class="ports-card">
+        <MetricRow label="ObsidianLM UI/API" value={status?.uiPort ? `:${status.uiPort}` : "--"} />
+        <MetricRow label="Managed llama.cpp" value={status?.managedLlamaPort ? `:${status.managedLlamaPort}` : "--"} />
+        <MetricRow label="Runtime endpoint" value={status?.activeRuntime ? `bound on :${status.managedLlamaPort}/v1` : "Reserved, not active"} muted={!status?.activeRuntime} />
+      </Panel>
+
+      <Panel eyebrow="Active runtime" title={activeRuntimeTitle} class="active-runtime-card">
+        <p class="panel-copy">Runtime management is not implemented in this phase. These fields reserve the shape of the operator console without pretending controls are live.</p>
+        <div class="metric-grid">
+          <MetricRow label="Model" value="Not selected" muted />
+          <MetricRow label="llama.cpp build" value="Not selected" muted />
+          <MetricRow label="Profile" value="None" muted />
+          <MetricRow label="Context" value="--" muted />
+          <MetricRow label="GPUs" value="--" muted />
+          <MetricRow label="Endpoint" value="Not bound" muted />
+        </div>
+      </Panel>
+
+      <Panel eyebrow="Controls" title="Runtime actions" class="controls-card">
+        <div class="control-stack" aria-describedby="runtime-controls-help">
+          <ToolbarButton variant="success" disabled title={runtimeControlsPlanned}>Start runtime</ToolbarButton>
+          <ToolbarButton variant="danger" disabled title={runtimeControlsPlanned}>Stop runtime</ToolbarButton>
+          <ToolbarButton variant="secondary" disabled title={runtimeControlsPlanned}>Restart</ToolbarButton>
+        </div>
+        <p id="runtime-controls-help" class="helper-text">{runtimeControlsPlanned}</p>
+      </Panel>
+
+      <Panel tone="code" eyebrow="Command preview" title="Launch command" class="command-card">
+        <TerminalBlock label="llama-server.exe" lines={commandPreview} />
+      </Panel>
+
+      <Panel tone={warnings.length ? "warning" : "default"} eyebrow="Safety" title="Warnings">
+        {#if warnings.length}
+          <ul class="warning-list">
+            {#each warnings as warning}
               <li>{warning}</li>
             {/each}
           </ul>
         {:else}
-          <p>No warnings reported by the Phase 0 service.</p>
+          <p class="empty-copy">No warnings reported by the service. ObsidianLM will not stop unknown processes automatically.</p>
         {/if}
-      </section>
-    {/if}
+      </Panel>
+
+      <Panel tone="code" eyebrow="Logs preview" title="Runtime output" class="logs-card">
+        <TerminalBlock label="runtime.log" lines={logPreview} empty />
+      </Panel>
+    </section>
   </section>
 </main>
