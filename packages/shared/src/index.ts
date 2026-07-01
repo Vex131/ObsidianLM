@@ -26,6 +26,7 @@ export type {
   RuntimeWarning
 } from "./types/runtime-state.js";
 export type { AppSettings, StartupMode, StaleProcessPolicy } from "./types/settings.js";
+export type { AdminTokenRequest, AuthLogoutResponse, AuthSetupResponse, AuthStatusResponse, AuthVerifyResponse } from "./types/auth.js";
 export type { ActiveRuntimeStatus, StatusResponse } from "./types/status.js";
 export type {
   CompactGpuStatus,

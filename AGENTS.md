@@ -4,7 +4,7 @@
 
 ObsidianLM is a lightweight local AI runtime manager.
 
-Read `docs/project-plan.md` before making implementation decisions.
+Read `docs/ObsidianLM_Project_Plan.md` before making implementation decisions.
 
 The first target runtime is `llama.cpp` / `llama-server.exe`.
 

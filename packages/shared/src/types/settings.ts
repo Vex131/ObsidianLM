@@ -9,4 +9,5 @@ export interface AppSettings {
   staleProcessPolicy: StaleProcessPolicy;
   modelFolders: string[];
   llamaCppFolders: string[];
+  adminTokenHash: string | null;
 }

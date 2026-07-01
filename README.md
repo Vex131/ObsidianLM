@@ -26,6 +26,64 @@ npm run start
 - llama.cpp API: `8085`
 - External tools such as OpenCode and Illustria should connect directly to llama.cpp, for example `http://localhost:8085/v1`.
 
+## Admin Token Authentication
+
+Phase 9 adds local admin token authentication for ObsidianLM's protected UI/API controls.
+
+### First-run setup
+
+On a fresh install, `adminTokenHash` is unset in `data/settings.json`. The first browser session that opens ObsidianLM sees a setup screen and creates the admin token. The raw token is accepted only during setup, hashed by the service, and then stored as `adminTokenHash`; do not store raw tokens in settings files, docs, scripts, or URLs.
+
+The token must be at least 12 characters and cannot contain whitespace. After setup, the dashboard saves the token in that browser's `localStorage` for v1 convenience and sends it to protected API routes as a bearer token. Use **Logout** to clear the saved browser token. Logging out does not remove or rotate the server-side token hash.
+
+### Public and protected endpoints
+
+These API routes remain public so the UI can check auth state, complete first-run setup, verify a submitted token, or clear local login state:
+
+- `GET /api/status`
+- `GET /api/auth/status`
+- `POST /api/auth/setup`
+- `POST /api/auth/verify`
+- `POST /api/auth/logout`
+
+All other `/api/*` routes require the configured admin token once `adminTokenHash` is set. This applies on localhost and over Tailscale; Tailscale connectivity is not treated as authentication. External tools should still connect directly to llama.cpp at its OpenAI-compatible `/v1` endpoint rather than through ObsidianLM.
+
+### Where the token hash is stored
+
+Development/built local mode stores the hash in:
+
+```text
+data/settings.json
+```
+
+Installed Windows Service Mode stores the hash in the service data directory unless overridden:
+
+```text
+%PROGRAMDATA%\ObsidianLM\data\settings.json
+```
+
+The stored value is a `scrypt:v1` hash. API responses sanitize settings and should not return the hash value.
+
+### Manual reset
+
+Use manual reset only if the admin token is lost or you intentionally want to force first-run setup again. Stop ObsidianLM first so the service cannot rewrite settings while you edit them.
+
+Local/dev mode:
+
+1. Stop the running `npm run dev` or `npm run start` process.
+2. Back up `data/settings.json`.
+3. Edit `data/settings.json` and set `adminTokenHash` to `null`, or remove only the `adminTokenHash` property.
+4. Start ObsidianLM again and complete the setup screen from a trusted browser.
+
+Windows Service Mode:
+
+1. Stop the service, for example with the existing service stop script/command.
+2. Back up `%PROGRAMDATA%\ObsidianLM\data\settings.json`.
+3. Edit that file and set `adminTokenHash` to `null`, or remove only the `adminTokenHash` property.
+4. Start the service again and complete setup from a trusted browser.
+
+Do not delete unrelated settings unless you intend to reset them. While `adminTokenHash` is unset, protected API routes are not locked yet, so complete setup before exposing the UI/API to other machines.
+
 ## Phase 0 Status
 
 Phase 0 provides the npm monorepo foundation, a Fastify TypeScript service, a Vite + Svelte dashboard shell, shared TypeScript types/constants, JSON storage defaults, and `GET /api/status`.
@@ -173,6 +231,20 @@ Implemented:
 - Runtime log APIs: `GET /api/runtime/logs?limit=300` for recent entries and `GET /api/runtime/logs/stream?limit=100` for SSE live updates.
 
 Live runtime logs are only for the active or most recent llama.cpp process started and tracked by ObsidianLM. ObsidianLM does not tail, adopt, or stream logs from manual/unmanaged `llama-server` processes.
+
+## Phase 9 Status
+
+Phase 9 adds admin token authentication for protected ObsidianLM controls.
+
+Implemented:
+
+- First-run admin token setup in the dashboard.
+- Server-side `scrypt:v1` token hashing stored as `adminTokenHash` in settings.
+- Login/token verification and logout that clears the browser-saved token.
+- Public auth/status routes plus bearer-token protection for other `/api/*` routes once configured.
+- Settings sanitization so API responses do not expose the stored token hash.
+
+Not implemented in Phase 9: multi-user accounts, role-based permissions, HTTPS/TLS termination, automatic token rotation, external identity providers, or using Tailscale as a substitute for the admin token.
 
 ### Windows Service Setup
 

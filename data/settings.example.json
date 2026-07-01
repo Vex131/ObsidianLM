@@ -1,6 +1,7 @@
 {
   "uiPort": 8090,
   "managedLlamaPort": 8085,
+  "adminTokenHash": null,
   "startupMode": "service_only",
   "staleProcessPolicy": "auto_stop_previous_managed_only",
   "modelFolders": [

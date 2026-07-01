@@ -9,7 +9,8 @@ export const defaultSettings: AppSettings = {
   startupMode: "service_only",
   staleProcessPolicy: "auto_stop_previous_managed_only",
   modelFolders: [],
-  llamaCppFolders: []
+  llamaCppFolders: [],
+  adminTokenHash: null
 };
 
 export const defaultRuntimeState: RuntimeState = {

@@ -9,6 +9,8 @@ import { registerMonitoringRoutes } from "./api/monitoring.js";
 import { registerProcessRoutes } from "./api/processes.js";
 import { registerSettingsRoutes } from "./api/settings.js";
 import { registerJobRoutes } from "./api/jobs.js";
+import { registerAuthRoutes } from "./api/auth.js";
+import { registerAdminAuthProtection } from "./auth/protect.js";
 import { ensureStorageFiles } from "./config/storage.js";
 import { ensureAppDirectories, webDistDir } from "./config/paths.js";
 import type { GpuMonitorOptions } from "./monitoring/gpu-monitor.js";
@@ -46,6 +48,8 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   });
 
   await registerStatusRoutes(app, runtimeManager, options.gpuMonitorOptions);
+  await registerAuthRoutes(app);
+  await registerAdminAuthProtection(app);
   await registerSettingsRoutes(app);
   await registerProfileRoutes(app, runtimeManager);
   await registerRuntimeRoutes(app, runtimeManager);

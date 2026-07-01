@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { defaultRuntimeState, defaultSettings, type AppSettings, type JobRecord, type RuntimeProfile, type RuntimeState } from "@obsidianlm/shared";
+import { isAdminTokenHash } from "../auth/admin-token.js";
 import { getDataDir } from "./paths.js";
 
 const jsonIndent = 2;
@@ -30,7 +31,8 @@ function normalizeStoredSettings(settings: Partial<AppSettings>): AppSettings {
     ...defaultSettings,
     ...settings,
     modelFolders: Array.isArray(settings.modelFolders) ? settings.modelFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.modelFolders,
-    llamaCppFolders: Array.isArray(settings.llamaCppFolders) ? settings.llamaCppFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.llamaCppFolders
+    llamaCppFolders: Array.isArray(settings.llamaCppFolders) ? settings.llamaCppFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.llamaCppFolders,
+    adminTokenHash: isAdminTokenHash(settings.adminTokenHash) ? settings.adminTokenHash : null
   };
 }
 
@@ -79,8 +81,13 @@ export async function saveJobs(jobs: JobRecord[]): Promise<void> {
 }
 
 export async function ensureStorageFiles(): Promise<void> {
+  const settings = await ensureJsonFile<Partial<AppSettings>>("settings.json", defaultSettings);
+  const normalizedSettings = normalizeStoredSettings(settings);
+  if (JSON.stringify(settings) !== JSON.stringify(normalizedSettings)) {
+    await saveSettings(normalizedSettings);
+  }
+
   await Promise.all([
-    ensureJsonFile<AppSettings>("settings.json", defaultSettings),
     ensureJsonFile<RuntimeProfile[]>("profiles.json", []),
     ensureJsonFile<RuntimeState>("runtime-state.json", defaultRuntimeState),
     ensureJsonFile<unknown[]>("jobs.json", [])

@@ -1,6 +1,11 @@
 <script lang="ts">
   import type {
     AppSettings,
+    AdminTokenRequest,
+    AuthLogoutResponse,
+    AuthSetupResponse,
+    AuthStatusResponse,
+    AuthVerifyResponse,
     CommandSpec,
     CreateProfileFromDiscoveryRequest,
     CreateProfileFromDiscoveryResponse,
@@ -19,6 +24,7 @@
     RuntimeActionResult,
     RuntimeLogEntry,
     RuntimeLogsResponse,
+    RuntimeLogsStreamEvent,
     RuntimeProfile,
     RuntimeState,
     StartupDetectionSummary,
@@ -51,6 +57,9 @@
   }
 
   const navItems = ["Overview", "Runtime", "Jobs", "GPU", "Processes", "Profiles", "Models", "Builds", "Logs", "Settings"];
+  const adminTokenStorageKey = "obsidianlm.adminToken";
+
+  type AuthMode = "checking" | "setup-required" | "logged-out" | "logged-in";
 
   let status = $state<StatusResponse | null>(null);
   let runtime = $state<RuntimeState | null>(null);
@@ -66,7 +75,16 @@
   let validation = $state<ValidationResponse | null>(null);
   let isLoading = $state(true);
   let pendingAction = $state<string | null>(null);
-  let eventSource: EventSource | null = null;
+  let authMode = $state<AuthMode>("checking");
+  let authStatus = $state<AuthStatusResponse | null>(null);
+  let adminToken = $state<string | null>(null);
+  let tokenInput = $state("");
+  let tokenConfirmInput = $state("");
+  let authMessage = $state<string | null>(null);
+  let authErrorMessage = $state<string | null>(null);
+  let authPendingAction = $state<"setup" | "login" | "logout" | null>(null);
+  let logStreamAbortController: AbortController | null = null;
+  let logStreamReconnectTimer: number | null = null;
   let logStreamState = $state<"connecting" | "connected" | "disconnected">("disconnected");
   let logSearch = $state("");
   let lastLogHeartbeat = $state<string | null>(null);
@@ -210,16 +228,214 @@
     return value ? formatDate(value) : "--";
   }
 
-  async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  function readStoredAdminToken(): string | null {
+    return localStorage.getItem(adminTokenStorageKey);
+  }
+
+  function writeStoredAdminToken(token: string): void {
+    localStorage.setItem(adminTokenStorageKey, token);
+  }
+
+  function clearStoredAdminToken(): void {
+    localStorage.removeItem(adminTokenStorageKey);
+  }
+
+  function friendlyRequestError(statusCode: number, fallback?: string): string {
+    if (statusCode === 401 || statusCode === 403) {
+      return "Invalid token";
+    }
+    return fallback || `Request failed with ${statusCode}`;
+  }
+
+  async function publicFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     const response = await fetch(url, init);
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const message = typeof data.message === "string" ? data.message : `Request failed with ${response.status}`;
-      throw new Error(message);
+      const message = typeof data.message === "string" ? data.message : undefined;
+      throw new Error(friendlyRequestError(response.status, message));
     }
 
     return data as T;
+  }
+
+  async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+    const headers = new Headers(init?.headers);
+    if (adminToken) {
+      headers.set("Authorization", `Bearer ${adminToken}`);
+    }
+
+    const response = await fetch(url, { ...init, headers });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        clearProtectedState();
+        clearStoredAdminToken();
+        adminToken = null;
+        authMode = "logged-out";
+      }
+      const message = typeof data.message === "string" ? data.message : undefined;
+      throw new Error(friendlyRequestError(response.status, message));
+    }
+
+    return data as T;
+  }
+
+  function clearProtectedState(): void {
+    runtime = null;
+    profiles = [];
+    selectedProfileId = "";
+    command = null;
+    logs = [];
+    jobs = [];
+    selectedJobId = "";
+    jobLogs = [];
+    validation = null;
+    settings = null;
+    modelFoldersText = "";
+    llamaCppFoldersText = "";
+    discoveredModels = [];
+    discoveredBuilds = [];
+    detection = null;
+    detectedProcesses = [];
+    portStatus = null;
+    gpuStatus = null;
+    modelDiscoveryWarnings = [];
+    buildDiscoveryWarnings = [];
+    selectedModelPath = "";
+    selectedBuildPath = "";
+    createdProfilePreview = null;
+    closeLogStream();
+  }
+
+  async function initializeAuth(): Promise<void> {
+    authMode = "checking";
+    authErrorMessage = null;
+    authMessage = null;
+    isLoading = true;
+
+    try {
+      authStatus = await publicFetchJson<AuthStatusResponse>("/api/auth/status");
+      if (!authStatus.configured) {
+        clearStoredAdminToken();
+        adminToken = null;
+        authMode = "setup-required";
+        clearProtectedState();
+        return;
+      }
+
+      const storedToken = readStoredAdminToken();
+      if (!storedToken) {
+        authMode = "logged-out";
+        clearProtectedState();
+        return;
+      }
+
+      const verifyResponse = await publicFetchJson<AuthVerifyResponse>("/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: storedToken } satisfies AdminTokenRequest)
+      });
+
+      if (!verifyResponse.ok) {
+        clearStoredAdminToken();
+        adminToken = null;
+        authMode = "logged-out";
+        clearProtectedState();
+        authErrorMessage = "Invalid token";
+        return;
+      }
+
+      adminToken = storedToken;
+      authMode = "logged-in";
+    } catch (error) {
+      authMode = "logged-out";
+      clearProtectedState();
+      authErrorMessage = error instanceof Error ? error.message : "Unable to check authentication.";
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function submitSetup(): Promise<void> {
+    const token = tokenInput.trim();
+    authPendingAction = "setup";
+    authErrorMessage = null;
+    authMessage = null;
+
+    try {
+      if (!token) {
+        throw new Error("Enter admin token");
+      }
+      if (tokenConfirmInput.trim() && tokenConfirmInput.trim() !== token) {
+        throw new Error("Admin tokens do not match.");
+      }
+
+      await publicFetchJson<AuthSetupResponse>("/api/auth/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token } satisfies AdminTokenRequest)
+      });
+      writeStoredAdminToken(token);
+      adminToken = token;
+      tokenInput = "";
+      tokenConfirmInput = "";
+      authStatus = { configured: true, authRequired: true };
+      authMode = "logged-in";
+    } catch (error) {
+      authErrorMessage = error instanceof Error ? error.message : "Unable to set up admin token.";
+    } finally {
+      authPendingAction = null;
+    }
+  }
+
+  async function submitLogin(): Promise<void> {
+    const token = tokenInput.trim();
+    authPendingAction = "login";
+    authErrorMessage = null;
+    authMessage = null;
+
+    try {
+      if (!token) {
+        throw new Error("Enter admin token");
+      }
+      const verifyResponse = await publicFetchJson<AuthVerifyResponse>("/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token } satisfies AdminTokenRequest)
+      });
+      if (!verifyResponse.ok) {
+        throw new Error("Invalid token");
+      }
+      writeStoredAdminToken(token);
+      adminToken = token;
+      tokenInput = "";
+      authMode = "logged-in";
+    } catch {
+      authErrorMessage = "Invalid token";
+      clearStoredAdminToken();
+      adminToken = null;
+    } finally {
+      authPendingAction = null;
+    }
+  }
+
+  async function logout(): Promise<void> {
+    authPendingAction = "logout";
+    try {
+      await publicFetchJson<AuthLogoutResponse>("/api/auth/logout", { method: "POST" }).catch(() => ({ ok: true }));
+    } finally {
+      clearStoredAdminToken();
+      adminToken = null;
+      tokenInput = "";
+      clearProtectedState();
+      authMessage = "Logged out";
+      authErrorMessage = null;
+      authMode = authStatus?.configured === false ? "setup-required" : "logged-out";
+      authPendingAction = null;
+      isLoading = false;
+    }
   }
 
   async function loadStatus(): Promise<void> {
@@ -520,45 +736,158 @@
     actionMessage = message;
   }
 
+  function closeLogStream(): void {
+    if (logStreamReconnectTimer !== null) {
+      window.clearTimeout(logStreamReconnectTimer);
+      logStreamReconnectTimer = null;
+    }
+    logStreamAbortController?.abort();
+    logStreamAbortController = null;
+    logStreamState = "disconnected";
+  }
+
+  function scheduleLogStreamReconnect(): void {
+    if (authMode !== "logged-in" || logStreamReconnectTimer !== null) {
+      return;
+    }
+    logStreamReconnectTimer = window.setTimeout(() => {
+      logStreamReconnectTimer = null;
+      openLogStream();
+    }, 2500);
+  }
+
+  function handleLogStreamEvent(eventName: RuntimeLogsStreamEvent["event"] | "message", dataText: string): void {
+    try {
+      if (eventName === "connection") {
+        logStreamState = "connected";
+        return;
+      }
+      if (eventName === "log") {
+        const entry = JSON.parse(dataText) as RuntimeLogEntry;
+        logs = [...logs.filter((item) => `${item.timestamp}-${item.sequence}` !== `${entry.timestamp}-${entry.sequence}`), entry].slice(-500);
+        logStreamState = "connected";
+        return;
+      }
+      if (eventName === "heartbeat") {
+        const data = JSON.parse(dataText) as { timestamp?: string };
+        lastLogHeartbeat = data.timestamp ?? new Date().toISOString();
+        logStreamState = "connected";
+        return;
+      }
+      if (eventName === "stopped") {
+        logStreamState = "disconnected";
+      }
+    } catch {
+      logStreamState = "connected";
+    }
+  }
+
+  function processSseBlock(block: string): void {
+    let eventName: RuntimeLogsStreamEvent["event"] | "message" = "message";
+    const dataLines: string[] = [];
+
+    for (const rawLine of block.split(/\r?\n/u)) {
+      const line = rawLine.trimEnd();
+      if (!line || line.startsWith(":")) {
+        continue;
+      }
+      if (line.startsWith("event:")) {
+        const value = line.slice(6).trim();
+        if (value === "connection" || value === "log" || value === "heartbeat" || value === "stopped") {
+          eventName = value;
+        }
+        continue;
+      }
+      if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).trimStart());
+      }
+    }
+
+    handleLogStreamEvent(eventName, dataLines.join("\n"));
+  }
+
+  async function readLogStream(response: Response): Promise<void> {
+    if (!response.body) {
+      throw new Error("Log stream unavailable.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const normalized = buffer.replace(/\r\n/gu, "\n");
+      const blocks = normalized.split("\n\n");
+      buffer = blocks.pop() ?? "";
+      for (const block of blocks) {
+        processSseBlock(block);
+      }
+      if (done) {
+        if (buffer.trim()) {
+          processSseBlock(buffer);
+        }
+        return;
+      }
+    }
+  }
+
   function openLogStream(): void {
-    eventSource?.close();
+    closeLogStream();
+    if (authMode !== "logged-in" || !adminToken) {
+      return;
+    }
+
+    const controller = new AbortController();
+    logStreamAbortController = controller;
     logStreamState = "connecting";
-    const source = new EventSource("/api/runtime/logs/stream?limit=100");
-    eventSource = source;
-    source.addEventListener("connection", () => {
-      logStreamState = "connected";
-    });
-    source.addEventListener("log", (event) => {
-      const entry = JSON.parse((event as MessageEvent).data) as RuntimeLogEntry;
-      logs = [...logs.filter((item) => `${item.timestamp}-${item.sequence}` !== `${entry.timestamp}-${entry.sequence}`), entry].slice(-500);
-    });
-    source.addEventListener("heartbeat", (event) => {
-      const data = JSON.parse((event as MessageEvent).data) as { timestamp?: string };
-      lastLogHeartbeat = data.timestamp ?? new Date().toISOString();
-      logStreamState = "connected";
-    });
-    source.addEventListener("stopped", () => {
-      logStreamState = "disconnected";
-    });
-    source.onerror = () => {
-      source.close();
-      eventSource = null;
-      logStreamState = "disconnected";
-      void loadLogs();
-    };
+
+    void (async () => {
+      try {
+        const headers = new Headers();
+        headers.set("Authorization", `Bearer ${adminToken}`);
+        const response = await fetch("/api/runtime/logs/stream?limit=100", {
+          headers,
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          throw new Error(friendlyRequestError(response.status));
+        }
+        await readLogStream(response);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          logStreamState = "disconnected";
+          void loadLogs().catch(() => undefined);
+          scheduleLogStreamReconnect();
+        }
+      }
+    })();
   }
 
   $effect(() => {
+    void initializeAuth();
+  });
+
+  $effect(() => {
+    if (authMode !== "logged-in") {
+      closeLogStream();
+      return;
+    }
+
     void refreshAll();
     openLogStream();
 
     return () => {
-      eventSource?.close();
+      closeLogStream();
     };
   });
 
   $effect(() => {
     selectedProfileId;
+    if (authMode !== "logged-in") {
+      return;
+    }
     validation = null;
     void loadCommand().catch((error) => {
       command = null;
@@ -571,6 +900,9 @@
 
   $effect(() => {
     selectedJobId;
+    if (authMode !== "logged-in") {
+      return;
+    }
     void loadJobLogs().catch(() => {
       jobLogs = [];
     });
@@ -607,11 +939,47 @@
 
       <div class="topbar-status" aria-live="polite">
         <StatusPill tone={serviceState} label={serviceLabel} />
-        <ToolbarButton variant="secondary" onclick={refreshAll} disabled={isLoading} title="Refresh dashboard state">
-          {isLoading ? "Checking..." : "Refresh"}
-        </ToolbarButton>
+        {#if authMode === "logged-in"}
+          <ToolbarButton variant="secondary" onclick={refreshAll} disabled={isLoading} title="Refresh dashboard state">
+            {isLoading ? "Checking..." : "Refresh"}
+          </ToolbarButton>
+          <ToolbarButton variant="ghost" onclick={logout} disabled={authPendingAction === "logout"} title="Clear saved admin token">
+            {authPendingAction === "logout" ? "Logging out..." : "Logout"}
+          </ToolbarButton>
+        {/if}
       </div>
     </header>
+
+    {#if authMode === "checking"}
+      <Panel tone="code" eyebrow="Authentication" title="Checking admin access" class="auth-panel">
+        <p class="empty-copy">Checking ObsidianLM authentication status...</p>
+      </Panel>
+    {:else if authMode === "setup-required"}
+      <Panel tone="live" eyebrow="Authentication" title="Set up admin token" class="auth-panel">
+        <form class="auth-form" onsubmit={(event) => { event.preventDefault(); void submitSetup(); }}>
+          <p class="empty-copy">Create the local admin token used to unlock protected ObsidianLM controls in this browser.</p>
+          <label class="form-field">Admin token<input type="password" autocomplete="new-password" bind:value={tokenInput} placeholder="Set up admin token" /></label>
+          <label class="form-field">Confirm token<input type="password" autocomplete="new-password" bind:value={tokenConfirmInput} placeholder="Repeat admin token" /></label>
+          {#if authErrorMessage}<p class="auth-error">{authErrorMessage}</p>{/if}
+          <div class="panel-actions inline-actions">
+            <ToolbarButton type="submit" variant="success" disabled={authPendingAction === "setup"}>{authPendingAction === "setup" ? "Saving..." : "Set up admin token"}</ToolbarButton>
+          </div>
+          <p class="helper-text">Stored in browser localStorage for v1 only. Token values are never placed in URLs.</p>
+        </form>
+      </Panel>
+    {:else if authMode === "logged-out"}
+      <Panel tone="code" eyebrow="Authentication" title="Enter admin token" class="auth-panel">
+        <form class="auth-form" onsubmit={(event) => { event.preventDefault(); void submitLogin(); }}>
+          {#if authMessage}<p class="auth-success">{authMessage}</p>{/if}
+          <p class="empty-copy">Enter admin token to load runtime profiles, jobs, settings, and live logs.</p>
+          <label class="form-field">Admin token<input type="password" autocomplete="current-password" bind:value={tokenInput} placeholder="Enter admin token" /></label>
+          {#if authErrorMessage}<p class="auth-error">{authErrorMessage}</p>{/if}
+          <div class="panel-actions inline-actions">
+            <ToolbarButton type="submit" variant="primary" disabled={authPendingAction === "login"}>{authPendingAction === "login" ? "Checking..." : "Login"}</ToolbarButton>
+          </div>
+        </form>
+      </Panel>
+    {:else}
 
     {#if errorMessage}
       <Panel tone="danger" eyebrow="Notice" title="Action needs attention" class="offline-panel">
@@ -1002,5 +1370,6 @@
         <p class="helper-text">Showing up to 500 visible entries. Clear only affects this UI buffer; persisted runtime log files are kept by the service.</p>
       </Panel>
     </section>
+    {/if}
   </section>
 </main>

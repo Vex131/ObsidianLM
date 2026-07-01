@@ -336,12 +336,44 @@ h2 {
 }
 
 .offline-panel,
+.auth-panel,
 .runtime-status-card,
 .active-runtime-card,
 .profiles-card,
 .command-card,
 .logs-card {
   grid-column: span 8;
+}
+
+.auth-panel {
+  max-width: 42rem;
+}
+
+.auth-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.auth-error,
+.auth-success {
+  margin: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.auth-error {
+  border-color: rgba(239, 68, 68, 0.38);
+  background: var(--color-danger-soft);
+  color: #fecaca;
+}
+
+.auth-success {
+  border-color: rgba(34, 197, 94, 0.34);
+  background: var(--color-success-soft);
+  color: #bbf7d0;
 }
 
 .runtime-summary {
@@ -1123,8 +1155,9 @@ h2 {
   .builds-card,
   .create-profile-card,
   .command-card,
-  .processes-card,
-  .logs-card,
+    .processes-card,
+    .logs-card,
+    .auth-panel,
   .offline-panel {
     grid-column: span 12;
   }
@@ -1184,6 +1217,7 @@ h2 {
   .command-card,
   .processes-card,
   .logs-card,
+  .auth-panel,
   .offline-panel {
     grid-column: span 12;
   }

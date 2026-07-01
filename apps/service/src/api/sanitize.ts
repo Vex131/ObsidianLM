@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { DetectedProcess, StartupDetectionSummary } from "@obsidianlm/shared";
+import type { AppSettings, DetectedProcess, StartupDetectionSummary } from "@obsidianlm/shared";
 
 export function safeBasename(value: string): string {
   const winName = path.win32.basename(value);
@@ -20,5 +20,12 @@ export function sanitizeDetectionForApi(summary: StartupDetectionSummary): Start
   return {
     ...summary,
     processes: summary.processes.map(sanitizeProcessForApi)
+  };
+}
+
+export function sanitizeSettingsForApi(settings: AppSettings): AppSettings {
+  return {
+    ...settings,
+    adminTokenHash: null
   };
 }
