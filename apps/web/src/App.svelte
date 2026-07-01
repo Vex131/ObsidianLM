@@ -27,6 +27,7 @@
   import StatusPill from "./lib/components/StatusPill.svelte";
   import TerminalBlock from "./lib/components/TerminalBlock.svelte";
   import ToolbarButton from "./lib/components/ToolbarButton.svelte";
+  import ProfileEditor from "./lib/components/profile/ProfileEditor.svelte";
 
   interface ProfilesResponse {
     profiles: RuntimeProfile[];
@@ -421,6 +422,22 @@
     actionMessage = "Recent logs copied to clipboard.";
   }
 
+  function setSelectedProfileId(id: string): void {
+    selectedProfileId = id;
+  }
+
+  function setCommand(commandPreview: CommandSpec | null): void {
+    command = commandPreview;
+  }
+
+  function setValidationResult(result: ValidationResponse | null): void {
+    validation = result;
+  }
+
+  function setActionMessage(message: string): void {
+    actionMessage = message;
+  }
+
   function openLogStream(): void {
     eventSource?.close();
     const source = new EventSource("/api/runtime/logs/stream");
@@ -481,9 +498,9 @@
   <section class="workspace">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Phase 4 GPU safety cockpit</p>
-        <h1>llama.cpp runtime and GPU monitor</h1>
-        <p class="subtitle">Detect stale state, read-only llama-server processes, managed port conflicts, and NVIDIA GPU VRAM usage without controlling external processes.</p>
+        <p class="eyebrow">Phase 5 profile editor</p>
+        <h1>llama.cpp runtime, GPU monitor, and profile cockpit</h1>
+        <p class="subtitle">Create, edit, import, export, validate, and copy local llama.cpp profile configs while preserving Phase 3 process safety and Phase 4 read-only GPU monitoring.</p>
       </div>
 
       <div class="topbar-status" aria-live="polite">
@@ -572,6 +589,20 @@
         </div>
         <TerminalBlock label={command?.executable ?? "llama-server.exe"} lines={commandLines} empty={!command} />
       </Panel>
+
+      <ProfileEditor
+        {profiles}
+        {selectedProfileId}
+        {runtime}
+        {pendingAction}
+        {fetchJson}
+        {runAction}
+        onProfilesChanged={loadProfiles}
+        {setSelectedProfileId}
+        {setCommand}
+        setValidation={setValidationResult}
+        {setActionMessage}
+      />
 
       <Panel tone={warnings.length || detectionWarnings.length ? "warning" : "default"} eyebrow="Startup Safety" title="Detection warnings">
         {#if warnings.length || detectionWarnings.length}

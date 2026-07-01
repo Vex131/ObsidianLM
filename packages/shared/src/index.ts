@@ -1,5 +1,5 @@
 export { DEFAULT_LLAMA_CPP_PORT, DEFAULT_OBSIDIANLM_PORT } from "./constants/ports.js";
-export { defaultRuntimeState, defaultSettings } from "./schemas/defaults.js";
+export { defaultProfileEditorDefaults, defaultRuntimeState, defaultSettings } from "./schemas/defaults.js";
 export type {
   CommandSpec,
   LlamaCppArgs,
@@ -52,3 +52,19 @@ export type {
   LlamaBuildDiscoveryResponse,
   ModelDiscoveryResponse
 } from "./types/discovery.js";
+export type {
+  CreateProfileRequest,
+  DeleteProfileResponse,
+  DuplicateProfileRequest,
+  ExportProfilesResponse,
+  ImportProfilesRequest,
+  ImportProfilesResponse,
+  ProfileConfigSnippetResponse,
+  ProfileDetailResponse,
+  ProfileEditorDefaults,
+  ProfileEditorPreset,
+  ProfileListResponse,
+  ProfileMutationResponse,
+  ProfileValidationResponse,
+  UpdateProfileRequest
+} from "./types/profile-editor.js";

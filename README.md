@@ -107,6 +107,23 @@ Implemented:
 
 Not implemented in Phase 4: running `llama-bench`/`llama-perplexity` jobs, Windows service installation, Docker, Electron, or a database. The job system remains Phase 6, and Windows service mode remains Phase 7.
 
+## Phase 5 Status
+
+Phase 5 adds a better profile editor for creating, editing, duplicating, deleting, importing/exporting, and copying starter configuration snippets for llama.cpp server profiles.
+
+Implemented:
+
+- Create new manual profiles from the dashboard without starting llama.cpp.
+- Edit existing profiles from the dashboard; saved edits apply the next time that profile is started.
+- Validate profile drafts with blocking errors separated from non-blocking warnings.
+- Duplicate profiles into a new unique profile ID without overwriting the source.
+- Delete stopped profiles while blocking deletion of the currently running managed profile.
+- Export profiles as portable JSON without runtime state or logs.
+- Import profile arrays or exported profile objects with append/merge behavior.
+- Copy the generated `llama.cpp` command, an OpenCode starter snippet, and an Illustria starter snippet for the selected profile.
+
+Not implemented in Phase 5: running `llama-bench`/`llama-perplexity` jobs, Windows service installation, Docker, Electron, or a database.
+
 ## Configure Discovery Folders
 
 Discovery is controlled by `modelFolders` and `llamaCppFolders` in `data/settings.json`. Fresh installs default both lists to empty. Use `data/settings.example.json` as a safe template, then replace the placeholder paths with your local folders.
@@ -200,6 +217,29 @@ Example profile shape:
 
 The created profile uses the selected model path and selected `llama-server` path, then stores the result in `data/profiles.json`.
 
+## Use the Better Profile Editor
+
+The dashboard includes a Phase 5 **Profile editor** for manual profile setup and maintenance.
+
+- Click **New manual profile**, enter the llama-server path, model path, host/port, and llama.cpp args, then click **Create draft**.
+- Select an existing profile, edit its fields, then click **Save profile**. The profile ID is preserved while editing.
+- Missing paths are allowed as draft warnings so you can save profiles before the files exist. Starting a runtime remains strict and requires a runnable profile.
+- Validation separates **Blocking errors** from **Warnings**. Blocking errors prevent saving/importing; warnings describe non-blocking draft or configuration concerns.
+- **Duplicate** creates a copy with a unique ID and does not overwrite the original profile.
+- **Delete** removes stopped profiles only. The delete button is disabled for the currently running profile, and the service also rejects deleting the active managed profile.
+- **Export profiles** produces portable profile JSON only; runtime state and logs are not included.
+- **Import append/merge** accepts an exported object or a profiles array. Existing profiles are not overwritten by default; conflicting IDs receive new unique IDs, and invalid profiles are skipped with errors.
+
+### Copy Runtime Commands and Starter Snippets
+
+For a selected profile, click **Generate snippets** in the **Copyable starter configs** panel.
+
+- **Copy command** copies the generated `llama.cpp` / `llama-server` command preview for the profile.
+- **Copy OpenCode** copies a starter OpenAI-compatible provider snippet using the profile endpoint, for example `http://localhost:8085/v1`.
+- **Copy Illustria** copies a starter OpenAI-compatible connection snippet using the same `/v1` endpoint.
+
+These snippets are editable starters. OpenCode and Illustria should still connect directly to llama.cpp, not through ObsidianLM.
+
 ## Run ObsidianLM
 
 Development mode:
@@ -231,6 +271,8 @@ From the UI:
 ## Safety Notes
 
 ObsidianLM only stops the child process started by the current ObsidianLM service run. It never kills unknown processes and never kills a process just because it is named `llama-server.exe`.
+
+Saving, duplicating, deleting, importing, or exporting profiles never starts, restarts, stops, or kills llama.cpp. Edits to a running profile are saved for the next start and do not change the currently running process. Deleting the currently running managed profile is blocked. Imports append/merge by default and do not overwrite existing profiles unless future explicit overwrite behavior is added.
 
 If `data/runtime-state.json` says a previous runtime was running, ObsidianLM performs conservative startup detection. If no matching live process is found, the stale state is marked stopped. If a possible previous managed process is found, ObsidianLM marks it as `unknown_previous_runtime`, shows a warning, and does not adopt or clean it up.
 

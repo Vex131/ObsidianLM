@@ -11,7 +11,7 @@ import {
 import { loadRuntimeState, saveRuntimeState } from "../config/storage.js";
 import { detectPort } from "../process/port-detector.js";
 import { buildLlamaCppServerCommand } from "./command.js";
-import { getProfile, isLlamaCppServerProfile, validateProfile } from "./profiles.js";
+import { getProfile, isLlamaCppServerProfile, validateProfile, withProfileOperation } from "./profiles.js";
 import { RuntimeLogBuffer } from "./log-buffer.js";
 import { runStartupDetection, type StartupDetectorOptions } from "./startup-detector.js";
 
@@ -91,6 +91,10 @@ export class RuntimeManager {
   }
 
   async start(profileId: string): Promise<RuntimeActionResult> {
+    return withProfileOperation(() => this.startLocked(profileId));
+  }
+
+  private async startLocked(profileId: string): Promise<RuntimeActionResult> {
     if (this.child) {
       return {
         ok: false,
