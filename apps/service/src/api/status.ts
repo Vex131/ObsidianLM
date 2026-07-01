@@ -1,15 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import type { StatusResponse } from "@obsidianlm/shared";
 import { loadSettings } from "../config/storage.js";
+import { getGpuMonitoringStatus, type GpuMonitorOptions } from "../monitoring/gpu-monitor.js";
 import type { RuntimeManager } from "../runtime/manager.js";
 import { getProfile, isLlamaCppServerProfile } from "../runtime/profiles.js";
 import { sanitizeDetectionForApi } from "./sanitize.js";
 
-export async function registerStatusRoutes(app: FastifyInstance, runtimeManager: RuntimeManager): Promise<void> {
+export async function registerStatusRoutes(app: FastifyInstance, runtimeManager: RuntimeManager, gpuMonitorOptions: GpuMonitorOptions = {}): Promise<void> {
   app.get("/api/status", async (): Promise<StatusResponse> => {
     const settings = await loadSettings();
     const detection = sanitizeDetectionForApi(await runtimeManager.refreshDetection({ reconcileStaleState: false }));
     const state = runtimeManager.getState();
+    const gpuStatus = await getGpuMonitoringStatus(state.pid, gpuMonitorOptions);
     const activeProfile = runtimeManager.getActiveProfile() ?? (state.activeProfileId ? await getProfile(state.activeProfileId) : null);
     const hasActiveRuntime = state.status !== "stopped" && state.status !== "unknown_previous_runtime";
 
@@ -35,6 +37,16 @@ export async function registerStatusRoutes(app: FastifyInstance, runtimeManager:
         warnings: detection.warnings,
         ports: detection.ports,
         checkedAt: detection.checkedAt
+      },
+      gpu: {
+        available: gpuStatus.available,
+        gpuCount: gpuStatus.summary.gpuCount,
+        totalMemoryMiB: gpuStatus.summary.totalMemoryMiB,
+        usedMemoryMiB: gpuStatus.summary.usedMemoryMiB,
+        currentManagedRuntimeGpuMemoryMiB: gpuStatus.summary.currentManagedRuntimeGpuMemoryMiB,
+        unknownGpuProcessCount: gpuStatus.summary.unknownGpuProcessCount,
+        warningsCount: gpuStatus.summary.warningsCount,
+        checkedAt: gpuStatus.checkedAt
       }
     };
   });

@@ -16,6 +16,19 @@ export type {
 export type { AppSettings, StartupMode, StaleProcessPolicy } from "./types/settings.js";
 export type { ActiveRuntimeStatus, StatusResponse } from "./types/status.js";
 export type {
+  CompactGpuStatus,
+  GpuDevice,
+  GpuMemoryInfo,
+  GpuMonitoringStatus,
+  GpuPowerInfo,
+  GpuProcess,
+  GpuProcessKind,
+  GpuSummary,
+  GpuTemperatureInfo,
+  GpuUtilizationInfo,
+  GpuWarning
+} from "./types/gpu.js";
+export type {
   DetectedPort,
   DetectedProcess,
   PortStatus,

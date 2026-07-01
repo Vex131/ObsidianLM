@@ -10,9 +10,14 @@ import { registerProcessRoutes } from "./api/processes.js";
 import { registerSettingsRoutes } from "./api/settings.js";
 import { ensureStorageFiles } from "./config/storage.js";
 import { webDistDir } from "./config/paths.js";
+import type { GpuMonitorOptions } from "./monitoring/gpu-monitor.js";
 import { RuntimeManager } from "./runtime/manager.js";
 
-export async function createServer(): Promise<FastifyInstance> {
+export interface CreateServerOptions {
+  gpuMonitorOptions?: GpuMonitorOptions;
+}
+
+export async function createServer(options: CreateServerOptions = {}): Promise<FastifyInstance> {
   const app = fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? "info"
@@ -34,13 +39,13 @@ export async function createServer(): Promise<FastifyInstance> {
     await runtimeManager.shutdown();
   });
 
-  await registerStatusRoutes(app, runtimeManager);
+  await registerStatusRoutes(app, runtimeManager, options.gpuMonitorOptions);
   await registerSettingsRoutes(app);
   await registerProfileRoutes(app, runtimeManager);
   await registerRuntimeRoutes(app, runtimeManager);
   await registerDiscoveryRoutes(app);
   await registerProcessRoutes(app);
-  await registerMonitoringRoutes(app, runtimeManager);
+  await registerMonitoringRoutes(app, runtimeManager, options.gpuMonitorOptions);
 
   if (existsSync(webDistDir)) {
     await app.register(fastifyStatic, {

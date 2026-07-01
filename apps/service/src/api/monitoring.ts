@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { loadSettings } from "../config/storage.js";
+import { getGpuMonitoringStatus, type GpuMonitorOptions } from "../monitoring/gpu-monitor.js";
 import { classifyPortStatus, detectPort } from "../process/port-detector.js";
 import type { RuntimeManager } from "../runtime/manager.js";
 
-export async function registerMonitoringRoutes(app: FastifyInstance, runtimeManager: RuntimeManager): Promise<void> {
+export async function registerMonitoringRoutes(app: FastifyInstance, runtimeManager: RuntimeManager, gpuMonitorOptions: GpuMonitorOptions = {}): Promise<void> {
   app.get<{ Querystring: { port?: string } }>("/api/monitoring/ports", async (request, reply) => {
     const settings = await loadSettings();
     const requestedPort = request.query.port ? Number.parseInt(request.query.port, 10) : settings.managedLlamaPort;
@@ -15,4 +16,6 @@ export async function registerMonitoringRoutes(app: FastifyInstance, runtimeMana
     const currentPid = runtimeManager.getState().pid;
     return classifyPortStatus(port, currentPid);
   });
+
+  app.get("/api/monitoring/gpu", async () => getGpuMonitoringStatus(runtimeManager.getState().pid, gpuMonitorOptions));
 }

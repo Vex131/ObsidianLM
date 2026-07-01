@@ -8,6 +8,9 @@
     DiscoveredModel,
     DetectedProcess,
     DiscoveryWarning,
+    GpuDevice,
+    GpuMonitoringStatus,
+    GpuProcess,
     LlamaBuildDiscoveryResponse,
     ModelDiscoveryResponse,
     PortStatus,
@@ -44,7 +47,7 @@
     settings: AppSettings;
   }
 
-  const navItems = ["Overview", "Runtime", "Processes", "Profiles", "Models", "Builds", "Logs", "Settings"];
+  const navItems = ["Overview", "Runtime", "GPU", "Processes", "Profiles", "Models", "Builds", "Logs", "Settings"];
 
   let status = $state<StatusResponse | null>(null);
   let runtime = $state<RuntimeState | null>(null);
@@ -66,6 +69,7 @@
   let detection = $state<StartupDetectionSummary | null>(null);
   let detectedProcesses = $state<DetectedProcess[]>([]);
   let portStatus = $state<PortStatus | null>(null);
+  let gpuStatus = $state<GpuMonitoringStatus | null>(null);
   let modelDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
   let buildDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
   let selectedModelPath = $state("");
@@ -99,6 +103,8 @@
   const selectedModel = $derived(discoveredModels.find((model) => model.path === selectedModelPath) ?? null);
   const selectedBuild = $derived(discoveredBuilds.find((build) => build.serverPath === selectedBuildPath) ?? null);
   const discoveryWarningLines = $derived([...modelDiscoveryWarnings, ...buildDiscoveryWarnings].map((warning) => warning.message));
+  const gpuWarnings = $derived(gpuStatus?.warnings ?? []);
+  const gpuTone = $derived(!gpuStatus || gpuStatus.available ? (gpuStatus?.summary.unknownGpuProcessCount ? "warning" : "default") : "warning");
 
   function formatBytes(bytes: number): string {
     if (bytes < 1024) {
@@ -118,6 +124,48 @@
 
   function formatDate(value: string): string {
     return new Date(value).toLocaleString();
+  }
+
+  function formatMiB(value: number | null | undefined): string {
+    if (value === null || value === undefined) {
+      return "--";
+    }
+    if (value >= 1024) {
+      return `${(value / 1024).toFixed(value >= 10240 ? 1 : 2)} GiB`;
+    }
+    return `${value.toFixed(0)} MiB`;
+  }
+
+  function formatPercent(value: number | null | undefined): string {
+    return value === null || value === undefined ? "--" : `${value.toFixed(0)}%`;
+  }
+
+  function formatTemperature(value: number | null | undefined): string {
+    return value === null || value === undefined ? "--" : `${value.toFixed(0)} C`;
+  }
+
+  function formatPower(draw: number | null | undefined, limit: number | null | undefined): string {
+    if (draw === null || draw === undefined) {
+      return "--";
+    }
+    return limit === null || limit === undefined ? `${draw.toFixed(1)} W` : `${draw.toFixed(1)} / ${limit.toFixed(1)} W`;
+  }
+
+  function gpuMemoryPercent(gpu: GpuDevice): number {
+    if (!gpu.memoryTotalMiB || gpu.memoryUsedMiB === null) {
+      return 0;
+    }
+    return Math.max(0, Math.min(100, (gpu.memoryUsedMiB / gpu.memoryTotalMiB) * 100));
+  }
+
+  function gpuProcessLabel(process: GpuProcess): string {
+    if (process.kind === "current_managed_runtime") {
+      return "Current managed runtime";
+    }
+    if (process.kind === "possible_llama_runtime") {
+      return "Possible llama runtime";
+    }
+    return "Unknown GPU process";
   }
 
   async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -189,6 +237,10 @@
     portStatus = await fetchJson<PortStatus>(`/api/monitoring/ports?port=${encodeURIComponent(port)}`);
   }
 
+  async function loadGpuStatus(): Promise<void> {
+    gpuStatus = await fetchJson<GpuMonitoringStatus>("/api/monitoring/gpu");
+  }
+
   async function loadLogs(): Promise<void> {
     const response = await fetchJson<{ logs: RuntimeLogEntry[] }>("/api/runtime/logs?limit=200");
     logs = response.logs;
@@ -209,7 +261,7 @@
     errorMessage = null;
 
     try {
-      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadSettings(), loadModels(), loadBuilds(), loadDetection(), loadProcesses()]);
+      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadSettings(), loadModels(), loadBuilds(), loadDetection(), loadProcesses(), loadGpuStatus()]);
       await loadCommand();
       await loadPortStatus();
     } catch (error) {
@@ -252,6 +304,13 @@
     await runAction("rescan-builds", async () => {
       await loadBuilds("POST");
       actionMessage = "Build scan finished. Detected files were not executed.";
+    });
+  }
+
+  async function refreshGpuStatus(): Promise<void> {
+    await runAction("refresh-gpu", async () => {
+      await loadGpuStatus();
+      actionMessage = "GPU status refreshed using read-only nvidia-smi queries.";
     });
   }
 
@@ -302,7 +361,7 @@
 
     try {
       await action();
-      await Promise.all([loadStatus(), loadRuntime(), loadLogs(), loadDetection(), loadProcesses(), loadPortStatus()]);
+      await Promise.all([loadStatus(), loadRuntime(), loadLogs(), loadDetection(), loadProcesses(), loadPortStatus(), loadGpuStatus()]);
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : "Action failed.";
     } finally {
@@ -422,9 +481,9 @@
   <section class="workspace">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Phase 3 startup safety cockpit</p>
-        <h1>llama.cpp runtime safety</h1>
-        <p class="subtitle">Detect stale state, read-only llama-server processes, and managed port conflicts before any manual launch.</p>
+        <p class="eyebrow">Phase 4 GPU safety cockpit</p>
+        <h1>llama.cpp runtime and GPU monitor</h1>
+        <p class="subtitle">Detect stale state, read-only llama-server processes, managed port conflicts, and NVIDIA GPU VRAM usage without controlling external processes.</p>
       </div>
 
       <div class="topbar-status" aria-live="polite">
@@ -543,6 +602,71 @@
         {:else}
           <p class="empty-copy">Profile starts are blocked only when the selected API port is already in use by something other than the current managed child process.</p>
         {/if}
+      </Panel>
+
+      <Panel tone={gpuTone} eyebrow="GPU Monitor" title="NVIDIA GPU status" class="gpu-card">
+        <div class="panel-actions">
+          <ToolbarButton variant="ghost" onclick={refreshGpuStatus} disabled={Boolean(pendingAction)}>{pendingAction === "refresh-gpu" ? "Refreshing..." : "Refresh GPU"}</ToolbarButton>
+        </div>
+        <div class="metric-grid compact">
+          <MetricRow label="GPUs" value={`${gpuStatus?.summary.gpuCount ?? status?.gpu.gpuCount ?? 0}`} />
+          <MetricRow label="VRAM used" value={`${formatMiB(gpuStatus?.summary.usedMemoryMiB ?? status?.gpu.usedMemoryMiB)} / ${formatMiB(gpuStatus?.summary.totalMemoryMiB ?? status?.gpu.totalMemoryMiB)}`} />
+          <MetricRow label="Managed runtime VRAM" value={formatMiB(gpuStatus?.summary.currentManagedRuntimeGpuMemoryMiB ?? status?.gpu.currentManagedRuntimeGpuMemoryMiB)} muted={!gpuStatus?.summary.currentManagedRuntimeGpuMemoryMiB && !status?.gpu.currentManagedRuntimeGpuMemoryMiB} />
+          <MetricRow label="Unknown GPU processes" value={`${gpuStatus?.summary.unknownGpuProcessCount ?? status?.gpu.unknownGpuProcessCount ?? 0}`} />
+        </div>
+        {#if gpuStatus && !gpuStatus.available}
+          <p class="empty-copy">nvidia-smi is not available or no NVIDIA GPU was detected.</p>
+        {/if}
+        {#if gpuWarnings.length}
+          <ul class="warning-list gpu-warning-list">
+            {#each gpuWarnings as warning}
+              <li>{warning.message}</li>
+            {/each}
+          </ul>
+        {/if}
+        {#if gpuStatus?.gpus.length}
+          <div class="gpu-list">
+            {#each gpuStatus.gpus as gpu}
+              <article class="gpu-device-card">
+                <div class="gpu-heading">
+                  <div>
+                    <strong>GPU {gpu.index}: {gpu.name}</strong>
+                    <span>{gpu.uuid ?? "UUID unavailable"}</span>
+                  </div>
+                  <StatusPill tone={gpu.processes.some((process) => process.kind === "current_managed_runtime") ? "online" : "unknown"} label={gpu.processes.some((process) => process.kind === "current_managed_runtime") ? "Managed runtime" : "Read-only"} />
+                </div>
+                <div class="gpu-memory-bar" aria-label={`GPU ${gpu.index} memory usage`}>
+                  <span style={`width: ${gpuMemoryPercent(gpu)}%`}></span>
+                </div>
+                <div class="metric-grid compact">
+                  <MetricRow label="VRAM" value={`${formatMiB(gpu.memoryUsedMiB)} used / ${formatMiB(gpu.memoryTotalMiB)} total`} />
+                  <MetricRow label="Free VRAM" value={formatMiB(gpu.memoryFreeMiB)} />
+                  <MetricRow label="Utilization" value={formatPercent(gpu.utilizationGpuPercent)} />
+                  <MetricRow label="Temperature" value={formatTemperature(gpu.temperatureGpuC)} />
+                  <MetricRow label="Power" value={formatPower(gpu.powerDrawW, gpu.powerLimitW)} />
+                  <MetricRow label="Driver / CUDA" value={`${gpu.driverVersion ?? "--"} / ${gpu.cudaVersion ?? "--"}`} />
+                </div>
+              </article>
+            {/each}
+          </div>
+        {/if}
+        {#if gpuStatus?.processes.length}
+          <div class="gpu-process-table" aria-label="GPU compute processes">
+            <div class="gpu-process-row heading"><span>PID</span><span>Process</span><span>GPU</span><span>VRAM</span><span>Classification</span></div>
+            {#each gpuStatus.processes as process}
+              <div class={`gpu-process-row ${process.kind === "current_managed_runtime" ? "managed" : process.kind === "unknown_gpu_process" ? "unknown" : ""}`}>
+                <span>{process.pid}</span>
+                <span>{process.processName}</span>
+                <span>{process.gpuIndex === null ? "Unknown" : `GPU ${process.gpuIndex}`}</span>
+                <span>{formatMiB(process.usedMemoryMiB)}</span>
+                <span>{gpuProcessLabel(process)}</span>
+              </div>
+            {/each}
+          </div>
+        {:else if gpuStatus?.available}
+          <p class="empty-copy">No active GPU compute processes were reported by nvidia-smi.</p>
+        {/if}
+        <p class="helper-text">Read-only in Phase 4: ObsidianLM lists GPU processes but never kills, adopts, or changes GPU settings.</p>
       </Panel>
 
       <Panel tone={detectedProcesses.length ? "warning" : "default"} eyebrow="Processes" title="Detected llama-server processes" class="processes-card">

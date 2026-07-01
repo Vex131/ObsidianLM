@@ -1,4 +1,5 @@
 import type { StartupDetectionSummary } from "./detection.js";
+import type { CompactGpuStatus } from "./gpu.js";
 import type { RuntimeStatus, RuntimeType } from "./runtime-state.js";
 
 export interface ActiveRuntimeStatus {
@@ -19,4 +20,5 @@ export interface StatusResponse {
   activeRuntime: ActiveRuntimeStatus | null;
   warnings: string[];
   detection: Pick<StartupDetectionSummary, "categories" | "warnings" | "ports" | "checkedAt">;
+  gpu: CompactGpuStatus;
 }

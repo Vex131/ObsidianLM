@@ -708,6 +708,111 @@ h2 {
   grid-column: span 8;
 }
 
+.gpu-card {
+  grid-column: span 12;
+}
+
+.gpu-warning-list {
+  margin-top: var(--space-4);
+}
+
+.gpu-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.gpu-device-card {
+  display: grid;
+  gap: var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background: rgba(6, 7, 13, 0.28);
+}
+
+.gpu-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.gpu-heading strong,
+.gpu-heading span {
+  display: block;
+}
+
+.gpu-heading span {
+  margin-top: var(--space-1);
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.gpu-memory-bar {
+  overflow: hidden;
+  height: 0.7rem;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: var(--radius-pill);
+  background: rgba(6, 7, 13, 0.54);
+}
+
+.gpu-memory-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.85), rgba(139, 92, 246, 0.85));
+}
+
+.gpu-process-table {
+  display: grid;
+  margin: var(--space-4) 0;
+  overflow-x: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.gpu-process-row {
+  display: grid;
+  grid-template-columns: 6rem minmax(9rem, 1fr) 6rem 7rem minmax(12rem, 1fr);
+  min-width: 48rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.gpu-process-row:last-child {
+  border-bottom: 0;
+}
+
+.gpu-process-row span {
+  padding: var(--space-3);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.gpu-process-row.heading span {
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.gpu-process-row.managed {
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.gpu-process-row.managed span:last-child {
+  color: #86efac;
+}
+
+.gpu-process-row.unknown span:last-child {
+  color: #fde68a;
+}
+
 .process-list {
   display: grid;
   gap: var(--space-3);
@@ -778,6 +883,7 @@ h2 {
 
   .runtime-status-card,
   .active-runtime-card,
+  .gpu-card,
   .profiles-card,
   .discovery-settings-card,
   .models-card,
@@ -833,6 +939,7 @@ h2 {
   .controls-card,
   .runtime-status-card,
   .active-runtime-card,
+  .gpu-card,
   .profiles-card,
   .discovery-settings-card,
   .models-card,
@@ -855,6 +962,10 @@ h2 {
 
   .runtime-summary {
     align-items: flex-start;
+  }
+
+  .gpu-list {
+    grid-template-columns: 1fr;
   }
 
   .runtime-orb {

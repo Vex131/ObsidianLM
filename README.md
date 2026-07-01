@@ -84,7 +84,28 @@ Process classification categories:
 - `port_conflict` — a checked runtime port is already in use by another process or unknown owner.
 - `no_runtime_detected` — no active runtime, matching previous process, unmanaged process, or port conflict was found.
 
-Not implemented in Phase 3: GPU process/VRAM detection, stale process adoption, stale process cleanup, unknown process cleanup, Windows service installation, running `llama-bench`/`llama-perplexity` jobs, Docker, Electron, or a database. GPU process detection is planned for Phase 4, not Phase 3.
+Not implemented in Phase 3: GPU process/VRAM detection, stale process adoption, stale process cleanup, unknown process cleanup, Windows service installation, running `llama-bench`/`llama-perplexity` jobs, Docker, Electron, or a database. GPU process detection is implemented in Phase 4, not Phase 3.
+
+## Phase 4 Status
+
+Phase 4 adds a read-only NVIDIA GPU monitor backed by `nvidia-smi`.
+
+Requirements:
+
+- An NVIDIA GPU driver that provides `nvidia-smi`.
+- `nvidia-smi` available on `PATH` for the ObsidianLM service process.
+
+Implemented:
+
+- Query GPU status through `nvidia-smi` without changing GPU settings.
+- Show GPU name, driver/CUDA version when available, VRAM used/free/total, utilization, temperature, and power draw/limit.
+- Show GPU compute processes with PID, process name, GPU, reported VRAM, and classification.
+- Mark the current ObsidianLM-managed runtime when its PID appears in the GPU process list.
+- Classify other `llama-server`-like GPU processes as possible llama.cpp runtimes without adopting or stopping them.
+- Report unknown GPU processes as warnings/info only.
+- Expose GPU status in the dashboard and through `GET /api/monitoring/gpu`; include a compact GPU summary in `GET /api/status`.
+
+Not implemented in Phase 4: running `llama-bench`/`llama-perplexity` jobs, Windows service installation, Docker, Electron, or a database. The job system remains Phase 6, and Windows service mode remains Phase 7.
 
 ## Configure Discovery Folders
 
@@ -215,6 +236,8 @@ If `data/runtime-state.json` says a previous runtime was running, ObsidianLM per
 
 When a profile port is already in use, ObsidianLM refuses to start another runtime on that port. It does not try to determine intent from the process name alone, and it does not free the port automatically.
 
+GPU monitoring is read-only. ObsidianLM calls `nvidia-smi` to display GPU state, but it never kills GPU processes, adopts GPU processes, changes GPU settings, or treats unknown GPU processes as cleanup targets. Unknown GPU processes are warnings/info only.
+
 ## Troubleshooting
 
 ### Port `8085` is already in use
@@ -228,6 +251,28 @@ If you started `llama-server.exe` outside ObsidianLM, Phase 3 classifies it as `
 ### Previous runtime state warning
 
 If ObsidianLM was closed while a runtime was running, `data/runtime-state.json` may still say a runtime was active. On the next startup, ObsidianLM checks for a matching live process. If none is found, it marks the state stopped; if a possible match is found, it warns and leaves the process alone.
+
+### `nvidia-smi` is missing
+
+Phase 4 GPU monitoring requires the NVIDIA driver tool `nvidia-smi` on `PATH`. If the dashboard reports `nvidia_smi_missing`, install or repair the NVIDIA driver, then open a new terminal and confirm this works before starting ObsidianLM again:
+
+```bash
+nvidia-smi
+```
+
+On Windows, `nvidia-smi.exe` is commonly installed under `C:\Program Files\NVIDIA Corporation\NVSMI\`. Add that folder to `PATH` if the command works only when called by full path.
+
+### No NVIDIA GPUs detected
+
+If `nvidia-smi` runs but ObsidianLM reports `no_nvidia_gpus_detected`, the service did not receive any GPU rows from the driver. Confirm the machine has a supported NVIDIA GPU, the driver is installed, and `nvidia-smi` shows the GPU in the same user/session used to start ObsidianLM.
+
+### GPU process owner unknown
+
+If ObsidianLM reports `gpu_process_owner_unknown`, the GPU summary query worked but the compute-process query failed. VRAM totals may still be shown, but process ownership may be incomplete. Run `nvidia-smi` manually to compare, update the NVIDIA driver if needed, and treat any listed VRAM use as informational until process rows are available.
+
+### Used VRAM with no listed process
+
+`nvidia-smi` can report used VRAM without returning a matching compute process. This can happen with driver/display allocation, short-lived processes, permission/session limits, or process-query failures. ObsidianLM does not infer ownership from VRAM totals alone and will not kill or clean up anything automatically.
 
 ## Project Plan
 
