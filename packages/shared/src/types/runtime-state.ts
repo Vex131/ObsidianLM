@@ -68,6 +68,7 @@ export interface RuntimeActionResult {
   ok: boolean;
   message: string;
   state: RuntimeState;
+  error?: string;
   command?: CommandSpec;
   warnings?: string[];
   errors?: string[];

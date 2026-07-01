@@ -61,6 +61,31 @@ Implemented:
 
 Not implemented in Phase 2: GPU monitoring, stale process adoption/cleanup, unknown process cleanup, Windows service installation, running `llama-bench`/`llama-perplexity` jobs, Docker, Electron, or a database.
 
+## Phase 3 Status
+
+Phase 3 adds conservative startup detection and port-conflict handling for local `llama-server` processes.
+
+Implemented:
+
+- On service startup, inspect previous `data/runtime-state.json`, configured llama.cpp ports, and visible `llama-server`-like processes.
+- Detect likely manual or unmanaged `llama-server` processes without adopting or stopping them.
+- Detect whether the managed llama.cpp port, normally `8085`, is already listening.
+- Block duplicate runtime starts when the selected profile port is already in use.
+- Mark stale previous runtime state as stopped when no matching live process is found.
+- Show startup detection warnings in the dashboard/runtime status.
+
+Process classification categories:
+
+- `current_managed_process` — the active child process started by this ObsidianLM service session.
+- `previous_managed_process_candidate` — a live process that may match previous ObsidianLM runtime state; shown as a warning, not adopted or stopped.
+- `previous_managed_stale_state` — previous runtime state said a runtime was active, but no matching process was found; state is marked stopped.
+- `previous_managed_stale_process` — reserved for a proven previous ObsidianLM-managed process that is stale/unhealthy; Phase 3 does not auto-stop these because current cross-platform proof is intentionally conservative.
+- `unmanaged_llama_process` — a `llama-server`-like process that ObsidianLM did not start in this session.
+- `port_conflict` — a checked runtime port is already in use by another process or unknown owner.
+- `no_runtime_detected` — no active runtime, matching previous process, unmanaged process, or port conflict was found.
+
+Not implemented in Phase 3: GPU process/VRAM detection, stale process adoption, stale process cleanup, unknown process cleanup, Windows service installation, running `llama-bench`/`llama-perplexity` jobs, Docker, Electron, or a database. GPU process detection is planned for Phase 4, not Phase 3.
+
 ## Configure Discovery Folders
 
 Discovery is controlled by `modelFolders` and `llamaCppFolders` in `data/settings.json`. Fresh installs default both lists to empty. Use `data/settings.example.json` as a safe template, then replace the placeholder paths with your local folders.
@@ -184,9 +209,25 @@ From the UI:
 
 ## Safety Notes
 
-ObsidianLM only manages the child process started by the current ObsidianLM service run. It never kills unknown processes and never kills a process just because it is named `llama-server.exe`.
+ObsidianLM only stops the child process started by the current ObsidianLM service run. It never kills unknown processes and never kills a process just because it is named `llama-server.exe`.
 
-If `data/runtime-state.json` says a previous runtime was running, ObsidianLM marks it as `unknown_previous_runtime`, shows a warning, and does not adopt or clean it up. Stale process detection, adoption, and cleanup are planned for Phase 3.
+If `data/runtime-state.json` says a previous runtime was running, ObsidianLM performs conservative startup detection. If no matching live process is found, the stale state is marked stopped. If a possible previous managed process is found, ObsidianLM marks it as `unknown_previous_runtime`, shows a warning, and does not adopt or clean it up.
+
+When a profile port is already in use, ObsidianLM refuses to start another runtime on that port. It does not try to determine intent from the process name alone, and it does not free the port automatically.
+
+## Troubleshooting
+
+### Port `8085` is already in use
+
+Another process is listening on the default llama.cpp API port. ObsidianLM will show a `port_conflict` warning and block starting a duplicate runtime. Stop the other process yourself, or change the profile port in `data/profiles.json` and point external tools to the new `/v1` URL.
+
+### Manual `llama-server` is running
+
+If you started `llama-server.exe` outside ObsidianLM, Phase 3 classifies it as `unmanaged_llama_process`. This is informational/safety behavior: ObsidianLM will not stop, adopt, or restart that process. Stop it manually if you want ObsidianLM to manage the port.
+
+### Previous runtime state warning
+
+If ObsidianLM was closed while a runtime was running, `data/runtime-state.json` may still say a runtime was active. On the next startup, ObsidianLM checks for a matching live process. If none is found, it marks the state stopped; if a possible match is found, it warns and leaves the process alone.
 
 ## Project Plan
 

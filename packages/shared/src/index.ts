@@ -16,6 +16,18 @@ export type {
 export type { AppSettings, StartupMode, StaleProcessPolicy } from "./types/settings.js";
 export type { ActiveRuntimeStatus, StatusResponse } from "./types/status.js";
 export type {
+  DetectedPort,
+  DetectedProcess,
+  PortStatus,
+  ProcessKind,
+  ProcessListResponse,
+  RuntimeDetectionAction,
+  RuntimeDetectionCategory,
+  RuntimeDetectionWarning,
+  RuntimeDetectionWarningLevel,
+  StartupDetectionSummary
+} from "./types/detection.js";
+export type {
   CreateProfileFromDiscoveryRequest,
   CreateProfileFromDiscoveryResponse,
   DiscoveredLlamaCppBuild,

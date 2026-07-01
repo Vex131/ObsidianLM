@@ -39,6 +39,6 @@ export async function registerProfileRoutes(app: FastifyInstance, runtimeManager
 
   app.post<{ Params: { id: string } }>("/api/profiles/:id/start", async (request, reply) => {
     const result = await runtimeManager.start(request.params.id);
-    return reply.status(result.ok ? 200 : 400).send(result);
+    return reply.status(result.ok ? 200 : result.error === "port_conflict" ? 409 : 400).send(result);
   });
 }

@@ -1,21 +1,49 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { defaultRuntimeState, type CommandSpec, type RuntimeActionResult, type RuntimeProfile, type RuntimeState } from "@obsidianlm/shared";
+import {
+  defaultRuntimeState,
+  type CommandSpec,
+  type DetectedPort,
+  type RuntimeActionResult,
+  type RuntimeProfile,
+  type RuntimeState,
+  type StartupDetectionSummary
+} from "@obsidianlm/shared";
 import { loadRuntimeState, saveRuntimeState } from "../config/storage.js";
+import { detectPort } from "../process/port-detector.js";
 import { buildLlamaCppServerCommand } from "./command.js";
 import { getProfile, isLlamaCppServerProfile, validateProfile } from "./profiles.js";
 import { RuntimeLogBuffer } from "./log-buffer.js";
+import { runStartupDetection, type StartupDetectorOptions } from "./startup-detector.js";
 
-export const staleRuntimeWarning = "Previous runtime state exists, but stale process adoption/cleanup is not implemented until Phase 3.";
+export const staleRuntimeWarning = "Previous runtime state exists, but ObsidianLM did not adopt or stop it because Phase 3 requires conservative proof.";
+
+interface RuntimeManagerOptions {
+  startupDetectorOptions?: StartupDetectorOptions;
+  portDetector?: (port: number, host?: string) => Promise<DetectedPort>;
+  spawnRuntime?: typeof spawn;
+}
 
 export class RuntimeManager {
   private child: ChildProcessWithoutNullStreams | null = null;
   private activeProfile: RuntimeProfile | null = null;
   private state: RuntimeState = defaultRuntimeState;
+  private detectionSummary: StartupDetectionSummary | null = null;
 
-  constructor(readonly logs = new RuntimeLogBuffer()) {}
+  constructor(readonly logs = new RuntimeLogBuffer(), private readonly options: RuntimeManagerOptions = {}) {}
 
   async initialize(): Promise<void> {
     const previousState = await loadRuntimeState();
+    this.detectionSummary = await runStartupDetection(this.child?.pid ?? null, this.options.startupDetectorOptions);
+
+    if (this.detectionSummary.categories.includes("previous_managed_stale_state")) {
+      this.state = {
+        ...defaultRuntimeState,
+        status: "stopped",
+        message: "Previous runtime state was stale; no matching live process was found."
+      };
+      this.logs.add("system", "Previous runtime state was stale. No matching live process was found and no process was killed.");
+      return;
+    }
 
     if (previousState.startedByObsidianLM && previousState.pid && ["starting", "running", "stopping"].includes(previousState.status)) {
       this.state = {
@@ -42,7 +70,16 @@ export class RuntimeManager {
   }
 
   getWarnings(): string[] {
-    return this.state.status === "unknown_previous_runtime" ? [staleRuntimeWarning] : [];
+    return [...new Set([...(this.state.status === "unknown_previous_runtime" ? [staleRuntimeWarning] : []), ...(this.detectionSummary?.warnings.map((warning) => warning.message) ?? [])])];
+  }
+
+  getDetectionSummary(): StartupDetectionSummary | null {
+    return this.detectionSummary ? structuredClone(this.detectionSummary) : null;
+  }
+
+  async refreshDetection(options: Partial<StartupDetectorOptions> = {}): Promise<StartupDetectionSummary> {
+    this.detectionSummary = await runStartupDetection(this.child?.pid ?? null, { ...this.options.startupDetectorOptions, ...options });
+    return this.detectionSummary;
   }
 
   getActiveCommand(): CommandSpec | null {
@@ -93,6 +130,20 @@ export class RuntimeManager {
       };
     }
 
+    const portStatus = await (this.options.portDetector ?? detectPort)(profile.port, "127.0.0.1");
+    if (portStatus.inUse) {
+      const message = `Port ${profile.port} is already in use by another process. ObsidianLM will not start a duplicate runtime.`;
+      this.detectionSummary = await this.refreshDetection();
+      return {
+        ok: false,
+        error: "port_conflict",
+        message,
+        state: this.getState(),
+        errors: [message],
+        warnings: this.getWarnings()
+      };
+    }
+
     const command = buildLlamaCppServerCommand(profile);
     await this.logs.startLogFile(profile.id);
 
@@ -114,7 +165,7 @@ export class RuntimeManager {
     this.logs.add("system", `Starting profile ${profile.name} with ${command.executable}`);
 
     try {
-      const child = spawn(command.executable, command.args, {
+      const child = (this.options.spawnRuntime ?? spawn)(command.executable, command.args, {
         shell: false,
         windowsHide: true
       });

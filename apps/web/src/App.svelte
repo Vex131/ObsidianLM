@@ -6,13 +6,17 @@
     CreateProfileFromDiscoveryResponse,
     DiscoveredLlamaCppBuild,
     DiscoveredModel,
+    DetectedProcess,
     DiscoveryWarning,
     LlamaBuildDiscoveryResponse,
     ModelDiscoveryResponse,
+    PortStatus,
+    ProcessListResponse,
     RuntimeActionResult,
     RuntimeLogEntry,
     RuntimeProfile,
     RuntimeState,
+    StartupDetectionSummary,
     StatusResponse
   } from "@obsidianlm/shared";
   import MetricRow from "./lib/components/MetricRow.svelte";
@@ -40,7 +44,7 @@
     settings: AppSettings;
   }
 
-  const navItems = ["Overview", "Runtime", "Profiles", "Models", "Builds", "Logs", "Settings"];
+  const navItems = ["Overview", "Runtime", "Processes", "Profiles", "Models", "Builds", "Logs", "Settings"];
 
   let status = $state<StatusResponse | null>(null);
   let runtime = $state<RuntimeState | null>(null);
@@ -59,6 +63,9 @@
   let llamaCppFoldersText = $state("");
   let discoveredModels = $state<DiscoveredModel[]>([]);
   let discoveredBuilds = $state<DiscoveredLlamaCppBuild[]>([]);
+  let detection = $state<StartupDetectionSummary | null>(null);
+  let detectedProcesses = $state<DetectedProcess[]>([]);
+  let portStatus = $state<PortStatus | null>(null);
   let modelDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
   let buildDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
   let selectedModelPath = $state("");
@@ -83,6 +90,9 @@
   const runtimeStatus = $derived(runtime?.status ?? status?.activeRuntime?.status ?? "stopped");
   const runtimeTone = $derived(runtimeStatus === "running" ? "online" : runtimeStatus === "failed" ? "danger" : runtimeStatus === "starting" || runtimeStatus === "stopping" ? "warning" : "offline");
   const warnings = $derived([...(status?.warnings ?? []), ...(validation?.warnings ?? [])]);
+  const detectionWarnings = $derived(detection?.warnings.map((warning) => warning.message) ?? []);
+  const selectedProfilePortConflict = $derived(Boolean(selectedProfile && portStatus?.port.port === selectedProfile.port && portStatus.conflict));
+  const selectedProfilePortMessage = $derived(selectedProfilePortConflict ? portStatus?.conflictMessage : null);
   const apiUrl = $derived(status?.activeRuntime?.apiUrl ?? (selectedProfile ? `http://localhost:${selectedProfile.port}/v1` : `http://localhost:${status?.managedLlamaPort ?? 8085}/v1`));
   const commandLines = $derived(command ? [command.displayCommand] : ["Select a profile to preview the llama-server.exe command."]);
   const logLines = $derived(logs.length ? logs.map((entry) => `${entry.timestamp} [${entry.stream}] ${entry.message}`) : ["No runtime logs yet."]);
@@ -165,6 +175,20 @@
     }
   }
 
+  async function loadDetection(): Promise<void> {
+    detection = await fetchJson<StartupDetectionSummary>("/api/runtime/detection");
+  }
+
+  async function loadProcesses(): Promise<void> {
+    const response = await fetchJson<ProcessListResponse>("/api/processes/llama");
+    detectedProcesses = response.processes;
+  }
+
+  async function loadPortStatus(): Promise<void> {
+    const port = selectedProfile?.port ?? settings?.managedLlamaPort ?? status?.managedLlamaPort ?? 8085;
+    portStatus = await fetchJson<PortStatus>(`/api/monitoring/ports?port=${encodeURIComponent(port)}`);
+  }
+
   async function loadLogs(): Promise<void> {
     const response = await fetchJson<{ logs: RuntimeLogEntry[] }>("/api/runtime/logs?limit=200");
     logs = response.logs;
@@ -185,8 +209,9 @@
     errorMessage = null;
 
     try {
-      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadSettings(), loadModels(), loadBuilds()]);
+      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadSettings(), loadModels(), loadBuilds(), loadDetection(), loadProcesses()]);
       await loadCommand();
+      await loadPortStatus();
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : "Unable to load ObsidianLM state.";
     } finally {
@@ -277,7 +302,7 @@
 
     try {
       await action();
-      await Promise.all([loadStatus(), loadRuntime(), loadLogs()]);
+      await Promise.all([loadStatus(), loadRuntime(), loadLogs(), loadDetection(), loadProcesses(), loadPortStatus()]);
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : "Action failed.";
     } finally {
@@ -368,6 +393,9 @@
       command = null;
       errorMessage = error instanceof Error ? error.message : "Unable to load command preview.";
     });
+    void loadPortStatus().catch(() => {
+      portStatus = null;
+    });
   });
 </script>
 
@@ -394,9 +422,9 @@
   <section class="workspace">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Phase 2 discovery cockpit</p>
-        <h1>llama.cpp runtime discovery</h1>
-        <p class="subtitle">Scan only configured folders for GGUF models and llama.cpp tools, then explicitly create a profile without starting llama.cpp.</p>
+        <p class="eyebrow">Phase 3 startup safety cockpit</p>
+        <h1>llama.cpp runtime safety</h1>
+        <p class="subtitle">Detect stale state, read-only llama-server processes, and managed port conflicts before any manual launch.</p>
       </div>
 
       <div class="topbar-status" aria-live="polite">
@@ -454,11 +482,14 @@
       <Panel eyebrow="Controls" title="Runtime actions" class="controls-card">
         <div class="control-stack" aria-describedby="runtime-controls-help">
           <ToolbarButton variant="secondary" onclick={validateSelectedProfile} disabled={!selectedProfileId || Boolean(pendingAction)}>{pendingAction === "validate" ? "Validating..." : "Validate profile"}</ToolbarButton>
-          <ToolbarButton variant="success" onclick={startSelectedProfile} disabled={!selectedProfileId || Boolean(pendingAction) || runtimeStatus === "running" || runtimeStatus === "starting"}>{pendingAction === "start" ? "Starting..." : "Start runtime"}</ToolbarButton>
+          <ToolbarButton variant="success" onclick={startSelectedProfile} disabled={!selectedProfileId || Boolean(pendingAction) || runtimeStatus === "running" || runtimeStatus === "starting" || selectedProfilePortConflict}>{pendingAction === "start" ? "Starting..." : "Start runtime"}</ToolbarButton>
           <ToolbarButton variant="danger" onclick={stopRuntime} disabled={Boolean(pendingAction) || runtimeStatus === "stopped"}>{pendingAction === "stop" ? "Stopping..." : "Stop runtime"}</ToolbarButton>
           <ToolbarButton variant="secondary" onclick={restartRuntime} disabled={Boolean(pendingAction) || runtimeStatus !== "running"}>{pendingAction === "restart" ? "Restarting..." : "Restart"}</ToolbarButton>
         </div>
         <p id="runtime-controls-help" class="helper-text">Stop only targets the active child process started by this running ObsidianLM service instance.</p>
+        {#if selectedProfilePortMessage}
+          <p class="port-conflict-copy">{selectedProfilePortMessage}</p>
+        {/if}
       </Panel>
 
       <Panel tone={validation && !validation.valid ? "danger" : validation?.valid ? "live" : "default"} eyebrow="Validation" title="Profile checks">
@@ -483,15 +514,56 @@
         <TerminalBlock label={command?.executable ?? "llama-server.exe"} lines={commandLines} empty={!command} />
       </Panel>
 
-      <Panel tone={warnings.length ? "warning" : "default"} eyebrow="Safety" title="Warnings">
-        {#if warnings.length}
+      <Panel tone={warnings.length || detectionWarnings.length ? "warning" : "default"} eyebrow="Startup Safety" title="Detection warnings">
+        {#if warnings.length || detectionWarnings.length}
           <ul class="warning-list">
-            {#each warnings as warning}
+            {#each [...warnings, ...detectionWarnings] as warning}
               <li>{warning}</li>
             {/each}
           </ul>
         {:else}
-          <p class="empty-copy">No warnings reported. ObsidianLM never kills unknown llama-server.exe processes in Phase 1.</p>
+          <p class="empty-copy">No warnings reported. ObsidianLM never kills unknown llama-server.exe processes and does not auto-start llama.cpp on service startup.</p>
+        {/if}
+        <div class="classification-strip" aria-label="Detection categories">
+          {#each detection?.categories ?? ["no_runtime_detected"] as category}
+            <span>{category}</span>
+          {/each}
+        </div>
+      </Panel>
+
+      <Panel tone={portStatus?.conflict ? "danger" : portStatus?.port.inUse ? "warning" : "default"} eyebrow="Port Monitor" title={`Port ${portStatus?.port.port ?? selectedProfile?.port ?? status?.managedLlamaPort ?? 8085}`} class="ports-card">
+        <div class="metric-grid compact">
+          <MetricRow label="Status" value={portStatus?.port.inUse ? "In use" : "Free"} />
+          <MetricRow label="Owner PID" value={portStatus?.port.ownerPid ? `${portStatus.port.ownerPid}` : "Unknown"} muted={!portStatus?.port.ownerPid} />
+          <MetricRow label="Host checked" value={portStatus?.port.host ?? "127.0.0.1"} />
+          <MetricRow label="Method" value={portStatus?.port.detectionMethod ?? "tcp_connect"} />
+        </div>
+        {#if portStatus?.conflictMessage}
+          <p class="port-conflict-copy">{portStatus.conflictMessage}</p>
+        {:else}
+          <p class="empty-copy">Profile starts are blocked only when the selected API port is already in use by something other than the current managed child process.</p>
+        {/if}
+      </Panel>
+
+      <Panel tone={detectedProcesses.length ? "warning" : "default"} eyebrow="Processes" title="Detected llama-server processes" class="processes-card">
+        {#if detectedProcesses.length}
+          <div class="process-list">
+            {#each detectedProcesses as process}
+              <article class="process-card">
+                <div class="process-heading">
+                  <strong>PID {process.pid}</strong>
+                  <span>{process.confidence} confidence</span>
+                </div>
+                <p>{process.name}</p>
+                {#if process.executablePath}<code>{process.executablePath}</code>{/if}
+                {#if process.commandLine}<details><summary>Command line</summary><code>{process.commandLine}</code></details>{/if}
+                <small>{process.reasons.join(" ")}</small>
+              </article>
+            {/each}
+          </div>
+          <p class="helper-text">Read-only in Phase 3: no kill, adopt, or stop controls are offered for detected external processes.</p>
+        {:else}
+          <p class="empty-copy">No llama-server-like processes were detected. llama-bench, llama-perplexity, and llama-cli are not treated as server runtimes.</p>
         {/if}
       </Panel>
 

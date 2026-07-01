@@ -1,3 +1,4 @@
+import type { StartupDetectionSummary } from "./detection.js";
 import type { RuntimeStatus, RuntimeType } from "./runtime-state.js";
 
 export interface ActiveRuntimeStatus {
@@ -17,4 +18,5 @@ export interface StatusResponse {
   managedLlamaPort: number;
   activeRuntime: ActiveRuntimeStatus | null;
   warnings: string[];
+  detection: Pick<StartupDetectionSummary, "categories" | "warnings" | "ports" | "checkedAt">;
 }

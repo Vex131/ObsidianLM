@@ -1,12 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import type { RuntimeLogEntry } from "@obsidianlm/shared";
 import type { RuntimeManager } from "../runtime/manager.js";
+import { sanitizeDetectionForApi } from "./sanitize.js";
 
 export async function registerRuntimeRoutes(app: FastifyInstance, runtimeManager: RuntimeManager): Promise<void> {
   app.get("/api/runtime", async () => ({
     state: runtimeManager.getState(),
     warnings: runtimeManager.getWarnings()
   }));
+
+  app.get("/api/runtime/detection", async () => sanitizeDetectionForApi(await runtimeManager.refreshDetection({ reconcileStaleState: false })));
 
   app.get("/api/runtime/command", async (request, reply) => {
     const command = runtimeManager.getActiveCommand();
