@@ -48,14 +48,16 @@ Do not use:
 
 ## Subagent Routing
 
-Use the global subagent set when useful, but do not force MINDCrew-specific routing onto this project.
+Use the global subagent set when useful. This project uses Svelte/Vite and Fastify/Node, so route implementation work by actual stack rather than by Laravel/Next.js assumptions.
 
 Recommended routing for ObsidianLM:
 
 - Unknown code/data flow: `@explore`
 - Current framework docs, CLI behavior, or package compatibility: `@researcher`
+- Scoped Svelte/Vite, Fastify/Node, shared TypeScript, runtime, config, and script implementation: `@coder`
 - Errors, logs, failed commands, broken startup, or crashed runtime behavior: `@debugger`
-- Regression coverage and test repair: `@tests`
+- Tests, typechecks, builds, regression coverage, and test repair: `@tester`
+- Browser/UI verification: `@e2e`
 - Docs-only work: `@docs`
 - Risky or multi-file review before completion: `@reviewer`
 - Git operations, commits, branches, pushes: `@git`
@@ -65,6 +67,8 @@ For now, do not route ObsidianLM frontend work to `@nextjs`, because this projec
 For now, do not route ObsidianLM service work to `@laravel`, because this project uses Fastify/Node, not Laravel.
 
 For now, do not route normal v1 storage work to `@database`, because v1 uses JSON files, not a database.
+
+Do not use removed old global agents: `@web`, `@service`, `@runtime`, `@tests`, `@test-runner`, or `@test-fixer`.
 
 ## Verification
 
@@ -78,6 +82,8 @@ For early phases, this usually means:
 - `npm test` if tests exist
 - Manual check that the service starts
 - Manual check that the UI loads
+
+Do not run `npm install` automatically unless dependencies are missing, package files changed, or the user/main agent explicitly asked for dependency installation.
 
 ## Git
 
