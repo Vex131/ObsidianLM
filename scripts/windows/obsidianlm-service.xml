@@ -1,0 +1,20 @@
+<service>
+  <id>ObsidianLM</id>
+  <name>ObsidianLM</name>
+  <displayname>ObsidianLM Runtime Manager</displayname>
+  <description>ObsidianLM local AI runtime control plane. Starts ObsidianLM only; llama.cpp profiles are started explicitly from the UI or API.</description>
+  <executable>%NODE_EXE%</executable>
+  <arguments>apps/service/dist/main.js</arguments>
+  <workingdirectory>%APP_ROOT%</workingdirectory>
+  <env name="NODE_ENV" value="production" />
+  <env name="OBSIDIANLM_SERVICE_MODE" value="1" />
+  <env name="OBSIDIANLM_DATA_DIR" value="%PROGRAMDATA%\ObsidianLM\data" />
+  <env name="OBSIDIANLM_LOG_DIR" value="%PROGRAMDATA%\ObsidianLM\logs" />
+  <logpath>%PROGRAMDATA%\ObsidianLM\logs\service</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10485760</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+</service>

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { StatusResponse } from "@obsidianlm/shared";
 import { loadSettings } from "../config/storage.js";
+import { getAppPaths } from "../config/paths.js";
 import { getGpuMonitoringStatus, type GpuMonitorOptions } from "../monitoring/gpu-monitor.js";
 import type { RuntimeManager } from "../runtime/manager.js";
 import { getProfile, isLlamaCppServerProfile } from "../runtime/profiles.js";
@@ -9,6 +10,7 @@ import { sanitizeDetectionForApi } from "./sanitize.js";
 export async function registerStatusRoutes(app: FastifyInstance, runtimeManager: RuntimeManager, gpuMonitorOptions: GpuMonitorOptions = {}): Promise<void> {
   app.get("/api/status", async (): Promise<StatusResponse> => {
     const settings = await loadSettings();
+    const paths = getAppPaths();
     const detection = sanitizeDetectionForApi(await runtimeManager.refreshDetection({ reconcileStaleState: false }));
     const state = runtimeManager.getState();
     const gpuStatus = await getGpuMonitoringStatus(state.pid, gpuMonitorOptions);
@@ -19,6 +21,10 @@ export async function registerStatusRoutes(app: FastifyInstance, runtimeManager:
       service: "running",
       app: "ObsidianLM",
       version: "0.1.0",
+      serviceMode: paths.serviceMode,
+      runningMode: paths.serviceMode ? "windowsService" : process.env.NODE_ENV === "production" ? "production" : "development",
+      dataDirMode: paths.dataDirMode,
+      logDirMode: paths.logDirMode,
       uiPort: settings.uiPort,
       managedLlamaPort: settings.managedLlamaPort,
       activeRuntime: hasActiveRuntime

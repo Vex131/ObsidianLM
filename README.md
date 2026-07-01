@@ -144,6 +144,82 @@ The Phase 6 test job runs a safe cross-platform Node command. It does not run `l
 
 Not implemented in Phase 6: full `llama-bench` integration, full `llama-perplexity` integration, routing jobs through `RuntimeManager`, killing unknown processes, Windows service installation, Docker, Electron, or a database. Full llama.cpp tool integrations are future phases built on this foundation.
 
+## Phase 7 Status
+
+Phase 7 adds Windows Service Mode support for running ObsidianLM itself as a background Windows service.
+
+Implemented:
+
+- Service-mode path resolution with `OBSIDIANLM_SERVICE_MODE=1`.
+- Production defaults for service data/logs under `%PROGRAMDATA%\ObsidianLM`.
+- Environment overrides: `OBSIDIANLM_DATA_DIR`, `OBSIDIANLM_LOG_DIR`, and the legacy `OBSIDIANLM_LOGS_DIR` alias.
+- Windows service npm commands for install, uninstall, start, stop, restart, and status.
+- PowerShell scripts under `scripts/windows/` with Windows/admin/build/service-state checks.
+- A WinSW-style service template at `scripts/windows/obsidianlm-service.xml`.
+- Service-mode labels in `GET /api/status` and the dashboard System panel.
+
+Not implemented in Phase 7: tray app, browser-based service installer buttons, auto-starting llama.cpp on boot, changing the llama.cpp API port behavior, changing `RuntimeManager` semantics, Docker, Electron, or a database.
+
+Windows Service Mode starts only ObsidianLM. On boot, ObsidianLM still scans and warns about existing llama.cpp processes and port conflicts, but it does not start, adopt, stop, or kill unknown llama.cpp processes.
+
+### Windows Service Setup
+
+Build before installing:
+
+```bash
+npm install
+npm run build
+```
+
+ObsidianLM uses a wrapper-agnostic script layout with a WinSW-style XML template. The repository does not commit or download a wrapper binary. Place a WinSW-compatible executable here before installing:
+
+```text
+%PROGRAMDATA%\ObsidianLM\service\obsidianlm-service.exe
+```
+
+The install script creates `%PROGRAMDATA%\ObsidianLM\service`, `%PROGRAMDATA%\ObsidianLM\data`, `%PROGRAMDATA%\ObsidianLM\logs`, `%PROGRAMDATA%\ObsidianLM\logs\runtimes`, `%PROGRAMDATA%\ObsidianLM\logs\jobs`, and `%PROGRAMDATA%\ObsidianLM\logs\service` as needed.
+
+Run install/uninstall from an elevated PowerShell session:
+
+```bash
+npm run service:install
+npm run service:start
+npm run service:status
+npm run service:stop
+npm run service:restart
+npm run service:uninstall
+```
+
+`service:install` fails if the project has not been built, if the wrapper executable is missing, or if a different service already uses the stable service name `ObsidianLM`. It does not start llama.cpp.
+
+`service:uninstall` stops the ObsidianLM service first if it is running. It preserves `%PROGRAMDATA%\ObsidianLM\data` by default. Logs are also preserved unless you explicitly run the script directly with `-RemoveLogs`.
+
+### Service Data and Logs
+
+Development mode keeps using project-local paths unless env vars override them:
+
+- Data: `data/`
+- Logs: `logs/`
+- Runtime logs: `logs/runtimes/`
+- Job logs: `logs/jobs/`
+
+Installed service mode defaults to:
+
+- Data: `%PROGRAMDATA%\ObsidianLM\data`
+- Logs: `%PROGRAMDATA%\ObsidianLM\logs`
+- Runtime logs: `%PROGRAMDATA%\ObsidianLM\logs\runtimes`
+- Job logs: `%PROGRAMDATA%\ObsidianLM\logs\jobs`
+- Service wrapper logs: `%PROGRAMDATA%\ObsidianLM\logs\service`
+
+ObsidianLM does not automatically migrate local project data into `%PROGRAMDATA%`. If you want the service to reuse development profiles or settings, stop ObsidianLM and manually copy the relevant JSON files from `data/` into `%PROGRAMDATA%\ObsidianLM\data` before starting the service.
+
+Tailscale access remains:
+
+- ObsidianLM UI/API: `http://100.84.76.75:8090`
+- llama.cpp clients: `http://100.84.76.75:8085/v1`
+
+External tools such as OpenCode and Illustria should still talk directly to llama.cpp, not through ObsidianLM.
+
 ## Configure Discovery Folders
 
 Discovery is controlled by `modelFolders` and `llamaCppFolders` in `data/settings.json`. Fresh installs default both lists to empty. Use `data/settings.example.json` as a safe template, then replace the placeholder paths with your local folders.

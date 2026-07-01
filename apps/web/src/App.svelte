@@ -103,6 +103,9 @@
   const selectedProfilePortConflict = $derived(Boolean(selectedProfile && portStatus?.port.port === selectedProfile.port && portStatus.conflict));
   const selectedProfilePortMessage = $derived(selectedProfilePortConflict ? portStatus?.conflictMessage : null);
   const apiUrl = $derived(status?.activeRuntime?.apiUrl ?? (selectedProfile ? `http://localhost:${selectedProfile.port}/v1` : `http://localhost:${status?.managedLlamaPort ?? 8085}/v1`));
+  const runningModeLabel = $derived(status?.runningMode === "windowsService" ? "Windows service" : status?.runningMode === "production" ? "Production" : "Development");
+  const dataDirModeLabel = $derived(status?.dataDirMode === "programData" ? "ProgramData" : status?.dataDirMode === "custom" ? "Custom" : "Project");
+  const logDirModeLabel = $derived(status?.logDirMode === "programData" ? "ProgramData" : status?.logDirMode === "custom" ? "Custom" : "Project");
   const commandLines = $derived(command ? [command.displayCommand] : ["Select a profile to preview the llama-server.exe command."]);
   const logLines = $derived(logs.length ? logs.map((entry) => `${entry.timestamp} [${entry.stream}] ${entry.message}`) : ["No runtime logs yet."]);
   const selectedJob = $derived(jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null);
@@ -620,6 +623,16 @@
         {:else}
           <p class="empty-copy">No profiles are configured. Copy <code>data/profiles.example.json</code> into <code>data/profiles.json</code>, then replace the example paths with your local llama-server.exe and GGUF model paths.</p>
         {/if}
+      </Panel>
+
+      <Panel eyebrow="System" title="Service mode" class="system-card">
+        <div class="metric-grid compact">
+          <MetricRow label="Running mode" value={runningModeLabel} />
+          <MetricRow label="Service mode" value={status?.serviceMode ? "Enabled" : "Disabled"} />
+          <MetricRow label="Data directory" value={dataDirModeLabel} />
+          <MetricRow label="Log directory" value={logDirModeLabel} />
+        </div>
+        <p class="helper-text">Windows Service Mode starts only ObsidianLM. llama.cpp profiles still require an explicit start action.</p>
       </Panel>
 
       <Panel eyebrow="Controls" title="Runtime actions" class="controls-card">

@@ -1,7 +1,7 @@
 import { mkdir, appendFile } from "node:fs/promises";
 import path from "node:path";
 import type { RuntimeLogEntry } from "@obsidianlm/shared";
-import { runtimeLogsDir } from "../config/paths.js";
+import { getRuntimeLogsDir } from "../config/paths.js";
 
 type LogListener = (entry: RuntimeLogEntry) => void;
 
@@ -14,6 +14,7 @@ export class RuntimeLogBuffer {
   constructor(private readonly maxEntries = 500) {}
 
   async startLogFile(profileId: string): Promise<string> {
+    const runtimeLogsDir = getRuntimeLogsDir();
     await mkdir(runtimeLogsDir, { recursive: true });
     const safeProfileId = profileId.replace(/[^a-zA-Z0-9_.-]/gu, "_");
     const timestamp = new Date().toISOString().replace(/[:.]/gu, "-");

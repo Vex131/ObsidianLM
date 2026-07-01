@@ -15,6 +15,10 @@ export interface StatusResponse {
   service: "running";
   app: "ObsidianLM";
   version: string;
+  serviceMode: boolean;
+  runningMode: "development" | "production" | "windowsService";
+  dataDirMode: "project" | "programData" | "custom";
+  logDirMode: "project" | "programData" | "custom";
   uiPort: number;
   managedLlamaPort: number;
   activeRuntime: ActiveRuntimeStatus | null;

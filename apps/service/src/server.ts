@@ -10,7 +10,7 @@ import { registerProcessRoutes } from "./api/processes.js";
 import { registerSettingsRoutes } from "./api/settings.js";
 import { registerJobRoutes } from "./api/jobs.js";
 import { ensureStorageFiles } from "./config/storage.js";
-import { webDistDir } from "./config/paths.js";
+import { ensureAppDirectories, webDistDir } from "./config/paths.js";
 import type { GpuMonitorOptions } from "./monitoring/gpu-monitor.js";
 import { RuntimeManager } from "./runtime/manager.js";
 import { JobManager } from "./jobs/manager.js";
@@ -34,6 +34,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
     });
   });
 
+  await ensureAppDirectories();
   await ensureStorageFiles();
   const runtimeManager = new RuntimeManager();
   const jobManager = new JobManager();
