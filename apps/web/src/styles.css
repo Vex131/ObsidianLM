@@ -750,6 +750,108 @@ h2 {
   color: var(--color-text-subtle);
 }
 
+.logs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.log-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.log-status-strip small {
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.logs-actions {
+  margin: 0;
+}
+
+.log-search-input {
+  width: 100%;
+  min-height: 2.55rem;
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+  background: var(--color-bg-panel-strong);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.log-viewer {
+  display: grid;
+  max-height: 28rem;
+  overflow: auto;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: var(--radius-lg);
+  background: var(--color-code);
+}
+
+.log-viewer .empty-copy {
+  padding: var(--space-4);
+}
+
+.log-entry {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.8fr) 5.5rem minmax(0, 2fr);
+  gap: var(--space-3);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  padding: var(--space-2) var(--space-3);
+  color: #c4d3ea;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+
+.log-entry:last-child {
+  border-bottom: 0;
+}
+
+.log-time {
+  color: var(--color-text-subtle);
+}
+
+.log-source {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.log-source-stdout .log-source {
+  border-color: rgba(56, 189, 248, 0.26);
+  color: #7dd3fc;
+}
+
+.log-source-stderr .log-source {
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.log-source-system .log-source {
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fde68a;
+}
+
+.log-message {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .warning-list {
   display: grid;
   gap: var(--space-2);
@@ -1137,5 +1239,14 @@ h2 {
 
   .metric-row strong {
     text-align: left;
+  }
+
+  .log-entry {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  .log-source {
+    width: max-content;
   }
 }

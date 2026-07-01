@@ -15,6 +15,10 @@ out/
 # Logs and temporary files
 logs/*.log
 logs/runtimes/*.log
+logs/runtimes/*.jsonl
+logs/jobs/*.log
+logs/jobs/*.jsonl
+logs/service/*.log
 tmp/
 temp/
 .cache/

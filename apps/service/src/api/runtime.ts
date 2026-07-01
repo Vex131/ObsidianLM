@@ -31,11 +31,11 @@ export async function registerRuntimeRoutes(app: FastifyInstance, runtimeManager
   });
 
   app.get<{ Querystring: { limit?: string } }>("/api/runtime/logs", async (request) => {
-    const limit = Number.parseInt(request.query.limit ?? "200", 10);
-    return { logs: runtimeManager.logs.getRecent(Number.isFinite(limit) ? limit : 200) };
+    const limit = Number.parseInt(request.query.limit ?? "300", 10);
+    return { logs: await runtimeManager.logs.getRecent(limit) };
   });
 
-  app.get("/api/runtime/logs/stream", async (request, reply) => {
+  app.get<{ Querystring: { limit?: string } }>("/api/runtime/logs/stream", async (request, reply) => {
     reply.hijack();
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -44,17 +44,60 @@ export async function registerRuntimeRoutes(app: FastifyInstance, runtimeManager
       "X-Accel-Buffering": "no"
     });
 
-    const send = (entry: RuntimeLogEntry): void => {
-      reply.raw.write(`event: log\ndata: ${JSON.stringify(entry)}\n\n`);
+    let closed = false;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let unsubscribe = (): void => {};
+
+    const cleanup = (): void => {
+      closed = true;
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
+      unsubscribe();
+      unsubscribe = (): void => {};
     };
 
-    for (const entry of runtimeManager.logs.getRecent(50)) {
+    request.raw.on("close", cleanup);
+
+    const sendEvent = (event: string, data: unknown): void => {
+      if (closed || reply.raw.destroyed) {
+        return;
+      }
+
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const send = (entry: RuntimeLogEntry): void => {
+      sendEvent("log", entry);
+      if (entry.source === "system" && entry.message.startsWith("Runtime process exited")) {
+        sendEvent("stopped", { timestamp: entry.timestamp, message: entry.message });
+      }
+    };
+
+    sendEvent("connection", { ok: true, state: runtimeManager.getState() });
+
+    const limit = Number.parseInt(request.query.limit ?? "300", 10);
+    for (const entry of await runtimeManager.logs.getRecent(limit)) {
+      if (closed || reply.raw.destroyed) {
+        return;
+      }
       send(entry);
     }
 
-    const unsubscribe = runtimeManager.logs.subscribe(send);
-    request.raw.on("close", () => {
-      unsubscribe();
-    });
+    if (closed || reply.raw.destroyed) {
+      return;
+    }
+
+    const state = runtimeManager.getState();
+    if (["stopped", "exited", "failed", "unknown_previous_runtime"].includes(state.status)) {
+      sendEvent("stopped", { state });
+    }
+
+    heartbeat = setInterval(() => {
+      sendEvent("heartbeat", { timestamp: new Date().toISOString() });
+    }, 15000);
+
+    unsubscribe = runtimeManager.logs.subscribe(send);
   });
 }

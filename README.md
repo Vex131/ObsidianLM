@@ -162,6 +162,18 @@ Not implemented in Phase 7: tray app, browser-based service installer buttons, a
 
 Windows Service Mode starts only ObsidianLM. On boot, ObsidianLM still scans and warns about existing llama.cpp processes and port conflicts, but it does not start, adopt, stop, or kill unknown llama.cpp processes.
 
+## Phase 8 Status
+
+Phase 8 adds persisted runtime log reading and live runtime log streaming for ObsidianLM-managed runtime processes.
+
+Implemented:
+
+- Runtime stdout/stderr/system entries are written as structured runtime log files.
+- The dashboard **Logs** panel shows recent runtime output, live stream status, search, refresh, copy visible, and clear visible actions.
+- Runtime log APIs: `GET /api/runtime/logs?limit=300` for recent entries and `GET /api/runtime/logs/stream?limit=100` for SSE live updates.
+
+Live runtime logs are only for the active or most recent llama.cpp process started and tracked by ObsidianLM. ObsidianLM does not tail, adopt, or stream logs from manual/unmanaged `llama-server` processes.
+
 ### Windows Service Setup
 
 Build before installing:
@@ -210,6 +222,12 @@ Installed service mode defaults to:
 - Runtime logs: `%PROGRAMDATA%\ObsidianLM\logs\runtimes`
 - Job logs: `%PROGRAMDATA%\ObsidianLM\logs\jobs`
 - Service wrapper logs: `%PROGRAMDATA%\ObsidianLM\logs\service`
+
+Log types are separate:
+
+- Runtime logs are llama.cpp runtime stdout/stderr/system output for ObsidianLM-managed runtime processes.
+- Job logs are one-shot job output, such as Phase 6 test jobs and future llama.cpp tool jobs.
+- Service wrapper logs are Windows service wrapper output for starting/stopping ObsidianLM itself; they are not llama.cpp runtime logs.
 
 ObsidianLM does not automatically migrate local project data into `%PROGRAMDATA%`. If you want the service to reuse development profiles or settings, stop ObsidianLM and manually copy the relevant JSON files from `data/` into `%PROGRAMDATA%\ObsidianLM\data` before starting the service.
 
@@ -363,6 +381,8 @@ From the UI:
 3. Run validation.
 4. Start the profile.
 5. Connect external tools directly to llama.cpp at `http://localhost:8085/v1` unless your profile uses a different port.
+
+View runtime logs in the dashboard **Logs** panel. It streams live output while a managed runtime is running and can refresh recent persisted runtime logs from disk. The **Jobs** panel shows job logs separately.
 
 ## Safety Notes
 

@@ -18,6 +18,7 @@
     ProcessListResponse,
     RuntimeActionResult,
     RuntimeLogEntry,
+    RuntimeLogsResponse,
     RuntimeProfile,
     RuntimeState,
     StartupDetectionSummary,
@@ -65,7 +66,10 @@
   let validation = $state<ValidationResponse | null>(null);
   let isLoading = $state(true);
   let pendingAction = $state<string | null>(null);
-  let eventSource = $state<EventSource | null>(null);
+  let eventSource: EventSource | null = null;
+  let logStreamState = $state<"connecting" | "connected" | "disconnected">("disconnected");
+  let logSearch = $state("");
+  let lastLogHeartbeat = $state<string | null>(null);
   let settings = $state<AppSettings | null>(null);
   let modelFoldersText = $state("");
   let llamaCppFoldersText = $state("");
@@ -107,7 +111,17 @@
   const dataDirModeLabel = $derived(status?.dataDirMode === "programData" ? "ProgramData" : status?.dataDirMode === "custom" ? "Custom" : "Project");
   const logDirModeLabel = $derived(status?.logDirMode === "programData" ? "ProgramData" : status?.logDirMode === "custom" ? "Custom" : "Project");
   const commandLines = $derived(command ? [command.displayCommand] : ["Select a profile to preview the llama-server.exe command."]);
-  const logLines = $derived(logs.length ? logs.map((entry) => `${entry.timestamp} [${entry.stream}] ${entry.message}`) : ["No runtime logs yet."]);
+  const filteredLogs = $derived.by(() => {
+    const query = logSearch.trim().toLowerCase();
+    const visibleLogs = query
+      ? logs.filter((entry) => `${entry.timestamp} ${entry.source} ${entry.message}`.toLowerCase().includes(query))
+      : logs;
+
+    return visibleLogs.slice(-500);
+  });
+  const logLines = $derived(filteredLogs.length ? filteredLogs.map((entry) => `${entry.timestamp} [${entry.source}] ${entry.message}`) : [logs.length ? "No visible logs match the current filter." : "No runtime logs yet."]);
+  const logConnectionTone = $derived(logStreamState === "connected" ? "online" : logStreamState === "connecting" ? "warning" : "offline");
+  const logStatusText = $derived(runtimeStatus === "running" ? "Managed runtime active" : "Runtime stopped or unavailable");
   const selectedJob = $derived(jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null);
   const runningJob = $derived(jobs.find((job) => job.status === "queued" || job.status === "running") ?? null);
   const jobLogLines = $derived(jobLogs.length ? jobLogs : ["No job logs selected yet."]);
@@ -270,8 +284,8 @@
   }
 
   async function loadLogs(): Promise<void> {
-    const response = await fetchJson<{ logs: RuntimeLogEntry[] }>("/api/runtime/logs?limit=200");
-    logs = response.logs;
+    const response = await fetchJson<RuntimeLogsResponse>("/api/runtime/logs?limit=300");
+    logs = response.logs.slice(-500);
   }
 
   async function loadJobs(): Promise<void> {
@@ -482,7 +496,12 @@
 
   async function copyLogs(): Promise<void> {
     await navigator.clipboard.writeText(logLines.join("\n"));
-    actionMessage = "Recent logs copied to clipboard.";
+    actionMessage = "Visible runtime logs copied to clipboard.";
+  }
+
+  function clearVisibleLogs(): void {
+    logs = [];
+    actionMessage = "Visible runtime logs cleared. Log files were not deleted.";
   }
 
   function setSelectedProfileId(id: string): void {
@@ -503,15 +522,28 @@
 
   function openLogStream(): void {
     eventSource?.close();
-    const source = new EventSource("/api/runtime/logs/stream");
+    logStreamState = "connecting";
+    const source = new EventSource("/api/runtime/logs/stream?limit=100");
     eventSource = source;
+    source.addEventListener("connection", () => {
+      logStreamState = "connected";
+    });
     source.addEventListener("log", (event) => {
       const entry = JSON.parse((event as MessageEvent).data) as RuntimeLogEntry;
-      logs = [...logs.filter((item) => item.id !== entry.id), entry].slice(-200);
+      logs = [...logs.filter((item) => `${item.timestamp}-${item.sequence}` !== `${entry.timestamp}-${entry.sequence}`), entry].slice(-500);
+    });
+    source.addEventListener("heartbeat", (event) => {
+      const data = JSON.parse((event as MessageEvent).data) as { timestamp?: string };
+      lastLogHeartbeat = data.timestamp ?? new Date().toISOString();
+      logStreamState = "connected";
+    });
+    source.addEventListener("stopped", () => {
+      logStreamState = "disconnected";
     });
     source.onerror = () => {
       source.close();
       eventSource = null;
+      logStreamState = "disconnected";
       void loadLogs();
     };
   }
@@ -935,10 +967,39 @@
       </Panel>
 
       <Panel tone="code" eyebrow="Logs" title="Runtime output" class="logs-card">
-        <div class="panel-actions">
-          <ToolbarButton variant="ghost" onclick={copyLogs} disabled={!logs.length}>Copy logs</ToolbarButton>
+        <div class="logs-toolbar">
+          <div class="log-status-strip">
+            <StatusPill tone={logConnectionTone} label={`Live stream ${logStreamState}`} />
+            <span>{logStatusText}</span>
+            {#if lastLogHeartbeat}
+              <small>Heartbeat {formatDate(lastLogHeartbeat)}</small>
+            {/if}
+          </div>
+          <div class="panel-actions inline-actions logs-actions">
+            <ToolbarButton variant="ghost" onclick={loadLogs}>Refresh</ToolbarButton>
+            <ToolbarButton variant="ghost" onclick={copyLogs} disabled={!filteredLogs.length}>Copy visible</ToolbarButton>
+            <ToolbarButton variant="ghost" onclick={clearVisibleLogs} disabled={!logs.length}>Clear visible</ToolbarButton>
+          </div>
         </div>
-        <TerminalBlock label="runtime.log" lines={logLines} empty={!logs.length} />
+
+        <label class="field-label" for="runtime-log-search">Search visible logs</label>
+        <input id="runtime-log-search" class="log-search-input" bind:value={logSearch} placeholder="Filter by message, source, or timestamp" />
+
+        <div class="log-viewer" aria-label="Runtime logs">
+          {#if filteredLogs.length}
+            {#each filteredLogs as entry (`${entry.timestamp}-${entry.sequence}`)}
+              <div class={`log-entry log-source-${entry.source}`}>
+                <span class="log-time">{entry.timestamp}</span>
+                <span class="log-source">{entry.source}</span>
+                <span class="log-message">{entry.message}</span>
+              </div>
+            {/each}
+          {:else}
+            <p class="empty-copy">{logs.length ? "No visible logs match the current filter." : "No runtime logs are available yet. Start a managed profile to stream stdout and stderr here."}</p>
+          {/if}
+        </div>
+
+        <p class="helper-text">Showing up to 500 visible entries. Clear only affects this UI buffer; persisted runtime log files are kept by the service.</p>
       </Panel>
     </section>
   </section>

@@ -57,12 +57,27 @@ export interface CommandSpec {
   commandHash: string;
 }
 
+export type RuntimeLogSource = "stdout" | "stderr" | "system";
+
 export interface RuntimeLogEntry {
   id: number;
+  sequence: number;
   timestamp: string;
-  stream: "stdout" | "stderr" | "system";
+  source: RuntimeLogSource;
+  /** @deprecated Use source. Kept for current UI compatibility. */
+  stream: RuntimeLogSource;
   message: string;
 }
+
+export interface RuntimeLogsResponse {
+  logs: RuntimeLogEntry[];
+}
+
+export type RuntimeLogsStreamEvent =
+  | { event: "connection"; data: { ok: true; state: RuntimeState } }
+  | { event: "log"; data: RuntimeLogEntry }
+  | { event: "heartbeat"; data: { timestamp: string } }
+  | { event: "stopped"; data: { timestamp?: string; message?: string; state?: RuntimeState } };
 
 export interface RuntimeActionResult {
   ok: boolean;
