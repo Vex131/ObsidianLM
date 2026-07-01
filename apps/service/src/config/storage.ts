@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { defaultRuntimeState, defaultSettings, type AppSettings, type RuntimeProfile, type RuntimeState } from "@obsidianlm/shared";
+import { defaultRuntimeState, defaultSettings, type AppSettings, type JobRecord, type RuntimeProfile, type RuntimeState } from "@obsidianlm/shared";
 import { getDataDir } from "./paths.js";
 
 const jsonIndent = 2;
@@ -46,6 +46,11 @@ export async function loadRuntimeState(): Promise<RuntimeState> {
   return ensureJsonFile<RuntimeState>("runtime-state.json", defaultRuntimeState);
 }
 
+export async function loadJobs(): Promise<JobRecord[]> {
+  const jobs = await ensureJsonFile<JobRecord[]>("jobs.json", []);
+  return Array.isArray(jobs) ? jobs : [];
+}
+
 export async function saveRuntimeState(state: RuntimeState): Promise<void> {
   const dataDir = getDataDir();
   await mkdir(dataDir, { recursive: true });
@@ -67,6 +72,10 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
 
 export async function saveProfiles(profiles: RuntimeProfile[]): Promise<void> {
   await writeJsonFile("profiles.json", profiles);
+}
+
+export async function saveJobs(jobs: JobRecord[]): Promise<void> {
+  await writeJsonFile("jobs.json", jobs);
 }
 
 export async function ensureStorageFiles(): Promise<void> {

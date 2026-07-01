@@ -1,6 +1,15 @@
 export { DEFAULT_LLAMA_CPP_PORT, DEFAULT_OBSIDIANLM_PORT } from "./constants/ports.js";
 export { defaultProfileEditorDefaults, defaultRuntimeState, defaultSettings } from "./schemas/defaults.js";
 export type {
+  JobActionResponse,
+  JobDetailResponse,
+  JobListResponse,
+  JobLogsResponse,
+  JobRecord,
+  JobStatus,
+  JobType
+} from "./types/jobs.js";
+export type {
   CommandSpec,
   LlamaCppArgs,
   LlamaCppProfile,

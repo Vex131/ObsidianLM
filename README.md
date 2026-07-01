@@ -124,6 +124,26 @@ Implemented:
 
 Not implemented in Phase 5: running `llama-bench`/`llama-perplexity` jobs, Windows service installation, Docker, Electron, or a database.
 
+## Phase 6 Status
+
+Phase 6 adds the generic one-shot job system foundation. It is intentionally separate from long-running llama.cpp server runtime management.
+
+Implemented:
+
+- Shared job types for queued, running, completed, failed, and cancelled jobs.
+- `data/jobs.json` storage with atomic writes.
+- `logs/jobs/` log files plus a small in-memory log tail for active/recent jobs.
+- A generic one-shot job runner that spawns a configured executable with args.
+- One active queued/running job at a time.
+- Safe cancellation for only the current in-memory managed job child process.
+- Startup restoration that marks leftover queued/running jobs as failed/interrupted without adopting or killing unknown processes.
+- Safe job API routes: `GET /api/jobs`, `GET /api/jobs/:id`, `POST /api/jobs/test`, `POST /api/jobs/:id/cancel`, and `GET /api/jobs/:id/logs`.
+- A dashboard Jobs panel for running the safe test job, cancelling a running managed job, viewing job status, and previewing logs.
+
+The Phase 6 test job runs a safe cross-platform Node command. It does not run `llama-bench`, `llama-perplexity`, or any discovered llama.cpp tool.
+
+Not implemented in Phase 6: full `llama-bench` integration, full `llama-perplexity` integration, routing jobs through `RuntimeManager`, killing unknown processes, Windows service installation, Docker, Electron, or a database. Full llama.cpp tool integrations are future phases built on this foundation.
+
 ## Configure Discovery Folders
 
 Discovery is controlled by `modelFolders` and `llamaCppFolders` in `data/settings.json`. Fresh installs default both lists to empty. Use `data/settings.example.json` as a safe template, then replace the placeholder paths with your local folders.

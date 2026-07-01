@@ -8,10 +8,12 @@ import { registerDiscoveryRoutes } from "./api/discovery.js";
 import { registerMonitoringRoutes } from "./api/monitoring.js";
 import { registerProcessRoutes } from "./api/processes.js";
 import { registerSettingsRoutes } from "./api/settings.js";
+import { registerJobRoutes } from "./api/jobs.js";
 import { ensureStorageFiles } from "./config/storage.js";
 import { webDistDir } from "./config/paths.js";
 import type { GpuMonitorOptions } from "./monitoring/gpu-monitor.js";
 import { RuntimeManager } from "./runtime/manager.js";
+import { JobManager } from "./jobs/manager.js";
 
 export interface CreateServerOptions {
   gpuMonitorOptions?: GpuMonitorOptions;
@@ -34,8 +36,11 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
 
   await ensureStorageFiles();
   const runtimeManager = new RuntimeManager();
+  const jobManager = new JobManager();
   await runtimeManager.initialize();
+  await jobManager.initialize();
   app.addHook("onClose", async () => {
+    await jobManager.shutdown();
     await runtimeManager.shutdown();
   });
 
@@ -46,6 +51,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   await registerDiscoveryRoutes(app);
   await registerProcessRoutes(app);
   await registerMonitoringRoutes(app, runtimeManager, options.gpuMonitorOptions);
+  await registerJobRoutes(app, jobManager);
 
   if (existsSync(webDistDir)) {
     await app.register(fastifyStatic, {

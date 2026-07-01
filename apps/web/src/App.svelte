@@ -11,6 +11,7 @@
     GpuDevice,
     GpuMonitoringStatus,
     GpuProcess,
+    JobRecord,
     LlamaBuildDiscoveryResponse,
     ModelDiscoveryResponse,
     PortStatus,
@@ -48,7 +49,7 @@
     settings: AppSettings;
   }
 
-  const navItems = ["Overview", "Runtime", "GPU", "Processes", "Profiles", "Models", "Builds", "Logs", "Settings"];
+  const navItems = ["Overview", "Runtime", "Jobs", "GPU", "Processes", "Profiles", "Models", "Builds", "Logs", "Settings"];
 
   let status = $state<StatusResponse | null>(null);
   let runtime = $state<RuntimeState | null>(null);
@@ -56,6 +57,9 @@
   let selectedProfileId = $state("");
   let command = $state<CommandSpec | null>(null);
   let logs = $state<RuntimeLogEntry[]>([]);
+  let jobs = $state<JobRecord[]>([]);
+  let selectedJobId = $state("");
+  let jobLogs = $state<string[]>([]);
   let errorMessage = $state<string | null>(null);
   let actionMessage = $state<string | null>(null);
   let validation = $state<ValidationResponse | null>(null);
@@ -101,6 +105,9 @@
   const apiUrl = $derived(status?.activeRuntime?.apiUrl ?? (selectedProfile ? `http://localhost:${selectedProfile.port}/v1` : `http://localhost:${status?.managedLlamaPort ?? 8085}/v1`));
   const commandLines = $derived(command ? [command.displayCommand] : ["Select a profile to preview the llama-server.exe command."]);
   const logLines = $derived(logs.length ? logs.map((entry) => `${entry.timestamp} [${entry.stream}] ${entry.message}`) : ["No runtime logs yet."]);
+  const selectedJob = $derived(jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null);
+  const runningJob = $derived(jobs.find((job) => job.status === "queued" || job.status === "running") ?? null);
+  const jobLogLines = $derived(jobLogs.length ? jobLogs : ["No job logs selected yet."]);
   const selectedModel = $derived(discoveredModels.find((model) => model.path === selectedModelPath) ?? null);
   const selectedBuild = $derived(discoveredBuilds.find((build) => build.serverPath === selectedBuildPath) ?? null);
   const discoveryWarningLines = $derived([...modelDiscoveryWarnings, ...buildDiscoveryWarnings].map((warning) => warning.message));
@@ -167,6 +174,23 @@
       return "Possible llama runtime";
     }
     return "Unknown GPU process";
+  }
+
+  function jobTone(statusValue: JobRecord["status"]): "online" | "offline" | "warning" | "danger" | "unknown" {
+    if (statusValue === "completed") {
+      return "online";
+    }
+    if (statusValue === "failed") {
+      return "danger";
+    }
+    if (statusValue === "cancelled") {
+      return "offline";
+    }
+    return "warning";
+  }
+
+  function formatOptionalDate(value: string | null): string {
+    return value ? formatDate(value) : "--";
   }
 
   async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -247,6 +271,23 @@
     logs = response.logs;
   }
 
+  async function loadJobs(): Promise<void> {
+    const response = await fetchJson<{ jobs: JobRecord[] }>("/api/jobs");
+    jobs = response.jobs;
+    if (!selectedJobId && response.jobs.length) {
+      selectedJobId = response.jobs[0].id;
+    }
+  }
+
+  async function loadJobLogs(): Promise<void> {
+    if (!selectedJobId) {
+      jobLogs = [];
+      return;
+    }
+    const response = await fetchJson<{ job: JobRecord; logs: string[] }>(`/api/jobs/${encodeURIComponent(selectedJobId)}/logs?limit=80`);
+    jobLogs = response.logs;
+  }
+
   async function loadCommand(): Promise<void> {
     command = null;
     if (!selectedProfileId) {
@@ -262,9 +303,10 @@
     errorMessage = null;
 
     try {
-      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadSettings(), loadModels(), loadBuilds(), loadDetection(), loadProcesses(), loadGpuStatus()]);
+      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadJobs(), loadSettings(), loadModels(), loadBuilds(), loadDetection(), loadProcesses(), loadGpuStatus()]);
       await loadCommand();
       await loadPortStatus();
+      await loadJobLogs();
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : "Unable to load ObsidianLM state.";
     } finally {
@@ -362,7 +404,8 @@
 
     try {
       await action();
-      await Promise.all([loadStatus(), loadRuntime(), loadLogs(), loadDetection(), loadProcesses(), loadPortStatus(), loadGpuStatus()]);
+      await Promise.all([loadStatus(), loadRuntime(), loadLogs(), loadJobs(), loadDetection(), loadProcesses(), loadPortStatus(), loadGpuStatus()]);
+      await loadJobLogs();
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : "Action failed.";
     } finally {
@@ -405,6 +448,23 @@
       const result = await fetchJson<RuntimeActionResult>("/api/runtime/restart", { method: "POST" });
       actionMessage = result.message;
       command = result.command ?? command;
+    });
+  }
+
+  async function runTestJob(): Promise<void> {
+    await runAction("run-test-job", async () => {
+      const response = await fetchJson<{ ok: boolean; message: string; job: JobRecord | null }>("/api/jobs/test", { method: "POST" });
+      if (response.job) {
+        selectedJobId = response.job.id;
+      }
+      actionMessage = response.message;
+    });
+  }
+
+  async function cancelJob(id: string): Promise<void> {
+    await runAction("cancel-job", async () => {
+      const response = await fetchJson<{ ok: boolean; message: string; job: JobRecord | null }>(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+      actionMessage = response.message;
     });
   }
 
@@ -473,6 +533,13 @@
       portStatus = null;
     });
   });
+
+  $effect(() => {
+    selectedJobId;
+    void loadJobLogs().catch(() => {
+      jobLogs = [];
+    });
+  });
 </script>
 
 <main class="app-shell">
@@ -498,9 +565,9 @@
   <section class="workspace">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Phase 5 profile editor</p>
-        <h1>llama.cpp runtime, GPU monitor, and profile cockpit</h1>
-        <p class="subtitle">Create, edit, import, export, validate, and copy local llama.cpp profile configs while preserving Phase 3 process safety and Phase 4 read-only GPU monitoring.</p>
+        <p class="eyebrow">Phase 6 job foundation</p>
+        <h1>llama.cpp runtime, jobs, GPU monitor, and profile cockpit</h1>
+        <p class="subtitle">Manage long-running llama.cpp server profiles separately from one-shot tool jobs. Phase 6 adds a safe generic job foundation without running llama-bench or llama-perplexity yet.</p>
       </div>
 
       <div class="topbar-status" aria-live="polite">
@@ -565,6 +632,46 @@
         <p id="runtime-controls-help" class="helper-text">Stop only targets the active child process started by this running ObsidianLM service instance.</p>
         {#if selectedProfilePortMessage}
           <p class="port-conflict-copy">{selectedProfilePortMessage}</p>
+        {/if}
+      </Panel>
+
+      <Panel tone={runningJob ? "warning" : "default"} eyebrow="Jobs" title="One-shot job queue" class="jobs-card">
+        <div class="panel-actions inline-actions">
+          <ToolbarButton variant="secondary" onclick={runTestJob} disabled={Boolean(pendingAction) || Boolean(runningJob)}>{pendingAction === "run-test-job" ? "Starting..." : "Run safe test job"}</ToolbarButton>
+          {#if runningJob}
+            <ToolbarButton variant="danger" onclick={() => cancelJob(runningJob.id)} disabled={Boolean(pendingAction)}>{pendingAction === "cancel-job" ? "Cancelling..." : "Cancel running job"}</ToolbarButton>
+          {/if}
+        </div>
+        <p class="helper-text">Phase 6 allows one active managed job at a time. Cancellation only targets the current in-memory job child process.</p>
+        {#if jobs.length}
+          <div class="job-list" aria-label="Jobs">
+            {#each jobs as job}
+              <button class={`job-row ${selectedJob?.id === job.id ? "selected" : ""}`} type="button" onclick={() => (selectedJobId = job.id)}>
+                <span><StatusPill tone={jobTone(job.status)} label={job.status} /></span>
+                <span>{job.type}</span>
+                <span>{formatOptionalDate(job.createdAt)}</span>
+                <span>{formatOptionalDate(job.startedAt)}</span>
+                <span>{formatOptionalDate(job.finishedAt)}</span>
+                <span>{job.exitCode ?? "--"}</span>
+              </button>
+            {/each}
+          </div>
+        {:else}
+          <p class="empty-copy">No jobs have been run yet. Use the safe test job to verify the generic runner.</p>
+        {/if}
+        {#if selectedJob}
+          <div class="job-detail">
+            <div class="metric-grid compact">
+              <MetricRow label="Selected job" value={selectedJob.id} />
+              <MetricRow label="Executable" value={selectedJob.executable} />
+              <MetricRow label="Started" value={formatOptionalDate(selectedJob.startedAt)} />
+              <MetricRow label="Finished" value={formatOptionalDate(selectedJob.finishedAt)} />
+            </div>
+            {#if selectedJob.errorMessage}
+              <p class="port-conflict-copy">{selectedJob.errorMessage}</p>
+            {/if}
+            <TerminalBlock label={selectedJob.logPath ?? "job.log"} lines={jobLogLines} empty={!jobLogs.length} />
+          </div>
         {/if}
       </Panel>
 

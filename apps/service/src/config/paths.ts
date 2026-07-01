@@ -10,11 +10,19 @@ export function getDataDir(): string {
     : path.resolve(workspaceRoot, "data");
 }
 
+export function getLogsDir(): string {
+  return process.env.OBSIDIANLM_LOGS_DIR
+    ? path.resolve(process.env.OBSIDIANLM_LOGS_DIR)
+    : path.resolve(workspaceRoot, "logs");
+}
+
+export function getJobLogsDir(): string {
+  return path.resolve(getLogsDir(), "jobs");
+}
+
 export const dataDir = getDataDir();
 
-export const logsDir = process.env.OBSIDIANLM_LOGS_DIR
-  ? path.resolve(process.env.OBSIDIANLM_LOGS_DIR)
-  : path.resolve(workspaceRoot, "logs");
+export const logsDir = getLogsDir();
 
 export const runtimeLogsDir = path.resolve(logsDir, "runtimes");
 

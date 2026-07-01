@@ -165,9 +165,11 @@ test("startup summary treats process detector warnings as unreliable detection",
 });
 
 test("process API sanitizer redacts local path and command line details", () => {
-  const sanitized = sanitizeProcessForApi(llamaProcess(8888, "C:\\Users\\name\\llama-server.exe --api-key secret --port 8085"));
+  const process = llamaProcess(8888, "C:\\Users\\name\\llama-server.exe --api-key secret --port 8085");
+  process.executablePath = "/usr/local/bin/llama-server";
+  const sanitized = sanitizeProcessForApi(process);
   assert.equal(sanitized.commandLine, null);
-  assert.equal(sanitized.executablePath, "llama-server.exe");
+  assert.equal(sanitized.executablePath, "llama-server");
   assert.match(sanitized.reasons.join(" "), /redacted/);
 });
 
