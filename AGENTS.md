@@ -66,6 +66,17 @@ Subagent handoffs should be narrow and token-efficient. Ask for file paths, rele
 
 Do not use subagents for tiny single-file edits, obvious copy changes, or small fixes where the handoff costs more than direct work.
 
+### Phase Subagent Budget Rules
+
+For ObsidianLM phase work, subagents are used to reduce total context, not to duplicate inspection.
+
+- `@explore` must return a compact edit map. After it returns, the main agent should not broadly re-read mapped files. Use targeted reads only.
+- `@reviewer` must be scoped to changed files and explicit risks, such as auth, storage mutation, path leaks, runtime/process safety, API compatibility, or missing tests.
+- `@tester` should report commands, failures, minimal relevant output, and recommended fixes. Do not paste full passing logs.
+- `@docs` should return final doc text or patch guidance, not broad README dumps.
+- `@e2e` should own browser smoke execution and cleanup when used. The main agent should not also repeat the same browser checks manually.
+- Prefer one focused subagent over several. Avoid using both a broad subagent and broad main-context reads for the same area.
+
 ## Git
 
 Use the global Conventional Commit rules. Prefer project scopes such as `service`, `web`, `shared`, `scripts`, `docs`, `config`, or `opencode`.
