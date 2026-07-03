@@ -24,23 +24,33 @@ Follow the global OpenCode rules first. This file only adds ObsidianLM-specific 
 - Do not run destructive migrations, storage wipes, service uninstall/reinstall flows, or broad cleanup commands without explicit approval.
 - Do not expose raw admin tokens, token hashes, secrets, local paths with credentials, or private runtime data in logs or responses.
 
-## Commands
+## Commands and Verification
 
 - Run backend commands from `apps/service`.
 - Run frontend commands from `apps/web`.
 - Run shared/package commands from the relevant package folder.
 - Use the existing package manager and scripts already present in the repo.
-- Do not run long-running dev servers, service processes, watchers, or queue workers in the foreground unless explicitly asked.
+- Do not start dev servers, service processes, watchers, or queue workers unless explicitly asked or required for a bounded smoke test with guaranteed cleanup.
+- Prefer the repo’s existing tests, typechecks, lint/build scripts, or targeted service/web checks for files changed.
+- Only claim commands passed if they were actually run.
 
-## Verification
+## Context Tools
 
-Use focused verification for the files changed. Prefer the repo’s existing tests, typechecks, lint/build scripts, or targeted service/web checks when available.
-
-Only claim commands passed if they were actually run.
+- Use Serena for symbol lookup, references, project memories, and targeted code navigation before broad source reads.
+- This repo has a Graphify graph in `graphify-out/` with god nodes, community structure, and cross-file relationships.
+- When the user types `/graphify`, invoke the Graphify skill/tool before doing anything else.
+- For codebase questions, first run `graphify query "<question>"` when `graphify-out/graph.json` exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts.
+- Prefer scoped Graphify results over `graphify-out/GRAPH_REPORT.md` or raw grep output.
+- Dirty `graphify-out/` files are expected after hooks or incremental updates. Only skip Graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If `graphify-out/wiki/index.md` exists, use it for broad navigation instead of raw source browsing.
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` when Graphify is available; it is AST-only and has no API cost.
 
 ## Git
 
-Use scoped Conventional Commit messages such as:
+Use the global Conventional Commit rules. Prefer project scopes such as `service`, `web`, `shared`, `scripts`, `docs`, `config`, or `opencode`.
+
+Examples:
 
 - `feat(service): add job system foundation`
 - `fix(web): handle auth setup failure`
@@ -49,16 +59,3 @@ Use scoped Conventional Commit messages such as:
 - `chore(config): update opencode rules`
 
 Do not commit or push unless explicitly asked.
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
