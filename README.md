@@ -265,6 +265,41 @@ Important boundaries:
 
 Not implemented in Phase 10: `llama-perplexity` execution, parsed benchmark dashboards beyond stored job results, multi-job concurrency, automatic GPU build installation, Docker, Electron, or a database.
 
+## Phase 11 Status
+
+Phase 11 adds real-use validation support, runtime health diagnostics, diagnostic test chat, storage hardening, and a small dashboard refactor.
+
+Implemented:
+
+- `GET /api/runtime/health` checks the active llama.cpp server profile by calling `/v1/models` with a bounded timeout. Local health checks map profile host `0.0.0.0` to `127.0.0.1`.
+- `POST /api/runtime/test-chat` sends one small non-streaming diagnostic request to `/v1/chat/completions` with bounded prompt length, `maxTokens`, and timeout.
+- Runtime health and test chat are protected after admin setup like other runtime controls.
+- The dashboard includes a runtime diagnostics card for health status, latency, endpoint, errors, and a manual test-chat panel. Test chat does not auto-run on refresh.
+- `saveRuntimeState()` now uses the same temp-file plus rename pattern as other JSON writes.
+- If `settings.json`, `profiles.json`, `runtime-state.json`, or `jobs.json` contains invalid JSON, startup backs it up as `<name>.invalid-<timestamp>.bak`, recreates a safe default, and surfaces a warning in `GET /api/status`.
+- The web dashboard started reducing `App.svelte` risk by extracting API helpers, formatting helpers, runtime diagnostics UI, and Jobs UI.
+
+Runtime diagnostics remain control-plane diagnostics only. ObsidianLM does not proxy general inference, stream chat, store conversations, or replace direct client access to llama.cpp. OpenCode, Illustria, and local tools should continue using llama.cpp directly on `http://localhost:8085/v1` unless you explicitly configured another llama.cpp port.
+
+Not implemented in Phase 11: Docker, Electron, a database, multi-runtime support, multi-job concurrency, `llama-perplexity`, benchmark charts, stale-process adoption, automatic stale-process killing, streaming chat, chat history, or a general inference proxy.
+
+### Phase 11 Real-use Validation
+
+Current repository validation status:
+
+- Automated service tests cover health success, test-chat validation, safe network errors, auth protection, corrupt JSON backup/recovery, and atomic runtime-state saves.
+- Current discovery data returned `modelCount=0`, `buildCount=0`, `benchCount=0`, and `profileCount=0`.
+- Real `llama-bench`, server launch, browser smoke, runtime health, and diagnostic test-chat verification are blocked until local discovery folders and a runnable server profile are configured.
+- Real local validation should be run with your configured discovery folders so ObsidianLM can find a real `llama-bench` executable, a `.gguf` model, and a runnable `llama-server` profile.
+
+Manual real-use checklist:
+
+1. Configure `modelFolders` and `llamaCppFolders` without committing machine-specific paths.
+2. Run a small `llama-bench` job from the Jobs panel.
+3. Start a real llama.cpp server profile.
+4. Click **Check runtime health** and confirm `/v1/models` responds.
+5. Click **Run test chat** with `Say OK in one short sentence.` and confirm a short response preview appears.
+
 ### Windows Service Setup
 
 Build before installing:
