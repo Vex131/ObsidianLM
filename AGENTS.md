@@ -1,99 +1,51 @@
-# ObsidianLM Agent Instructions
+# ObsidianLM Project Rules
 
-## Project
+Follow the global OpenCode rules first. This file only adds ObsidianLM-specific guidance.
 
-ObsidianLM is a lightweight local AI runtime manager.
+## Project Shape
 
-Read `docs/ObsidianLM_Project_Plan.md` before making implementation decisions.
+- `apps/service` contains the backend service.
+- `apps/web` contains the frontend app.
+- `packages/shared` contains shared types, defaults, and contracts.
+- `scripts/windows` contains Windows service scripts.
+- `data` and service-mode storage may contain local/user runtime data. Treat them carefully.
 
-The first target runtime is `llama.cpp` / `llama-server.exe`.
+## Working Rules
 
-ObsidianLM is a control plane. It starts, stops, configures, monitors, and validates local runtimes. External tools like OpenCode and Illustria should talk directly to the llama.cpp OpenAI-compatible API.
+- Inspect the relevant app/package before editing.
+- Keep backend, frontend, and shared-contract changes aligned.
+- Preserve existing API shapes, settings formats, storage paths, auth behavior, and Windows service behavior unless the task asks for a change.
+- Do not move or rewrite project structure casually.
+- Do not add dependencies unless clearly justified.
 
-## Stack
+## Safety
 
-Use:
+- Do not delete or reset `data`, settings, logs, auth/token data, generated user content, or service-mode files without explicit approval.
+- Do not run destructive migrations, storage wipes, service uninstall/reinstall flows, or broad cleanup commands without explicit approval.
+- Do not expose raw admin tokens, token hashes, secrets, local paths with credentials, or private runtime data in logs or responses.
 
-- Vite + Svelte SPA for the frontend.
-- Node.js + TypeScript + Fastify for the service.
-- JSON files for v1 storage.
-- A monorepo layout with `apps/web`, `apps/service`, and `packages/shared`.
+## Commands
 
-Do not use:
-
-- Next.js.
-- Electron.
-- A database.
-- Docker as a required local development dependency.
-- Heavy UI/charting frameworks unless explicitly approved.
-
-## Safety Rules
-
-- Never silently kill unknown processes.
-- Only auto-stop processes that were previously started and tracked by ObsidianLM.
-- Ask before running destructive commands.
-- Ask before deleting files.
-- Ask before killing real system processes.
-- Do not commit secrets, real tokens, private IPs, model files, llama.cpp builds, logs, or local runtime state.
-- Do not commit `.env` files.
-
-## Implementation Rules
-
-- Keep runtime-specific logic inside runtime adapters.
-- Keep shared types/schemas in `packages/shared`.
-- Use generic names like runtime, provider, profile, and tool job where possible.
-- `llama-bench` and `llama-perplexity` should be modeled as jobs/tools, not long-running runtimes.
-- Keep Phase 0 small and working before starting Phase 1.
-- Prefer simple, readable code over premature abstractions.
-
-## Subagent Routing
-
-Use the global subagent set when useful. This project uses Svelte/Vite and Fastify/Node, so route implementation work by actual stack rather than by Laravel/Next.js assumptions.
-
-Recommended routing for ObsidianLM:
-
-- Unknown code/data flow: `@explore`
-- Current framework docs, CLI behavior, or package compatibility: `@researcher`
-- Scoped Svelte/Vite, Fastify/Node, shared TypeScript, runtime, config, and script implementation: `@coder`
-- Errors, logs, failed commands, broken startup, or crashed runtime behavior: `@debugger`
-- Tests, typechecks, builds, regression coverage, and test repair: `@tester`
-- Browser/UI verification: `@e2e`
-- Docs-only work: `@docs`
-- Risky or multi-file review before completion: `@reviewer`
-- Git operations, commits, branches, pushes: `@git`
-
-For now, do not route ObsidianLM frontend work to `@nextjs`, because this project uses Svelte/Vite, not Next.js.
-
-For now, do not route ObsidianLM service work to `@laravel`, because this project uses Fastify/Node, not Laravel.
-
-For now, do not route normal v1 storage work to `@database`, because v1 uses JSON files, not a database.
-
-Do not use removed old global agents: `@web`, `@service`, `@runtime`, `@tests`, `@test-runner`, or `@test-fixer`.
+- Run backend commands from `apps/service`.
+- Run frontend commands from `apps/web`.
+- Run shared/package commands from the relevant package folder.
+- Use the existing package manager and scripts already present in the repo.
+- Do not run long-running dev servers, service processes, watchers, or queue workers in the foreground unless explicitly asked.
 
 ## Verification
 
-Before claiming a phase is complete, run the relevant checks.
+Use focused verification for the files changed. Prefer the repo’s existing tests, typechecks, lint/build scripts, or targeted service/web checks when available.
 
-For early phases, this usually means:
-
-- `npm install`
-- `npm run build`
-- `npm run typecheck`
-- `npm test` if tests exist
-- Manual check that the service starts
-- Manual check that the UI loads
-
-Do not run `npm install` automatically unless dependencies are missing, package files changed, or the user/main agent explicitly asked for dependency installation.
+Only claim commands passed if they were actually run.
 
 ## Git
 
-Use small commits.
+Use scoped Conventional Commit messages such as:
 
-Suggested commit style:
+- `feat(service): add job system foundation`
+- `fix(web): handle auth setup failure`
+- `refactor(shared): simplify settings defaults`
+- `docs(readme): clarify service mode setup`
+- `chore(config): update opencode rules`
 
-- `chore: scaffold monorepo`
-- `feat(service): add status endpoint`
-- `feat(web): add dashboard shell`
-- `docs: update setup notes`
-
-Do not commit generated logs, model files, local data files, or build output.
+Do not commit or push unless explicitly asked.
