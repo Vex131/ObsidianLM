@@ -28,7 +28,10 @@
     RuntimeLogsResponse,
     RuntimeLogsStreamEvent,
     RuntimeProfile,
+    RuntimeHealthResponse,
     RuntimeState,
+    RuntimeTestChatRequest,
+    RuntimeTestChatResponse,
     StartupDetectionSummary,
     StatusResponse
   } from "@obsidianlm/shared";
@@ -38,6 +41,10 @@
   import TerminalBlock from "./lib/components/TerminalBlock.svelte";
   import ToolbarButton from "./lib/components/ToolbarButton.svelte";
   import ProfileEditor from "./lib/components/profile/ProfileEditor.svelte";
+  import RuntimeDiagnosticsPanel from "./lib/components/runtime/RuntimeDiagnosticsPanel.svelte";
+  import JobsPanel from "./lib/components/jobs/JobsPanel.svelte";
+  import { friendlyRequestError, publicFetchJson } from "./lib/api";
+  import { formatBytes, formatDate, formatMiB, formatOptionalDate, formatPercent, formatPower, formatTemperature, gpuMemoryPercent } from "./lib/format";
 
   interface ProfilesResponse {
     profiles: RuntimeProfile[];
@@ -132,6 +139,8 @@
   let detectedProcesses = $state<DetectedProcess[]>([]);
   let portStatus = $state<PortStatus | null>(null);
   let gpuStatus = $state<GpuMonitoringStatus | null>(null);
+  let runtimeHealth = $state<RuntimeHealthResponse | null>(null);
+  let testChatResult = $state<RuntimeTestChatResponse | null>(null);
   let modelDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
   let buildDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
   let selectedModelPath = $state("");
@@ -207,58 +216,6 @@
   const gpuWarnings = $derived(gpuStatus?.warnings ?? []);
   const gpuTone = $derived(!gpuStatus || gpuStatus.available ? (gpuStatus?.summary.unknownGpuProcessCount ? "warning" : "default") : "warning");
 
-  function formatBytes(bytes: number): string {
-    if (bytes < 1024) {
-      return `${bytes} B`;
-    }
-
-    const units = ["KB", "MB", "GB", "TB"];
-    let value = bytes / 1024;
-    let unitIndex = 0;
-    while (value >= 1024 && unitIndex < units.length - 1) {
-      value /= 1024;
-      unitIndex += 1;
-    }
-
-    return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
-  }
-
-  function formatDate(value: string): string {
-    return new Date(value).toLocaleString();
-  }
-
-  function formatMiB(value: number | null | undefined): string {
-    if (value === null || value === undefined) {
-      return "--";
-    }
-    if (value >= 1024) {
-      return `${(value / 1024).toFixed(value >= 10240 ? 1 : 2)} GiB`;
-    }
-    return `${value.toFixed(0)} MiB`;
-  }
-
-  function formatPercent(value: number | null | undefined): string {
-    return value === null || value === undefined ? "--" : `${value.toFixed(0)}%`;
-  }
-
-  function formatTemperature(value: number | null | undefined): string {
-    return value === null || value === undefined ? "--" : `${value.toFixed(0)} C`;
-  }
-
-  function formatPower(draw: number | null | undefined, limit: number | null | undefined): string {
-    if (draw === null || draw === undefined) {
-      return "--";
-    }
-    return limit === null || limit === undefined ? `${draw.toFixed(1)} W` : `${draw.toFixed(1)} / ${limit.toFixed(1)} W`;
-  }
-
-  function gpuMemoryPercent(gpu: GpuDevice): number {
-    if (!gpu.memoryTotalMiB || gpu.memoryUsedMiB === null) {
-      return 0;
-    }
-    return Math.max(0, Math.min(100, (gpu.memoryUsedMiB / gpu.memoryTotalMiB) * 100));
-  }
-
   function gpuProcessLabel(process: GpuProcess): string {
     if (process.kind === "current_managed_runtime") {
       return "Current managed runtime";
@@ -291,10 +248,6 @@
     return configuredThreads && configuredThreads > 0 ? configuredThreads : 8;
   }
 
-  function formatOptionalDate(value: string | null): string {
-    return value ? formatDate(value) : "--";
-  }
-
   function readStoredAdminToken(): string | null {
     return localStorage.getItem(adminTokenStorageKey);
   }
@@ -305,25 +258,6 @@
 
   function clearStoredAdminToken(): void {
     localStorage.removeItem(adminTokenStorageKey);
-  }
-
-  function friendlyRequestError(statusCode: number, fallback?: string): string {
-    if (statusCode === 401 || statusCode === 403) {
-      return "Invalid token";
-    }
-    return fallback || `Request failed with ${statusCode}`;
-  }
-
-  async function publicFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(url, init);
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      const message = typeof data.message === "string" ? data.message : undefined;
-      throw new Error(friendlyRequestError(response.status, message));
-    }
-
-    return data as T;
   }
 
   async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -368,6 +302,8 @@
     detectedProcesses = [];
     portStatus = null;
     gpuStatus = null;
+    runtimeHealth = null;
+    testChatResult = null;
     modelDiscoveryWarnings = [];
     buildDiscoveryWarnings = [];
     selectedModelPath = "";
@@ -581,6 +517,28 @@
     gpuStatus = await fetchJson<GpuMonitoringStatus>("/api/monitoring/gpu");
   }
 
+  async function loadRuntimeHealth(): Promise<void> {
+    runtimeHealth = await fetchJson<RuntimeHealthResponse>("/api/runtime/health");
+  }
+
+  async function checkRuntimeHealth(): Promise<void> {
+    await runAction("runtime-health", async () => {
+      await loadRuntimeHealth();
+      actionMessage = runtimeHealth?.ok ? "Runtime health check passed." : runtimeHealth?.message ?? "Runtime health check completed.";
+    });
+  }
+
+  async function runRuntimeTestChat(prompt: string): Promise<void> {
+    await runAction("test-chat", async () => {
+      testChatResult = await fetchJson<RuntimeTestChatResponse>("/api/runtime/test-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt } satisfies RuntimeTestChatRequest)
+      });
+      actionMessage = testChatResult.ok ? "Diagnostic test chat completed." : testChatResult.message;
+    });
+  }
+
   async function loadLogs(): Promise<void> {
     const response = await fetchJson<RuntimeLogsResponse>("/api/runtime/logs?limit=300");
     logs = response.logs.slice(-500);
@@ -618,7 +576,7 @@
     errorMessage = null;
 
     try {
-      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadJobs(), loadSettings(), loadModels(), loadBuilds(), loadDetection(), loadProcesses(), loadGpuStatus()]);
+      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadJobs(), loadSettings(), loadModels(), loadBuilds(), loadDetection(), loadProcesses(), loadGpuStatus(), loadRuntimeHealth()]);
       await loadCommand();
       await loadPortStatus();
       await loadJobLogs();
@@ -1163,94 +1121,35 @@
         {/if}
       </Panel>
 
-      <Panel tone={runningJob ? "warning" : "default"} eyebrow="Jobs" title="One-shot job queue" class="jobs-card">
-        <div class="panel-actions inline-actions">
-          <ToolbarButton variant="secondary" onclick={runTestJob} disabled={Boolean(pendingAction) || Boolean(runningJob)}>{pendingAction === "run-test-job" ? "Starting..." : "Run safe test job"}</ToolbarButton>
-          {#if runningJob}
-            <ToolbarButton variant="danger" onclick={() => cancelJob(runningJob.id)} disabled={Boolean(pendingAction)}>{pendingAction === "cancel-job" ? "Cancelling..." : "Cancel running job"}</ToolbarButton>
-          {/if}
-        </div>
-        <div class="editor-section">
-          <h3>llama-bench</h3>
-          <div class="metric-grid compact">
-            <MetricRow label="Selected model" value={selectedBenchModel?.fileName ?? "No GGUF model discovered"} muted={!selectedBenchModel} />
-            <MetricRow label="Selected tool" value={selectedBenchTool?.tool.fileName ?? "No llama-bench tool discovered"} muted={!selectedBenchTool} />
-          </div>
-          <div class="form-grid">
-            <label class="form-field span-2" for="bench-model-select">GGUF model
-              <select id="bench-model-select" class="profile-select" bind:value={selectedBenchModelPath} disabled={Boolean(pendingAction) || Boolean(runningJob) || !discoveredModels.length}>
-                {#each discoveredModels as model}
-                  <option value={model.path}>{model.name} — {formatBytes(model.sizeBytes)}</option>
-                {/each}
-              </select>
-            </label>
-            <label class="form-field span-2" for="bench-tool-select">llama-bench build/tool
-              <select id="bench-tool-select" class="profile-select" bind:value={selectedBenchPath} disabled={Boolean(pendingAction) || Boolean(runningJob) || !benchToolOptions.length}>
-                {#each benchToolOptions as option}
-                  <option value={option.tool.path}>{option.build.name} — {option.tool.fileName}</option>
-                {/each}
-              </select>
-            </label>
-            <label class="form-field">GPU layers<input type="number" bind:value={benchForm.nGpuLayers} min="0" /></label>
-            <label class="form-field">Context display<input type="number" bind:value={benchForm.ctxSize} min="1" /></label>
-            <label class="form-field">Batch<input type="number" bind:value={benchForm.batchSize} min="1" /></label>
-            <label class="form-field">UBatch<input type="number" bind:value={benchForm.ubatchSize} min="1" /></label>
-            <label class="form-field">Threads<input type="number" bind:value={benchForm.threads} min="1" /></label>
-            <label class="form-field">Prompt tokens<input type="number" bind:value={benchForm.promptTokens} min="1" /></label>
-            <label class="form-field">Generation tokens<input type="number" bind:value={benchForm.generationTokens} min="1" /></label>
-            <label class="form-field">Repetitions<input type="number" bind:value={benchForm.repetitions} min="1" /></label>
-          </div>
-          <div class="panel-actions inline-actions">
-            <ToolbarButton variant="success" onclick={runLlamaBenchJob} disabled={!selectedBenchModel || !selectedBenchTool || Boolean(pendingAction) || Boolean(runningJob)}>{pendingAction === "run-llama-bench" ? "Starting..." : "Run llama-bench"}</ToolbarButton>
-          </div>
-          <p class="helper-text">Safe laptop CPU defaults use 0 GPU layers, 512 prompt tokens, 128 generation tokens, and 3 repetitions. CPU build testing is fine; GPU deployment can use a GPU build later. llama-bench is a one-shot tool job and does not start llama-server. Context is shown for profile parity, but llama-bench derives context from prompt/generation sizes and the backend ignores ctxSize.</p>
-        </div>
-        <p class="helper-text">One active managed job is allowed at a time. Cancellation only targets the current in-memory job child process.</p>
-        {#if jobs.length}
-          <div class="job-list" aria-label="Jobs">
-            {#each jobs as job}
-              <button class={`job-row ${selectedJob?.id === job.id ? "selected" : ""}`} type="button" onclick={() => (selectedJobId = job.id)}>
-                <span><StatusPill tone={jobTone(job.status)} label={job.status} /></span>
-                <span>{job.type}</span>
-                <span>{formatOptionalDate(job.createdAt)}</span>
-                <span>{formatOptionalDate(job.startedAt)}</span>
-                <span>{formatOptionalDate(job.finishedAt)}</span>
-                <span>{job.exitCode ?? "--"}</span>
-              </button>
-            {/each}
-          </div>
-        {:else}
-          <p class="empty-copy">No jobs have been run yet. Use the safe test job to verify the generic runner.</p>
-        {/if}
-        {#if selectedJob}
-          <div class="job-detail">
-            <div class="metric-grid compact">
-              <MetricRow label="Selected job" value={selectedJob.id} />
-              <MetricRow label="Executable" value={selectedJob.executable} />
-              <MetricRow label="Started" value={formatOptionalDate(selectedJob.startedAt)} />
-              <MetricRow label="Finished" value={formatOptionalDate(selectedJob.finishedAt)} />
-            </div>
-            {#if selectedJob.errorMessage}
-              <p class="port-conflict-copy">{selectedJob.errorMessage}</p>
-            {/if}
-            {#if selectedJobBenchResult}
-              <div class="job-list" aria-label="llama-bench results">
-                {#each selectedJobBenchResult.rows as row}
-                  <div class="job-row">
-                    <span>{row.test}</span>
-                    <span>{row.backend ?? "--"}</span>
-                    <span>{row.threads ?? "--"}</span>
-                    <span>{row.nPrompt ?? "--"} / {row.nGen ?? "--"}</span>
-                    <span>{row.testTime ?? "--"}</span>
-                    <span>{row.tokensPerSecond === undefined ? "--" : `${row.tokensPerSecond.toFixed(2)} t/s`}</span>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-            <TerminalBlock label={selectedJob.logPath ?? "job.log"} lines={jobLogLines} empty={!jobLogs.length} />
-          </div>
-        {/if}
-      </Panel>
+      <RuntimeDiagnosticsPanel
+        health={runtimeHealth}
+        {testChatResult}
+        {pendingAction}
+        onCheckHealth={checkRuntimeHealth}
+        onRunTestChat={runRuntimeTestChat}
+      />
+
+      <JobsPanel
+        {jobs}
+        bind:selectedJobId
+        {selectedJob}
+        selectedJobBenchResult={selectedJobBenchResult as never}
+        {runningJob}
+        {jobLogs}
+        {jobLogLines}
+        {discoveredModels}
+        bind:selectedBenchModelPath
+        {benchToolOptions}
+        bind:selectedBenchPath
+        {selectedBenchModel}
+        {selectedBenchTool}
+        {benchForm}
+        {pendingAction}
+        {runTestJob}
+        {cancelJob}
+        {runLlamaBenchJob}
+        {jobTone}
+      />
 
       <Panel tone={validation && !validation.valid ? "danger" : validation?.valid ? "live" : "default"} eyebrow="Validation" title="Profile checks">
         {#if validation}
