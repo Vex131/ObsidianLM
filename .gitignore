@@ -47,3 +47,4 @@ Thumbs.db
 .idea/
 *.swp
 .agents/subagents-and-skills.md
+.serena/

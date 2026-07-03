@@ -46,6 +46,26 @@ Follow the global OpenCode rules first. This file only adds ObsidianLM-specific 
 - Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` when Graphify is available; it is AST-only and has no API cost.
 
+## Subagent Routing for Phase Work
+
+Phase work often spans service, web, shared contracts, tests, docs, and verification. Use subagents when they are likely to reduce main-context tokens or prevent repeated broad reads.
+
+For any phase or task touching 3+ of these areas, use at least one focused subagent unless the reason to stay direct is clear and stated: `apps/service`, `apps/web`, `packages/shared`, `scripts/windows`, tests, README/docs, browser smoke, runtime/process management, storage/settings/auth.
+
+Recommended phase pipeline:
+
+1. Use Graphify or Serena first for targeted context when available.
+2. Use `@explore` for a concise implementation map when file ownership, API flow, or UI/data flow is not already obvious.
+3. Keep tightly coupled integration in the main agent or one `@coder`; do not split one connected change across many coders.
+4. Use `@tester` after implementation for focused tests, failures, typecheck/lint/build interpretation, and regression gaps.
+5. Use `@reviewer` before final response when changes touch protected APIs, auth, settings/storage, runtime/job/process behavior, Windows service behavior, or broad UI refactors.
+6. Use `@docs` for README-heavy phases when docs would otherwise bloat the main context.
+7. Use `@e2e` only for bounded browser smoke checks with guaranteed cleanup; do not leave dev servers or browser sessions running.
+
+Subagent handoffs should be narrow and token-efficient. Ask for file paths, relevant symbols, risks, commands, and recommended next steps. Avoid full-file dumps, long logs, and broad diffs in handoff responses.
+
+Do not use subagents for tiny single-file edits, obvious copy changes, or small fixes where the handoff costs more than direct work.
+
 ## Git
 
 Use the global Conventional Commit rules. Prefer project scopes such as `service`, `web`, `shared`, `scripts`, `docs`, `config`, or `opencode`.
