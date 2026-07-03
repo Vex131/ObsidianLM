@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { defaultRuntimeState, defaultSettings, type AppSettings, type JobRecord, type RuntimeProfile, type RuntimeState } from "@obsidianlm/shared";
@@ -6,6 +6,24 @@ import { isAdminTokenHash } from "../auth/admin-token.js";
 import { getDataDir } from "./paths.js";
 
 const jsonIndent = 2;
+const storageWarnings: string[] = [];
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
+function invalidBackupName(fileName: string): string {
+  const timestamp = new Date().toISOString().replace(/[:.]/gu, "-");
+  return `${fileName}.invalid-${timestamp}.bak`;
+}
+
+function rememberStorageWarning(fileName: string, backupName: string): void {
+  storageWarnings.push(`${fileName} was invalid JSON. Backed it up as ${backupName} and recreated a safe default.`);
+}
+
+export function getStorageWarnings(): string[] {
+  return [...storageWarnings];
+}
 
 async function ensureJsonFile<T>(fileName: string, defaultValue: T): Promise<T> {
   const dataDir = getDataDir();
@@ -17,8 +35,16 @@ async function ensureJsonFile<T>(fileName: string, defaultValue: T): Promise<T> 
     const file = await readFile(filePath, "utf8");
     return JSON.parse(file) as T;
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      await writeFile(filePath, `${JSON.stringify(defaultValue, null, jsonIndent)}\n`, "utf8");
+    if (isNodeError(error) && error.code === "ENOENT") {
+      await writeJsonFile(fileName, defaultValue);
+      return defaultValue;
+    }
+
+    if (error instanceof SyntaxError) {
+      const backupName = invalidBackupName(fileName);
+      await copyFile(filePath, path.join(dataDir, backupName));
+      await writeJsonFile(fileName, defaultValue);
+      rememberStorageWarning(fileName, backupName);
       return defaultValue;
     }
 
@@ -54,9 +80,7 @@ export async function loadJobs(): Promise<JobRecord[]> {
 }
 
 export async function saveRuntimeState(state: RuntimeState): Promise<void> {
-  const dataDir = getDataDir();
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(path.join(dataDir, "runtime-state.json"), `${JSON.stringify(state, null, jsonIndent)}\n`, "utf8");
+  await writeJsonFile("runtime-state.json", state);
 }
 
 async function writeJsonFile(fileName: string, value: unknown): Promise<void> {

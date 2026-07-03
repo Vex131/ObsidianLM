@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { StatusResponse } from "@obsidianlm/shared";
-import { loadSettings } from "../config/storage.js";
+import { getStorageWarnings, loadSettings } from "../config/storage.js";
 import { getAppPaths } from "../config/paths.js";
 import { getGpuMonitoringStatus, type GpuMonitorOptions } from "../monitoring/gpu-monitor.js";
 import type { RuntimeManager } from "../runtime/manager.js";
@@ -37,7 +37,7 @@ export async function registerStatusRoutes(app: FastifyInstance, runtimeManager:
             apiUrl: activeProfile && isLlamaCppServerProfile(activeProfile) ? `http://localhost:${activeProfile.port}/v1` : null
           }
         : null,
-      warnings: runtimeManager.getWarnings(),
+      warnings: [...runtimeManager.getWarnings(), ...getStorageWarnings()],
       detection: {
         categories: detection.categories,
         warnings: detection.warnings,
