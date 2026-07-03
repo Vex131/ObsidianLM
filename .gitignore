@@ -19,6 +19,8 @@ logs/runtimes/*.jsonl
 logs/jobs/*.log
 logs/jobs/*.jsonl
 logs/service/*.log
+graphify-out/
+.graphify-out/
 tmp/
 temp/
 .cache/
