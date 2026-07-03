@@ -25,6 +25,16 @@ export function getStorageWarnings(): string[] {
   return [...storageWarnings];
 }
 
+async function readJsonFileReadOnly<T>(fileName: string, defaultValue: T): Promise<T> {
+  const filePath = path.join(getDataDir(), fileName);
+  try {
+    const file = await readFile(filePath, "utf8");
+    return JSON.parse(file) as T;
+  } catch {
+    return defaultValue;
+  }
+}
+
 async function ensureJsonFile<T>(fileName: string, defaultValue: T): Promise<T> {
   const dataDir = getDataDir();
   await mkdir(dataDir, { recursive: true });
@@ -67,8 +77,17 @@ export async function loadSettings(): Promise<AppSettings> {
   return normalizeStoredSettings(await ensureJsonFile<Partial<AppSettings>>("settings.json", defaultSettings));
 }
 
+export async function loadSettingsReadOnly(): Promise<AppSettings> {
+  return normalizeStoredSettings(await readJsonFileReadOnly<Partial<AppSettings>>("settings.json", defaultSettings));
+}
+
 export async function loadProfiles(): Promise<RuntimeProfile[]> {
   return ensureJsonFile<RuntimeProfile[]>("profiles.json", []);
+}
+
+export async function loadProfilesReadOnly(): Promise<RuntimeProfile[]> {
+  const profiles = await readJsonFileReadOnly<RuntimeProfile[]>("profiles.json", []);
+  return Array.isArray(profiles) ? profiles : [];
 }
 
 export async function loadRuntimeState(): Promise<RuntimeState> {

@@ -39,6 +39,16 @@ export type { AppSettings, StartupMode, StaleProcessPolicy } from "./types/setti
 export type { AdminTokenRequest, AuthLogoutResponse, AuthSetupResponse, AuthStatusResponse, AuthVerifyResponse } from "./types/auth.js";
 export type { ActiveRuntimeStatus, StatusResponse } from "./types/status.js";
 export type {
+  ReadinessCheck,
+  ReadinessCheckStatus,
+  ReadinessConfiguredState,
+  ReadinessCounts,
+  ReadinessGpuState,
+  ReadinessPortState,
+  ReadinessResponse,
+  ReadinessRuntimeState
+} from "./types/readiness.js";
+export type {
   CompactGpuStatus,
   GpuDevice,
   GpuMemoryInfo,

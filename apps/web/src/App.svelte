@@ -31,6 +31,7 @@
     RuntimeLogsStreamEvent,
     RuntimeProfile,
     RuntimeHealthResponse,
+    ReadinessResponse,
     RuntimeState,
     RuntimeTestChatRequest,
     RuntimeTestChatResponse,
@@ -44,6 +45,7 @@
   import ToolbarButton from "./lib/components/ToolbarButton.svelte";
   import ProfileEditor from "./lib/components/profile/ProfileEditor.svelte";
   import RuntimeDiagnosticsPanel from "./lib/components/runtime/RuntimeDiagnosticsPanel.svelte";
+  import ReadinessPanel from "./lib/components/readiness/ReadinessPanel.svelte";
   import JobsPanel from "./lib/components/jobs/JobsPanel.svelte";
   import { friendlyRequestError, publicFetchJson } from "./lib/api";
   import { formatBytes, formatDate, formatMiB, formatOptionalDate, formatPercent, formatPower, formatTemperature, gpuMemoryPercent } from "./lib/format";
@@ -165,6 +167,7 @@
   let portStatus = $state<PortStatus | null>(null);
   let gpuStatus = $state<GpuMonitoringStatus | null>(null);
   let runtimeHealth = $state<RuntimeHealthResponse | null>(null);
+  let readiness = $state<ReadinessResponse | null>(null);
   let testChatResult = $state<RuntimeTestChatResponse | null>(null);
   let modelDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
   let buildDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
@@ -356,6 +359,7 @@
     portStatus = null;
     gpuStatus = null;
     runtimeHealth = null;
+    readiness = null;
     testChatResult = null;
     modelDiscoveryWarnings = [];
     buildDiscoveryWarnings = [];
@@ -596,6 +600,10 @@
     runtimeHealth = await fetchJson<RuntimeHealthResponse>("/api/runtime/health");
   }
 
+  async function loadReadiness(): Promise<void> {
+    readiness = await fetchJson<ReadinessResponse>("/api/readiness");
+  }
+
   async function checkRuntimeHealth(): Promise<void> {
     await runAction("runtime-health", async () => {
       await loadRuntimeHealth();
@@ -651,7 +659,7 @@
     errorMessage = null;
 
     try {
-      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadJobs(), loadSettings(), loadModels(), loadBuilds(), loadToolInputs(), loadDetection(), loadProcesses(), loadGpuStatus(), loadRuntimeHealth()]);
+      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadJobs(), loadSettings(), loadModels(), loadBuilds(), loadToolInputs(), loadDetection(), loadProcesses(), loadGpuStatus(), loadRuntimeHealth(), loadReadiness()]);
       await loadCommand();
       await loadPortStatus();
       await loadJobLogs();
@@ -1243,6 +1251,8 @@
         onCheckHealth={checkRuntimeHealth}
         onRunTestChat={runRuntimeTestChat}
       />
+
+      <ReadinessPanel {readiness} />
 
       <JobsPanel
         {jobs}

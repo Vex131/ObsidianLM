@@ -9,6 +9,7 @@ import { registerMonitoringRoutes } from "./api/monitoring.js";
 import { registerProcessRoutes } from "./api/processes.js";
 import { registerSettingsRoutes } from "./api/settings.js";
 import { registerJobRoutes } from "./api/jobs.js";
+import { registerReadinessRoutes } from "./api/readiness.js";
 import { registerAuthRoutes } from "./api/auth.js";
 import { registerAdminAuthProtection } from "./auth/protect.js";
 import { ensureStorageFiles } from "./config/storage.js";
@@ -51,6 +52,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   await registerAuthRoutes(app);
   await registerAdminAuthProtection(app);
   await registerSettingsRoutes(app);
+  await registerReadinessRoutes(app, runtimeManager, options.gpuMonitorOptions);
   await registerProfileRoutes(app, runtimeManager);
   await registerRuntimeRoutes(app, runtimeManager);
   await registerDiscoveryRoutes(app);

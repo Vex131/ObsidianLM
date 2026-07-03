@@ -1,6 +1,6 @@
 import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
-import type { DiscoveredToolInputFile, DiscoveryWarning, ToolInputDiscoveryResponse } from "@obsidianlm/shared";
+import type { AppSettings, DiscoveredToolInputFile, DiscoveryWarning, ToolInputDiscoveryResponse } from "@obsidianlm/shared";
 import { loadSettings } from "../config/storage.js";
 import { stableId } from "./helpers.js";
 
@@ -79,8 +79,8 @@ async function scanFolder(folder: string, currentPath: string, depth: number, de
   }
 }
 
-export async function discoverToolInputs(): Promise<ToolInputDiscoveryResponse> {
-  const settings = await loadSettings();
+export async function discoverToolInputs(settingsOverride?: AppSettings): Promise<ToolInputDiscoveryResponse> {
+  const settings = settingsOverride ?? (await loadSettings());
   const detectedAt = new Date().toISOString();
   const warnings: DiscoveryWarning[] = [];
   const files: DiscoveredToolInputFile[] = [];

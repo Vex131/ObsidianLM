@@ -13,6 +13,9 @@
     "typecheck": "npm --workspace @obsidianlm/shared run build && npm --workspace @obsidianlm/service run typecheck && npm --workspace @obsidianlm/web run typecheck && npm --workspace @obsidianlm/shared run typecheck",
     "lint": "npm --workspace @obsidianlm/shared run build && npm --workspace @obsidianlm/service run lint && npm --workspace @obsidianlm/web run lint && npm --workspace @obsidianlm/shared run lint",
     "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:headed": "npm run build && playwright test --headed",
+    "test:e2e:debug": "npm run build && playwright test --debug",
     "service:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/install-service.ps1",
     "service:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/uninstall-service.ps1",
     "service:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/start-service.ps1",
@@ -21,6 +24,7 @@
     "service:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/status-service.ps1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "concurrently": "^9.1.2"
   }
 }

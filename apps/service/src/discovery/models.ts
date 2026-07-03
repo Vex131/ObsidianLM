@@ -1,6 +1,6 @@
 import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
-import type { DiscoveredModel, DiscoveryWarning, ModelDiscoveryResponse } from "@obsidianlm/shared";
+import type { AppSettings, DiscoveredModel, DiscoveryWarning, ModelDiscoveryResponse } from "@obsidianlm/shared";
 import { loadSettings } from "../config/storage.js";
 import { stableId } from "./helpers.js";
 
@@ -103,8 +103,8 @@ async function scanFolder(folder: string, currentPath: string, depth: number, de
   }
 }
 
-export async function discoverModels(): Promise<ModelDiscoveryResponse> {
-  const settings = await loadSettings();
+export async function discoverModels(settingsOverride?: AppSettings): Promise<ModelDiscoveryResponse> {
+  const settings = settingsOverride ?? (await loadSettings());
   const detectedAt = new Date().toISOString();
   const warnings: DiscoveryWarning[] = [];
   const models: DiscoveredModel[] = [];

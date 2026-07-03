@@ -1,6 +1,6 @@
 import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
-import type { DiscoveredLlamaCppBuild, DiscoveredLlamaCppTool, DiscoveredLlamaCppToolKind, DiscoveryWarning, LlamaBuildDiscoveryResponse } from "@obsidianlm/shared";
+import type { AppSettings, DiscoveredLlamaCppBuild, DiscoveredLlamaCppTool, DiscoveredLlamaCppToolKind, DiscoveryWarning, LlamaBuildDiscoveryResponse } from "@obsidianlm/shared";
 import { loadSettings } from "../config/storage.js";
 import { friendlyNameFromFolder, stableId } from "./helpers.js";
 
@@ -55,8 +55,8 @@ async function scanBuildFolder(folder: string, currentPath: string, depth: numbe
   }
 }
 
-export async function discoverLlamaBuilds(): Promise<LlamaBuildDiscoveryResponse> {
-  const settings = await loadSettings();
+export async function discoverLlamaBuilds(settingsOverride?: AppSettings): Promise<LlamaBuildDiscoveryResponse> {
+  const settings = settingsOverride ?? (await loadSettings());
   const detectedAt = new Date().toISOString();
   const warnings: DiscoveryWarning[] = [];
   const buildMap = new Map<string, DiscoveredLlamaCppTool[]>();

@@ -312,6 +312,35 @@ Automated tests cover tool input discovery, extension filtering, missing-folder 
 
 Real `llama-perplexity` validation requires all of these configured locally and intentionally not committed: a runnable `llama-perplexity` executable, a `.gguf` model, and a small supported input file. If those are present, run a small job from **Jobs** or `POST /api/jobs/llama-perplexity` and confirm the job reaches a terminal status with parsed PPL output. If any discovery count is zero, real execution remains unverified until the corresponding folder is configured.
 
+## Phase 13 Status
+
+Phase 13 adds readiness, browser smoke, and real-use validation guidance.
+
+Implemented:
+
+- `GET /api/readiness` summarizes setup state, discovery counts, profile count, managed port conflict state, GPU monitor availability, active runtime state, storage warnings, blocking checks, warnings, and recommended next actions.
+- Readiness is protected after admin setup like other control endpoints and returns sanitized count/status data instead of local absolute paths, token hashes, command lines, or raw runtime paths.
+- The dashboard includes a Readiness / Setup Checklist panel with blocking checks, warnings, discovery counts, empty-state guidance, and next actions.
+- Playwright browser smoke tests run against isolated `.tmp/e2e-data` and `.tmp/e2e-logs` on port `18090` and do not require real GGUF files, llama.cpp tools, GPU, Tailscale, or llama-server.
+- Root scripts: `npm run test:e2e`, `npm run test:e2e:headed`, and `npm run test:e2e:debug`.
+- Real local validation checklist: `docs/validation/local-real-smoke.md`.
+
+Important boundaries remain unchanged: ObsidianLM is a control plane, UI/API defaults to port `8090`, external clients still talk directly to llama.cpp on `8085`, and one-shot tools (`llama-bench`, `llama-perplexity`, `llama-cli`) are not runtime providers.
+
+### Phase 13 Validation Notes
+
+Use automated tests for repeatable behavior and browser smoke for UI wiring. Real local validation still requires machine-specific configured folders and should not be faked when discovery counts are zero.
+
+```bash
+npm run typecheck
+npm run lint
+npm run build
+npm run test
+npm run test:e2e
+```
+
+Follow `docs/validation/local-real-smoke.md` for the manual checklist before relying on a real local llama.cpp runtime.
+
 ### Phase 11 Real-use Validation
 
 Current repository validation status:
