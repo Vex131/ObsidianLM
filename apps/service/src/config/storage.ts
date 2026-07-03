@@ -58,6 +58,7 @@ function normalizeStoredSettings(settings: Partial<AppSettings>): AppSettings {
     ...settings,
     modelFolders: Array.isArray(settings.modelFolders) ? settings.modelFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.modelFolders,
     llamaCppFolders: Array.isArray(settings.llamaCppFolders) ? settings.llamaCppFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.llamaCppFolders,
+    toolInputFolders: Array.isArray(settings.toolInputFolders) ? settings.toolInputFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.toolInputFolders,
     adminTokenHash: isAdminTokenHash(settings.adminTokenHash) ? settings.adminTokenHash : null
   };
 }

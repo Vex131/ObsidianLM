@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { CreateProfileFromDiscoveryRequest } from "@obsidianlm/shared";
 import { discoverLlamaBuilds } from "../discovery/llama-builds.js";
 import { discoverModels } from "../discovery/models.js";
+import { discoverToolInputs } from "../discovery/tool-inputs.js";
 import { createProfileFromDiscovery, validateCreateProfileRequest } from "../discovery/profile-factory.js";
 
 export async function registerDiscoveryRoutes(app: FastifyInstance): Promise<void> {
@@ -12,6 +13,10 @@ export async function registerDiscoveryRoutes(app: FastifyInstance): Promise<voi
   app.get("/api/discovery/llama-builds", async () => discoverLlamaBuilds());
 
   app.post("/api/discovery/llama-builds/rescan", async () => discoverLlamaBuilds());
+
+  app.get("/api/discovery/tool-inputs", async () => discoverToolInputs());
+
+  app.post("/api/discovery/tool-inputs/rescan", async () => discoverToolInputs());
 
   app.post<{ Body: CreateProfileFromDiscoveryRequest }>("/api/discovery/profiles", async (request, reply) => {
     const requestErrors = validateCreateProfileRequest(request.body);

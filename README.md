@@ -283,6 +283,35 @@ Runtime diagnostics remain control-plane diagnostics only. ObsidianLM does not p
 
 Not implemented in Phase 11: Docker, Electron, a database, multi-runtime support, multi-job concurrency, `llama-perplexity`, benchmark charts, stale-process adoption, automatic stale-process killing, streaming chat, chat history, or a general inference proxy.
 
+## Phase 12 Status
+
+Phase 12 adds `llama-perplexity` one-shot jobs and configured dataset/tool-input discovery.
+
+Implemented:
+
+- New `toolInputFolders` setting for dataset/tool-input discovery.
+- Metadata-only discovery for `.txt`, `.raw`, `.jsonl`, and `.md` files under configured tool input folders.
+- Discovery skips symlinks, caps recursion/results, and reports missing or unreadable folders as warnings.
+- `POST /api/jobs/llama-perplexity` starts a discovered `llama-perplexity` executable with a discovered `.gguf` model and a discovered tool input file.
+- `llama-perplexity` command building uses `-m <modelPath>` and `-f <datasetPath>` plus validated numeric options only: threads, context size, batch size, ubatch size, and GPU layers.
+- Job results parse final output like `Final estimate: PPL = 5.4007 +/- 0.67339` and progress fragments like `[1]15.2701,[2]5.4007`.
+- The Jobs UI offers both `llama-bench` and `llama-perplexity` controls and displays final PPL, uncertainty, estimate count, and warnings.
+
+Important boundaries:
+
+- ObsidianLM remains a control plane. OpenCode, Illustria, and other local tools should continue talking directly to llama.cpp on port `8085` unless explicitly configured otherwise.
+- ObsidianLM UI/API remains on port `8090` unless explicitly overridden.
+- `llama-bench`, `llama-perplexity`, and `llama-cli` are one-shot jobs/tools, not runtime providers.
+- Running `llama-perplexity` does not start `llama-server`, use `RuntimeManager`, proxy inference, adopt external runtimes, or kill unknown processes.
+
+Not implemented in Phase 12: KL-divergence mode, automatic dataset download, benchmark/perplexity charts, multi-job concurrency, multi-runtime support, runtime adoption, automatic stale-process killing, Docker, Electron, a database, or a general inference proxy.
+
+### Phase 12 Real-use Validation
+
+Automated tests cover tool input discovery, extension filtering, missing-folder warnings, symlink skipping where supported by the OS, command building, request validation, final/progress parser behavior, protected API behavior, undiscovered path rejection, mocked job startup, sanitized API responses, and a `llama-bench` regression.
+
+Real `llama-perplexity` validation requires all of these configured locally and intentionally not committed: a runnable `llama-perplexity` executable, a `.gguf` model, and a small supported input file. If those are present, run a small job from **Jobs** or `POST /api/jobs/llama-perplexity` and confirm the job reaches a terminal status with parsed PPL output. If any discovery count is zero, real execution remains unverified until the corresponding folder is configured.
+
 ### Phase 11 Real-use Validation
 
 Current repository validation status:
@@ -366,7 +395,7 @@ External tools such as OpenCode and Illustria should still talk directly to llam
 
 ## Configure Discovery Folders
 
-Discovery is controlled by `modelFolders` and `llamaCppFolders` in `data/settings.json`. Fresh installs default both lists to empty. Use `data/settings.example.json` as a safe template, then replace the placeholder paths with your local folders.
+Discovery is controlled by `modelFolders`, `llamaCppFolders`, and `toolInputFolders` in `data/settings.json`. Fresh installs default these lists to empty. Use `data/settings.example.json` as a safe template, then replace the placeholder paths with your local folders.
 
 Example shape:
 
@@ -377,7 +406,8 @@ Example shape:
   "startupMode": "service_only",
   "staleProcessPolicy": "auto_stop_previous_managed_only",
   "modelFolders": ["C:\\path\\to\\models"],
-  "llamaCppFolders": ["C:\\path\\to\\llama.cpp-builds"]
+  "llamaCppFolders": ["C:\\path\\to\\llama.cpp-builds"],
+  "toolInputFolders": ["C:\\path\\to\\tool-inputs"]
 }
 ```
 
@@ -387,10 +417,12 @@ You can also edit these folders from the dashboard under **Discovery folders**. 
 
 - Discovery scans only the configured folders. It does not search the whole machine.
 - Model discovery reads directory entries and file metadata; it does not load model contents.
+- Tool input discovery reads directory entries and file metadata only; it does not read dataset contents during discovery.
 - Build discovery detects executable file names; it does not execute detected tools.
 - Symlinked configured folders and symlinked entries are skipped.
 - Missing or unreadable folders are kept in settings and reported as warnings instead of crashing the service.
 - Model scans stop below depth 8 and after 1000 `.gguf` files.
+- Tool input scans stop below depth 8 and after 1000 supported text-like files.
 - Build scans check the configured folder and one nested level below it.
 - Creating a profile appends to `data/profiles.json`, validates the profile, and does not start llama.cpp.
 
@@ -403,7 +435,14 @@ Supported detected llama.cpp files in Phase 2:
 - `llama-server.exe` / `llama-server` — runtime provider, required for a discovered build to appear.
 - `llama-cli.exe` / `llama-cli` — detected companion tool.
 - `llama-bench.exe` / `llama-bench` — detected companion tool; Phase 10 can run it as a one-shot job.
-- `llama-perplexity.exe` / `llama-perplexity` — detected companion tool only; jobs are planned later.
+- `llama-perplexity.exe` / `llama-perplexity` — detected companion tool; Phase 12 can run it as a one-shot job.
+
+Supported tool input files in Phase 12:
+
+- `.txt`
+- `.raw`
+- `.jsonl`
+- `.md`
 
 ### Local manual laptop smoke-test example
 
@@ -435,6 +474,28 @@ POST /api/jobs/llama-bench
 ```
 
 The request must select a discovered bench tool with `buildId` or `benchPath` and a discovered `modelPath`. If no discovered bench tool or GGUF model is available, the API returns a validation/conflict error instead of guessing paths or starting a runtime.
+
+## Run llama-perplexity as a One-shot Job
+
+`llama-perplexity` support uses the Jobs system, not runtime management. It does not start `llama-server` and does not make a model available at `http://localhost:8085/v1`.
+
+Requirements:
+
+1. Configure `llamaCppFolders` with a folder containing a discovered `llama-perplexity.exe` / `llama-perplexity` tool.
+2. Configure `modelFolders` with a folder containing the `.gguf` model to evaluate.
+3. Configure `toolInputFolders` with a folder containing a supported `.txt`, `.raw`, `.jsonl`, or `.md` input file.
+4. Rescan builds, models, and tool inputs from the dashboard.
+5. Open **Jobs**, select the discovered GGUF model, `llama-perplexity` tool, and input file, then click **Run llama-perplexity**.
+
+API route:
+
+```text
+POST /api/jobs/llama-perplexity
+```
+
+The request must select a discovered perplexity tool with `buildId` or `perplexityPath`, a discovered `modelPath`, and a discovered `datasetPath`. The API rejects arbitrary paths that were not returned by configured discovery.
+
+Perplexity (`PPL`) is a language-model evaluation measure where lower is generally better for the same dataset/tokenizer/evaluation setup. It is not a universal quality score: compare PPL only across similar models, tokenizers, context/options, and input data. Phase 12 does not implement KL-divergence mode, automatic dataset downloads, charts, or multi-job concurrency.
 
 ## Configure a llama.cpp Profile
 

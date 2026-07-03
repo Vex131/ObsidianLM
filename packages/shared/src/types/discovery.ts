@@ -21,6 +21,18 @@ export interface DiscoveredModel {
   familyGuess?: string;
 }
 
+export interface DiscoveredToolInputFile {
+  id: string;
+  name: string;
+  fileName: string;
+  path: string;
+  folder: string;
+  extension: ".txt" | ".raw" | ".jsonl" | ".md";
+  sizeBytes: number;
+  modifiedAt: string;
+  detectedAt: string;
+}
+
 export type DiscoveredLlamaCppToolKind = "server" | "cli" | "bench" | "perplexity" | "unknown";
 
 export interface DiscoveredLlamaCppTool {
@@ -53,9 +65,17 @@ export interface LlamaBuildDiscoveryResponse {
   detectedAt: string;
 }
 
+export interface ToolInputDiscoveryResponse {
+  files: DiscoveredToolInputFile[];
+  warnings: DiscoveryWarning[];
+  scannedFolders: string[];
+  detectedAt: string;
+}
+
 export interface DiscoverySettingsUpdate {
   modelFolders: string[];
   llamaCppFolders: string[];
+  toolInputFolders: string[];
 }
 
 export interface CreateProfileFromDiscoveryRequest {

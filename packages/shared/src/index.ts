@@ -12,7 +12,11 @@ export type {
   LlamaBenchArgs,
   LlamaBenchJobResult,
   LlamaBenchRequest,
-  LlamaBenchResultRow
+  LlamaBenchResultRow,
+  LlamaPerplexityArgs,
+  LlamaPerplexityEstimate,
+  LlamaPerplexityJobResult,
+  LlamaPerplexityRequest
 } from "./types/jobs.js";
 export type {
   CommandSpec,
@@ -66,10 +70,12 @@ export type {
   DiscoveredLlamaCppTool,
   DiscoveredLlamaCppToolKind,
   DiscoveredModel,
+  DiscoveredToolInputFile,
   DiscoverySettingsUpdate,
   DiscoveryWarning,
   LlamaBuildDiscoveryResponse,
-  ModelDiscoveryResponse
+  ModelDiscoveryResponse,
+  ToolInputDiscoveryResponse
 } from "./types/discovery.js";
 export type {
   CreateProfileRequest,

@@ -1,4 +1,4 @@
-export type JobType = "test" | "generic" | "llama-bench";
+export type JobType = "test" | "generic" | "llama-bench" | "llama-perplexity";
 
 export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
@@ -21,7 +21,7 @@ export interface JobRecord {
   errorMessage: string | null;
 }
 
-export type JobResult = LlamaBenchJobResult;
+export type JobResult = LlamaBenchJobResult | LlamaPerplexityJobResult;
 
 export interface LlamaBenchRequest {
   buildId?: string;
@@ -85,6 +85,42 @@ export interface LlamaBenchJobResult {
   type: "llama-bench";
   parsed: boolean;
   rows: LlamaBenchResultRow[];
+  warnings: string[];
+}
+
+export interface LlamaPerplexityRequest {
+  buildId?: string;
+  perplexityPath?: string;
+  modelPath?: string;
+  datasetPath?: string;
+  args?: LlamaPerplexityArgs;
+  threads?: number;
+  ctxSize?: number;
+  batchSize?: number;
+  ubatchSize?: number;
+  nGpuLayers?: number;
+}
+
+export interface LlamaPerplexityArgs {
+  threads?: number;
+  ctxSize?: number;
+  batchSize?: number;
+  ubatchSize?: number;
+  nGpuLayers?: number;
+}
+
+export interface LlamaPerplexityEstimate {
+  index: number;
+  ppl: number;
+}
+
+export interface LlamaPerplexityJobResult {
+  type: "llama-perplexity";
+  parsed: boolean;
+  finalPpl: number | null;
+  uncertainty: number | null;
+  estimates: LlamaPerplexityEstimate[];
+  estimateCount: number;
   warnings: string[];
 }
 

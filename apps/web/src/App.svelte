@@ -12,6 +12,7 @@
     DiscoveredLlamaCppBuild,
     DiscoveredLlamaCppTool,
     DiscoveredModel,
+    DiscoveredToolInputFile,
     DetectedProcess,
     DiscoveryWarning,
     GpuDevice,
@@ -20,6 +21,7 @@
     JobActionResponse,
     JobRecord,
     LlamaBuildDiscoveryResponse,
+    LlamaPerplexityJobResult,
     ModelDiscoveryResponse,
     PortStatus,
     ProcessListResponse,
@@ -96,7 +98,28 @@
     rows: LlamaBenchResultRowView[];
   }
 
-  type JobRecordWithOptionalResult = JobRecord & { result?: LlamaBenchResultView | null };
+  interface ToolInputDiscoveryResponse {
+    files: DiscoveredToolInputFile[];
+    warnings: DiscoveryWarning[];
+    scannedFolders: string[];
+    detectedAt: string;
+  }
+
+  interface LlamaPerplexityRequestPayload {
+    buildId: string;
+    perplexityPath: string;
+    modelPath: string;
+    datasetPath: string;
+    args: {
+      threads: number;
+      ctxSize: number;
+      batchSize: number;
+      ubatchSize: number;
+      nGpuLayers: number;
+    };
+  }
+
+  type JobRecordWithOptionalResult = JobRecord & { result?: LlamaBenchResultView | LlamaPerplexityJobResult | null };
 
   const navItems = ["Overview", "Runtime", "Jobs", "GPU", "Processes", "Profiles", "Models", "Builds", "Logs", "Settings"];
   const adminTokenStorageKey = "obsidianlm.adminToken";
@@ -133,8 +156,10 @@
   let settings = $state<AppSettings | null>(null);
   let modelFoldersText = $state("");
   let llamaCppFoldersText = $state("");
+  let toolInputFoldersText = $state("");
   let discoveredModels = $state<DiscoveredModel[]>([]);
   let discoveredBuilds = $state<DiscoveredLlamaCppBuild[]>([]);
+  let discoveredToolInputs = $state<DiscoveredToolInputFile[]>([]);
   let detection = $state<StartupDetectionSummary | null>(null);
   let detectedProcesses = $state<DetectedProcess[]>([]);
   let portStatus = $state<PortStatus | null>(null);
@@ -143,10 +168,14 @@
   let testChatResult = $state<RuntimeTestChatResponse | null>(null);
   let modelDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
   let buildDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
+  let toolInputDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
   let selectedModelPath = $state("");
   let selectedBuildPath = $state("");
   let selectedBenchModelPath = $state("");
   let selectedBenchPath = $state("");
+  let selectedPerplexityModelPath = $state("");
+  let selectedPerplexityPath = $state("");
+  let selectedDatasetPath = $state("");
   let benchThreadsInitialized = false;
   let createdProfilePreview = $state<CommandSpec | null>(null);
   let profileForm = $state({
@@ -170,6 +199,13 @@
     promptTokens: 512,
     generationTokens: 128,
     repetitions: 3
+  });
+  let perplexityForm = $state({
+    nGpuLayers: 0,
+    ctxSize: 8192,
+    batchSize: 512,
+    ubatchSize: 128,
+    threads: 8
   });
 
   const selectedProfile = $derived(profiles.find((profile) => profile.id === selectedProfileId) ?? null);
@@ -199,6 +235,7 @@
   const logStatusText = $derived(runtimeStatus === "running" ? "Managed runtime active" : "Runtime stopped or unavailable");
   const selectedJob = $derived(jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null);
   const selectedJobBenchResult = $derived((selectedJob as JobRecordWithOptionalResult | null)?.result?.type === "llama-bench" ? (selectedJob as JobRecordWithOptionalResult).result : null);
+  const selectedJobPerplexityResult = $derived((selectedJob as JobRecordWithOptionalResult | null)?.result?.type === "llama-perplexity" ? (selectedJob as JobRecordWithOptionalResult).result as LlamaPerplexityJobResult : null);
   const runningJob = $derived(jobs.find((job) => job.status === "queued" || job.status === "running") ?? null);
   const jobLogLines = $derived(jobLogs.length ? jobLogs : ["No job logs selected yet."]);
   const selectedModel = $derived(discoveredModels.find((model) => model.path === selectedModelPath) ?? null);
@@ -212,7 +249,17 @@
     );
   });
   const selectedBenchTool = $derived(benchToolOptions.find((option) => option.tool.path === selectedBenchPath) ?? benchToolOptions[0] ?? null);
-  const discoveryWarningLines = $derived([...modelDiscoveryWarnings, ...buildDiscoveryWarnings].map((warning) => warning.message));
+  const selectedPerplexityModel = $derived(discoveredModels.find((model) => model.path === selectedPerplexityModelPath) ?? discoveredModels[0] ?? null);
+  const perplexityToolOptions = $derived.by(() => {
+    return discoveredBuilds.flatMap((build) =>
+      build.tools
+        .filter(isPerplexityTool)
+        .map((tool) => ({ build, tool }))
+    );
+  });
+  const selectedPerplexityTool = $derived(perplexityToolOptions.find((option) => option.tool.path === selectedPerplexityPath) ?? perplexityToolOptions[0] ?? null);
+  const selectedDataset = $derived(discoveredToolInputs.find((input) => input.path === selectedDatasetPath) ?? discoveredToolInputs[0] ?? null);
+  const discoveryWarningLines = $derived([...modelDiscoveryWarnings, ...buildDiscoveryWarnings, ...toolInputDiscoveryWarnings].map((warning) => warning.message));
   const gpuWarnings = $derived(gpuStatus?.warnings ?? []);
   const gpuTone = $derived(!gpuStatus || gpuStatus.available ? (gpuStatus?.summary.unknownGpuProcessCount ? "warning" : "default") : "warning");
 
@@ -241,6 +288,10 @@
 
   function isBenchTool(tool: DiscoveredLlamaCppTool): boolean {
     return tool.exists && (tool.kind === "bench" || tool.fileName.toLowerCase().includes("llama-bench"));
+  }
+
+  function isPerplexityTool(tool: DiscoveredLlamaCppTool): boolean {
+    return tool.exists && (tool.kind === "perplexity" || tool.fileName.toLowerCase().includes("llama-perplexity"));
   }
 
   function defaultBenchThreads(profileList: RuntimeProfile[]): number {
@@ -296,8 +347,10 @@
     settings = null;
     modelFoldersText = "";
     llamaCppFoldersText = "";
+    toolInputFoldersText = "";
     discoveredModels = [];
     discoveredBuilds = [];
+    discoveredToolInputs = [];
     detection = null;
     detectedProcesses = [];
     portStatus = null;
@@ -306,10 +359,14 @@
     testChatResult = null;
     modelDiscoveryWarnings = [];
     buildDiscoveryWarnings = [];
+    toolInputDiscoveryWarnings = [];
     selectedModelPath = "";
     selectedBuildPath = "";
     selectedBenchModelPath = "";
     selectedBenchPath = "";
+    selectedPerplexityModelPath = "";
+    selectedPerplexityPath = "";
+    selectedDatasetPath = "";
     benchThreadsInitialized = false;
     createdProfilePreview = null;
     closeLogStream();
@@ -470,6 +527,7 @@
     settings = response.settings;
     modelFoldersText = response.settings.modelFolders.join("\n");
     llamaCppFoldersText = response.settings.llamaCppFolders.join("\n");
+    toolInputFoldersText = response.settings.toolInputFolders.join("\n");
     profileForm.port = response.settings.managedLlamaPort;
   }
 
@@ -482,6 +540,9 @@
     }
     if (!selectedBenchModelPath && response.models.length) {
       selectedBenchModelPath = response.models[0].path;
+    }
+    if (!selectedPerplexityModelPath && response.models.length) {
+      selectedPerplexityModelPath = response.models[0].path;
     }
   }
 
@@ -496,6 +557,20 @@
     if (!selectedBenchPath || !benchTools.some((tool) => tool.path === selectedBenchPath)) {
       const firstBenchTool = benchTools[0];
       selectedBenchPath = firstBenchTool?.path ?? "";
+    }
+    const perplexityTools = response.builds.flatMap((build) => build.tools.filter(isPerplexityTool));
+    if (!selectedPerplexityPath || !perplexityTools.some((tool) => tool.path === selectedPerplexityPath)) {
+      const firstPerplexityTool = perplexityTools[0];
+      selectedPerplexityPath = firstPerplexityTool?.path ?? "";
+    }
+  }
+
+  async function loadToolInputs(method: "GET" | "POST" = "GET"): Promise<void> {
+    const response = await fetchJson<ToolInputDiscoveryResponse>("/api/discovery/tool-inputs" + (method === "POST" ? "/rescan" : ""), { method });
+    discoveredToolInputs = response.files;
+    toolInputDiscoveryWarnings = response.warnings;
+    if (!selectedDatasetPath && response.files.length) {
+      selectedDatasetPath = response.files[0].path;
     }
   }
 
@@ -576,7 +651,7 @@
     errorMessage = null;
 
     try {
-      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadJobs(), loadSettings(), loadModels(), loadBuilds(), loadDetection(), loadProcesses(), loadGpuStatus(), loadRuntimeHealth()]);
+      await Promise.all([loadStatus(), loadRuntime(), loadProfiles(), loadLogs(), loadJobs(), loadSettings(), loadModels(), loadBuilds(), loadToolInputs(), loadDetection(), loadProcesses(), loadGpuStatus(), loadRuntimeHealth()]);
       await loadCommand();
       await loadPortStatus();
       await loadJobLogs();
@@ -598,14 +673,16 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           modelFolders: linesFromText(modelFoldersText),
-          llamaCppFolders: linesFromText(llamaCppFoldersText)
+          llamaCppFolders: linesFromText(llamaCppFoldersText),
+          toolInputFolders: linesFromText(toolInputFoldersText)
         })
       });
       settings = response.settings;
       modelFoldersText = response.settings.modelFolders.join("\n");
       llamaCppFoldersText = response.settings.llamaCppFolders.join("\n");
+      toolInputFoldersText = response.settings.toolInputFolders.join("\n");
       actionMessage = "Discovery folders saved. Scans still only read configured folders.";
-      await Promise.all([loadModels("POST"), loadBuilds("POST")]);
+      await Promise.all([loadModels("POST"), loadBuilds("POST"), loadToolInputs("POST")]);
     });
   }
 
@@ -620,6 +697,13 @@
     await runAction("rescan-builds", async () => {
       await loadBuilds("POST");
       actionMessage = "Build scan finished. Detected files were not executed.";
+    });
+  }
+
+  async function rescanToolInputs(): Promise<void> {
+    await runAction("rescan-tool-inputs", async () => {
+      await loadToolInputs("POST");
+      actionMessage = "Tool input scan finished. Only file metadata was read.";
     });
   }
 
@@ -756,6 +840,37 @@
         }
       };
       const response = await fetchJson<JobActionResponse>("/api/jobs/llama-bench", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (response.job) {
+        selectedJobId = response.job.id;
+      }
+      actionMessage = response.message;
+    });
+  }
+
+  async function runLlamaPerplexityJob(): Promise<void> {
+    if (!selectedPerplexityModel || !selectedPerplexityTool || !selectedDataset) {
+      return;
+    }
+
+    await runAction("run-llama-perplexity", async () => {
+      const body: LlamaPerplexityRequestPayload = {
+        buildId: selectedPerplexityTool.build.id,
+        perplexityPath: selectedPerplexityTool.tool.path,
+        modelPath: selectedPerplexityModel.path,
+        datasetPath: selectedDataset.path,
+        args: {
+          threads: perplexityForm.threads,
+          ctxSize: perplexityForm.ctxSize,
+          batchSize: perplexityForm.batchSize,
+          ubatchSize: perplexityForm.ubatchSize,
+          nGpuLayers: perplexityForm.nGpuLayers
+        }
+      };
+      const response = await fetchJson<JobActionResponse>("/api/jobs/llama-perplexity", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
@@ -1005,9 +1120,9 @@
   <section class="workspace">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Phase 6 job foundation</p>
+        <p class="eyebrow">Phase 12 llama-perplexity jobs</p>
         <h1>llama.cpp runtime, jobs, GPU monitor, and profile cockpit</h1>
-        <p class="subtitle">Manage long-running llama.cpp server profiles separately from one-shot tool jobs. Phase 6 adds a safe generic job foundation without running llama-bench or llama-perplexity yet.</p>
+        <p class="subtitle">Manage long-running llama.cpp server profiles separately from one-shot llama-bench and llama-perplexity tool jobs. OpenCode and local tools still talk directly to llama.cpp.</p>
       </div>
 
       <div class="topbar-status" aria-live="polite">
@@ -1134,20 +1249,31 @@
         bind:selectedJobId
         {selectedJob}
         selectedJobBenchResult={selectedJobBenchResult as never}
+        selectedJobPerplexityResult={selectedJobPerplexityResult as never}
         {runningJob}
         {jobLogs}
         {jobLogLines}
         {discoveredModels}
+        {discoveredToolInputs}
         bind:selectedBenchModelPath
         {benchToolOptions}
         bind:selectedBenchPath
         {selectedBenchModel}
         {selectedBenchTool}
         {benchForm}
+        bind:selectedPerplexityModelPath
+        bind:selectedPerplexityPath
+        bind:selectedDatasetPath
+        {perplexityToolOptions}
+        {selectedPerplexityModel}
+        {selectedPerplexityTool}
+        {selectedDataset}
+        {perplexityForm}
         {pendingAction}
         {runTestJob}
         {cancelJob}
         {runLlamaBenchJob}
+        {runLlamaPerplexityJob}
         {jobTone}
       />
 
@@ -1310,11 +1436,13 @@
         <textarea id="model-folders" class="folder-textarea" bind:value={modelFoldersText} placeholder="D:\Models" rows="4"></textarea>
         <label class="field-label" for="build-folders">llama.cpp build folders</label>
         <textarea id="build-folders" class="folder-textarea" bind:value={llamaCppFoldersText} placeholder="C:\llama.cpp" rows="4"></textarea>
+        <label class="field-label" for="tool-input-folders">Tool input folders</label>
+        <textarea id="tool-input-folders" class="folder-textarea" bind:value={toolInputFoldersText} placeholder="D:\Datasets" rows="4"></textarea>
         <div class="panel-actions inline-actions">
           <ToolbarButton variant="secondary" onclick={saveDiscoveryFolders} disabled={Boolean(pendingAction)}>{pendingAction === "save-discovery-folders" ? "Saving..." : "Save discovery folders"}</ToolbarButton>
         </div>
         <p class="helper-text">Only these folders are scanned. Missing folders are saved but reported as warnings during discovery.</p>
-        {#if settings && !settings.modelFolders.length && !settings.llamaCppFolders.length}
+        {#if settings && !settings.modelFolders.length && !settings.llamaCppFolders.length && !settings.toolInputFolders.length}
           <p class="empty-copy">No discovery folders are configured yet.</p>
         {/if}
       </Panel>
@@ -1336,6 +1464,26 @@
           </div>
         {:else}
           <p class="empty-copy">No .gguf models found in configured folders.</p>
+        {/if}
+      </Panel>
+
+      <Panel eyebrow="Tool inputs" title="Discovered datasets/tool inputs" class="models-card">
+        <div class="panel-actions">
+          <ToolbarButton variant="ghost" onclick={rescanToolInputs} disabled={Boolean(pendingAction)}>{pendingAction === "rescan-tool-inputs" ? "Scanning..." : "Rescan tool inputs"}</ToolbarButton>
+        </div>
+        {#if discoveredToolInputs.length}
+          <div class="discovery-list">
+            {#each discoveredToolInputs as input}
+              <button class={`discovery-item ${selectedDatasetPath === input.path ? "selected" : ""}`} type="button" onclick={() => (selectedDatasetPath = input.path)}>
+                <strong>{input.fileName}</strong>
+                <span>{input.folder}</span>
+                <small>{formatBytes(input.sizeBytes)} • {input.extension} • modified {formatDate(input.modifiedAt)}</small>
+                <code>{input.path}</code>
+              </button>
+            {/each}
+          </div>
+        {:else}
+          <p class="empty-copy">No .txt, .raw, .jsonl, or .md tool inputs found in configured folders.</p>
         {/if}
       </Panel>
 

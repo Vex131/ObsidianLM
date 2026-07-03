@@ -9,5 +9,8 @@
   ],
   "llamaCppFolders": [
     "C:\\path\\to\\llama.cpp-builds"
+  ],
+  "toolInputFolders": [
+    "C:\\path\\to\\tool-inputs"
   ]
 }

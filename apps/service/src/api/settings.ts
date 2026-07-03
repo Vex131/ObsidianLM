@@ -12,10 +12,10 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
   app.get("/api/settings", async () => ({ settings: sanitizeSettingsForApi(await loadSettings()) }));
 
   app.patch<{ Body: DiscoverySettingsUpdate }>("/api/settings/discovery-folders", async (request, reply) => {
-    if (!isRecord(request.body) || !Array.isArray(request.body.modelFolders) || !Array.isArray(request.body.llamaCppFolders)) {
+    if (!isRecord(request.body) || !Array.isArray(request.body.modelFolders) || !Array.isArray(request.body.llamaCppFolders) || (request.body.toolInputFolders !== undefined && !Array.isArray(request.body.toolInputFolders))) {
       return reply.status(400).send({
         error: "invalid_settings_update",
-        message: "modelFolders and llamaCppFolders must both be arrays."
+        message: "modelFolders and llamaCppFolders must be arrays. toolInputFolders must be an array when provided."
       });
     }
 
@@ -23,7 +23,8 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     const nextSettings = {
       ...settings,
       modelFolders: normalizeFolderList(request.body.modelFolders),
-      llamaCppFolders: normalizeFolderList(request.body.llamaCppFolders)
+      llamaCppFolders: normalizeFolderList(request.body.llamaCppFolders),
+      toolInputFolders: request.body.toolInputFolders === undefined ? settings.toolInputFolders : normalizeFolderList(request.body.toolInputFolders)
     };
 
     await saveSettings(nextSettings);
