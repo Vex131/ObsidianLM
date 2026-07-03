@@ -14,6 +14,12 @@ import {
   type GpuCommandRunner
 } from "../src/monitoring/gpu-monitor.js";
 
+const adminToken = "phase4-valid-admin-token";
+
+function authHeader(): { authorization: string } {
+  return { authorization: `Bearer ${adminToken}` };
+}
+
 async function makeDataFixture() {
   const root = await mkdtemp(path.join(tmpdir(), "obsidianlm-phase4-"));
   const dataDir = path.join(root, "data");
@@ -26,6 +32,8 @@ async function createFixtureApp(t: TestContext, commandRunner: GpuCommandRunner)
   const fixture = await makeDataFixture();
   process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
   const app = await createServer({ gpuMonitorOptions: { commandRunner } });
+  const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
+  assert.equal(setup.statusCode, 201);
   t.after(async () => {
     await app.close();
     delete process.env.OBSIDIANLM_DATA_DIR;
@@ -146,7 +154,7 @@ test("GET /api/monitoring/gpu returns a stable GPU monitoring shape", async (t) 
     "1111, C:\\llama.cpp\\llama-server.exe, GPU-111, 1536\n3333, python.exe, GPU-222, 512"
   ]));
 
-  const response = await app.inject({ method: "GET", url: "/api/monitoring/gpu" });
+  const response = await app.inject({ method: "GET", url: "/api/monitoring/gpu", headers: authHeader() });
   assert.equal(response.statusCode, 200);
   const body = response.json() as GpuMonitoringStatus;
   assert.equal(body.available, true);

@@ -15,6 +15,12 @@ import { RuntimeManager } from "../src/runtime/manager.js";
 import { buildDetectionSummary } from "../src/runtime/startup-detector.js";
 import { sanitizeProcessForApi } from "../src/api/sanitize.js";
 
+const adminToken = "phase3-valid-admin-token";
+
+function authHeader(): { authorization: string } {
+  return { authorization: `Bearer ${adminToken}` };
+}
+
 async function makeDataFixture() {
   const root = await mkdtemp(path.join(tmpdir(), "obsidianlm-phase3-"));
   const dataDir = path.join(root, "data");
@@ -231,9 +237,11 @@ test("POST /api/profiles/:id/start returns 409 when selected profile port is in 
   const profile = makeProfile(fixture.buildPath, fixture.modelPath, port);
   await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile]), "utf8");
   const app = await createServer();
+  const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
+  assert.equal(setup.statusCode, 201);
   t.after(async () => app.close());
 
-  const response = await app.inject({ method: "POST", url: `/api/profiles/${profile.id}/start` });
+  const response = await app.inject({ method: "POST", url: `/api/profiles/${profile.id}/start`, headers: authHeader() });
   assert.equal(response.statusCode, 409);
   assert.equal(response.json().error, "port_conflict");
 });
@@ -245,17 +253,19 @@ test("Phase 3 read-only API routes return process, port, and detection payloads"
   t.after(() => delete process.env.OBSIDIANLM_DATA_DIR);
 
   const app = await createServer();
+  const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
+  assert.equal(setup.statusCode, 201);
   t.after(async () => app.close());
 
-  const processes = await app.inject({ method: "GET", url: "/api/processes/llama" });
+  const processes = await app.inject({ method: "GET", url: "/api/processes/llama", headers: authHeader() });
   assert.equal(processes.statusCode, 200);
   assert.ok(Array.isArray(processes.json().processes));
 
-  const ports = await app.inject({ method: "GET", url: "/api/monitoring/ports?port=18086" });
+  const ports = await app.inject({ method: "GET", url: "/api/monitoring/ports?port=18086", headers: authHeader() });
   assert.equal(ports.statusCode, 200);
   assert.equal(ports.json().port.port, 18086);
 
-  const detection = await app.inject({ method: "GET", url: "/api/runtime/detection" });
+  const detection = await app.inject({ method: "GET", url: "/api/runtime/detection", headers: authHeader() });
   assert.equal(detection.statusCode, 200);
   assert.ok(Array.isArray(detection.json().categories));
 });

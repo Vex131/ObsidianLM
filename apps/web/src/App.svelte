@@ -10,12 +10,14 @@
     CreateProfileFromDiscoveryRequest,
     CreateProfileFromDiscoveryResponse,
     DiscoveredLlamaCppBuild,
+    DiscoveredLlamaCppTool,
     DiscoveredModel,
     DetectedProcess,
     DiscoveryWarning,
     GpuDevice,
     GpuMonitoringStatus,
     GpuProcess,
+    JobActionResponse,
     JobRecord,
     LlamaBuildDiscoveryResponse,
     ModelDiscoveryResponse,
@@ -55,6 +57,39 @@
   interface SettingsResponse {
     settings: AppSettings;
   }
+
+  interface LlamaBenchRequestPayload {
+    buildId: string;
+    benchPath: string;
+    modelPath: string;
+    args: {
+      threads: number;
+      ctxSize: number;
+      batchSize: number;
+      ubatchSize: number;
+      nGpuLayers: number;
+      promptTokens: number;
+      generationTokens: number;
+      repetitions: number;
+    };
+  }
+
+  interface LlamaBenchResultRowView {
+    test: string;
+    backend?: string;
+    threads?: string;
+    nPrompt?: string;
+    nGen?: string;
+    testTime?: string;
+    tokensPerSecond?: number;
+  }
+
+  interface LlamaBenchResultView {
+    type: "llama-bench";
+    rows: LlamaBenchResultRowView[];
+  }
+
+  type JobRecordWithOptionalResult = JobRecord & { result?: LlamaBenchResultView | null };
 
   const navItems = ["Overview", "Runtime", "Jobs", "GPU", "Processes", "Profiles", "Models", "Builds", "Logs", "Settings"];
   const adminTokenStorageKey = "obsidianlm.adminToken";
@@ -101,6 +136,9 @@
   let buildDiscoveryWarnings = $state<DiscoveryWarning[]>([]);
   let selectedModelPath = $state("");
   let selectedBuildPath = $state("");
+  let selectedBenchModelPath = $state("");
+  let selectedBenchPath = $state("");
+  let benchThreadsInitialized = false;
   let createdProfilePreview = $state<CommandSpec | null>(null);
   let profileForm = $state({
     name: "",
@@ -113,6 +151,16 @@
     ubatchSize: 128,
     threads: 8,
     threadsBatch: 8
+  });
+  let benchForm = $state({
+    nGpuLayers: 0,
+    ctxSize: 8192,
+    batchSize: 512,
+    ubatchSize: 128,
+    threads: 8,
+    promptTokens: 512,
+    generationTokens: 128,
+    repetitions: 3
   });
 
   const selectedProfile = $derived(profiles.find((profile) => profile.id === selectedProfileId) ?? null);
@@ -141,10 +189,20 @@
   const logConnectionTone = $derived(logStreamState === "connected" ? "online" : logStreamState === "connecting" ? "warning" : "offline");
   const logStatusText = $derived(runtimeStatus === "running" ? "Managed runtime active" : "Runtime stopped or unavailable");
   const selectedJob = $derived(jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null);
+  const selectedJobBenchResult = $derived((selectedJob as JobRecordWithOptionalResult | null)?.result?.type === "llama-bench" ? (selectedJob as JobRecordWithOptionalResult).result : null);
   const runningJob = $derived(jobs.find((job) => job.status === "queued" || job.status === "running") ?? null);
   const jobLogLines = $derived(jobLogs.length ? jobLogs : ["No job logs selected yet."]);
   const selectedModel = $derived(discoveredModels.find((model) => model.path === selectedModelPath) ?? null);
   const selectedBuild = $derived(discoveredBuilds.find((build) => build.serverPath === selectedBuildPath) ?? null);
+  const selectedBenchModel = $derived(discoveredModels.find((model) => model.path === selectedBenchModelPath) ?? discoveredModels[0] ?? null);
+  const benchToolOptions = $derived.by(() => {
+    return discoveredBuilds.flatMap((build) =>
+      build.tools
+        .filter(isBenchTool)
+        .map((tool) => ({ build, tool }))
+    );
+  });
+  const selectedBenchTool = $derived(benchToolOptions.find((option) => option.tool.path === selectedBenchPath) ?? benchToolOptions[0] ?? null);
   const discoveryWarningLines = $derived([...modelDiscoveryWarnings, ...buildDiscoveryWarnings].map((warning) => warning.message));
   const gpuWarnings = $derived(gpuStatus?.warnings ?? []);
   const gpuTone = $derived(!gpuStatus || gpuStatus.available ? (gpuStatus?.summary.unknownGpuProcessCount ? "warning" : "default") : "warning");
@@ -222,6 +280,15 @@
       return "offline";
     }
     return "warning";
+  }
+
+  function isBenchTool(tool: DiscoveredLlamaCppTool): boolean {
+    return tool.exists && (tool.kind === "bench" || tool.fileName.toLowerCase().includes("llama-bench"));
+  }
+
+  function defaultBenchThreads(profileList: RuntimeProfile[]): number {
+    const configuredThreads = profileList.find((profile) => typeof profile.llamaArgs?.threads === "number")?.llamaArgs?.threads;
+    return configuredThreads && configuredThreads > 0 ? configuredThreads : 8;
   }
 
   function formatOptionalDate(value: string | null): string {
@@ -305,6 +372,9 @@
     buildDiscoveryWarnings = [];
     selectedModelPath = "";
     selectedBuildPath = "";
+    selectedBenchModelPath = "";
+    selectedBenchPath = "";
+    benchThreadsInitialized = false;
     createdProfilePreview = null;
     closeLogStream();
   }
@@ -453,6 +523,10 @@
     if (!selectedProfileId && response.profiles.length > 0) {
       selectedProfileId = response.profiles[0].id;
     }
+    if (!benchThreadsInitialized) {
+      benchForm.threads = defaultBenchThreads(response.profiles);
+      benchThreadsInitialized = true;
+    }
   }
 
   async function loadSettings(): Promise<void> {
@@ -470,6 +544,9 @@
     if (!selectedModelPath && response.models.length) {
       selectedModelPath = response.models[0].path;
     }
+    if (!selectedBenchModelPath && response.models.length) {
+      selectedBenchModelPath = response.models[0].path;
+    }
   }
 
   async function loadBuilds(method: "GET" | "POST" = "GET"): Promise<void> {
@@ -478,6 +555,11 @@
     buildDiscoveryWarnings = response.warnings;
     if (!selectedBuildPath && response.builds.length) {
       selectedBuildPath = response.builds[0].serverPath;
+    }
+    const benchTools = response.builds.flatMap((build) => build.tools.filter(isBenchTool));
+    if (!selectedBenchPath || !benchTools.some((tool) => tool.path === selectedBenchPath)) {
+      const firstBenchTool = benchTools[0];
+      selectedBenchPath = firstBenchTool?.path ?? "";
     }
   }
 
@@ -687,6 +769,39 @@
   async function runTestJob(): Promise<void> {
     await runAction("run-test-job", async () => {
       const response = await fetchJson<{ ok: boolean; message: string; job: JobRecord | null }>("/api/jobs/test", { method: "POST" });
+      if (response.job) {
+        selectedJobId = response.job.id;
+      }
+      actionMessage = response.message;
+    });
+  }
+
+  async function runLlamaBenchJob(): Promise<void> {
+    if (!selectedBenchModel || !selectedBenchTool) {
+      return;
+    }
+
+    await runAction("run-llama-bench", async () => {
+      const body: LlamaBenchRequestPayload = {
+        buildId: selectedBenchTool.build.id,
+        benchPath: selectedBenchTool.tool.path,
+        modelPath: selectedBenchModel.path,
+        args: {
+          threads: benchForm.threads,
+          ctxSize: benchForm.ctxSize,
+          batchSize: benchForm.batchSize,
+          ubatchSize: benchForm.ubatchSize,
+          nGpuLayers: benchForm.nGpuLayers,
+          promptTokens: benchForm.promptTokens,
+          generationTokens: benchForm.generationTokens,
+          repetitions: benchForm.repetitions
+        }
+      };
+      const response = await fetchJson<JobActionResponse>("/api/jobs/llama-bench", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
       if (response.job) {
         selectedJobId = response.job.id;
       }
@@ -1055,7 +1170,42 @@
             <ToolbarButton variant="danger" onclick={() => cancelJob(runningJob.id)} disabled={Boolean(pendingAction)}>{pendingAction === "cancel-job" ? "Cancelling..." : "Cancel running job"}</ToolbarButton>
           {/if}
         </div>
-        <p class="helper-text">Phase 6 allows one active managed job at a time. Cancellation only targets the current in-memory job child process.</p>
+        <div class="editor-section">
+          <h3>llama-bench</h3>
+          <div class="metric-grid compact">
+            <MetricRow label="Selected model" value={selectedBenchModel?.fileName ?? "No GGUF model discovered"} muted={!selectedBenchModel} />
+            <MetricRow label="Selected tool" value={selectedBenchTool?.tool.fileName ?? "No llama-bench tool discovered"} muted={!selectedBenchTool} />
+          </div>
+          <div class="form-grid">
+            <label class="form-field span-2" for="bench-model-select">GGUF model
+              <select id="bench-model-select" class="profile-select" bind:value={selectedBenchModelPath} disabled={Boolean(pendingAction) || Boolean(runningJob) || !discoveredModels.length}>
+                {#each discoveredModels as model}
+                  <option value={model.path}>{model.name} — {formatBytes(model.sizeBytes)}</option>
+                {/each}
+              </select>
+            </label>
+            <label class="form-field span-2" for="bench-tool-select">llama-bench build/tool
+              <select id="bench-tool-select" class="profile-select" bind:value={selectedBenchPath} disabled={Boolean(pendingAction) || Boolean(runningJob) || !benchToolOptions.length}>
+                {#each benchToolOptions as option}
+                  <option value={option.tool.path}>{option.build.name} — {option.tool.fileName}</option>
+                {/each}
+              </select>
+            </label>
+            <label class="form-field">GPU layers<input type="number" bind:value={benchForm.nGpuLayers} min="0" /></label>
+            <label class="form-field">Context display<input type="number" bind:value={benchForm.ctxSize} min="1" /></label>
+            <label class="form-field">Batch<input type="number" bind:value={benchForm.batchSize} min="1" /></label>
+            <label class="form-field">UBatch<input type="number" bind:value={benchForm.ubatchSize} min="1" /></label>
+            <label class="form-field">Threads<input type="number" bind:value={benchForm.threads} min="1" /></label>
+            <label class="form-field">Prompt tokens<input type="number" bind:value={benchForm.promptTokens} min="1" /></label>
+            <label class="form-field">Generation tokens<input type="number" bind:value={benchForm.generationTokens} min="1" /></label>
+            <label class="form-field">Repetitions<input type="number" bind:value={benchForm.repetitions} min="1" /></label>
+          </div>
+          <div class="panel-actions inline-actions">
+            <ToolbarButton variant="success" onclick={runLlamaBenchJob} disabled={!selectedBenchModel || !selectedBenchTool || Boolean(pendingAction) || Boolean(runningJob)}>{pendingAction === "run-llama-bench" ? "Starting..." : "Run llama-bench"}</ToolbarButton>
+          </div>
+          <p class="helper-text">Safe laptop CPU defaults use 0 GPU layers, 512 prompt tokens, 128 generation tokens, and 3 repetitions. CPU build testing is fine; GPU deployment can use a GPU build later. llama-bench is a one-shot tool job and does not start llama-server. Context is shown for profile parity, but llama-bench derives context from prompt/generation sizes and the backend ignores ctxSize.</p>
+        </div>
+        <p class="helper-text">One active managed job is allowed at a time. Cancellation only targets the current in-memory job child process.</p>
         {#if jobs.length}
           <div class="job-list" aria-label="Jobs">
             {#each jobs as job}
@@ -1082,6 +1232,20 @@
             </div>
             {#if selectedJob.errorMessage}
               <p class="port-conflict-copy">{selectedJob.errorMessage}</p>
+            {/if}
+            {#if selectedJobBenchResult}
+              <div class="job-list" aria-label="llama-bench results">
+                {#each selectedJobBenchResult.rows as row}
+                  <div class="job-row">
+                    <span>{row.test}</span>
+                    <span>{row.backend ?? "--"}</span>
+                    <span>{row.threads ?? "--"}</span>
+                    <span>{row.nPrompt ?? "--"} / {row.nGen ?? "--"}</span>
+                    <span>{row.testTime ?? "--"}</span>
+                    <span>{row.tokensPerSecond === undefined ? "--" : `${row.tokensPerSecond.toFixed(2)} t/s`}</span>
+                  </div>
+                {/each}
+              </div>
             {/if}
             <TerminalBlock label={selectedJob.logPath ?? "job.log"} lines={jobLogLines} empty={!jobLogs.length} />
           </div>

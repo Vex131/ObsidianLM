@@ -5,6 +5,12 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { createServer } from "../src/server.js";
 
+const adminToken = "phase2-valid-admin-token";
+
+function authHeader(): { authorization: string } {
+  return { authorization: `Bearer ${adminToken}` };
+}
+
 async function makeFixture() {
   const root = await mkdtemp(path.join(tmpdir(), "obsidianlm-service-phase2-"));
   const dataDir = path.join(root, "data");
@@ -43,6 +49,8 @@ async function createFixtureApp(t: TestContext) {
   process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
 
   const app = await createServer();
+  const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
+  assert.equal(setup.statusCode, 201);
   t.after(async () => {
     await app.close();
     delete process.env.OBSIDIANLM_DATA_DIR;
@@ -55,6 +63,7 @@ async function saveDiscoveryFolders(app: Awaited<ReturnType<typeof createServer>
   return app.inject({
     method: "PATCH",
     url: "/api/settings/discovery-folders",
+    headers: authHeader(),
     payload: {
       modelFolders: [fixture.modelDir],
       llamaCppFolders: [fixture.llamaRoot]
@@ -70,6 +79,7 @@ test("settings API normalizes and stores discovery folders", async (t) => {
   const settingsPatch = await app.inject({
     method: "PATCH",
     url: "/api/settings/discovery-folders",
+    headers: authHeader(),
     payload: {
       modelFolders: [modelFolderWithWhitespace, fixture.modelDir, "", 42],
       llamaCppFolders: [llamaFolderWithWhitespace, fixture.llamaRoot, null]
@@ -85,7 +95,7 @@ test("settings API normalizes and stores discovery folders", async (t) => {
   assert.deepEqual(storedSettings.modelFolders, [fixture.modelDir]);
   assert.deepEqual(storedSettings.llamaCppFolders, [fixture.llamaRoot]);
 
-  const settingsGet = await app.inject({ method: "GET", url: "/api/settings" });
+  const settingsGet = await app.inject({ method: "GET", url: "/api/settings", headers: authHeader() });
   assert.equal(settingsGet.statusCode, 200);
   assert.deepEqual(settingsGet.json().settings.modelFolders, [fixture.modelDir]);
   assert.deepEqual(settingsGet.json().settings.llamaCppFolders, [fixture.llamaRoot]);
@@ -102,12 +112,15 @@ test("settings loader tolerates older settings files without discovery folders",
     delete process.env.OBSIDIANLM_DATA_DIR;
   });
 
-  const settingsGet = await app.inject({ method: "GET", url: "/api/settings" });
+  const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
+  assert.equal(setup.statusCode, 201);
+
+  const settingsGet = await app.inject({ method: "GET", url: "/api/settings", headers: authHeader() });
   assert.equal(settingsGet.statusCode, 200);
   assert.deepEqual(settingsGet.json().settings.modelFolders, []);
   assert.deepEqual(settingsGet.json().settings.llamaCppFolders, []);
 
-  const modelsResponse = await app.inject({ method: "GET", url: "/api/discovery/models" });
+  const modelsResponse = await app.inject({ method: "GET", url: "/api/discovery/models", headers: authHeader() });
   assert.equal(modelsResponse.statusCode, 200);
   assert.deepEqual(modelsResponse.json().models, []);
 });
@@ -117,7 +130,7 @@ test("model discovery API scans configured folders for fake GGUF files", async (
   const settingsPatch = await saveDiscoveryFolders(app, fixture);
   assert.equal(settingsPatch.statusCode, 200);
 
-  const modelsResponse = await app.inject({ method: "GET", url: "/api/discovery/models" });
+  const modelsResponse = await app.inject({ method: "GET", url: "/api/discovery/models", headers: authHeader() });
   assert.equal(modelsResponse.statusCode, 200);
   const modelsBody = modelsResponse.json();
   assert.deepEqual(modelsBody.scannedFolders, [fixture.modelDir]);
@@ -135,7 +148,7 @@ test("llama.cpp build discovery API returns fake builds that contain llama-serve
   const settingsPatch = await saveDiscoveryFolders(app, fixture);
   assert.equal(settingsPatch.statusCode, 200);
 
-  const buildsResponse = await app.inject({ method: "GET", url: "/api/discovery/llama-builds" });
+  const buildsResponse = await app.inject({ method: "GET", url: "/api/discovery/llama-builds", headers: authHeader() });
   assert.equal(buildsResponse.statusCode, 200);
   const buildsBody = buildsResponse.json();
   assert.deepEqual(buildsBody.scannedFolders, [fixture.llamaRoot]);
@@ -161,6 +174,7 @@ test("discovery APIs warn for missing configured folders without crashing", asyn
   const settingsPatch = await app.inject({
     method: "PATCH",
     url: "/api/settings/discovery-folders",
+    headers: authHeader(),
     payload: {
       modelFolders: [missingModelDir],
       llamaCppFolders: [missingBuildDir]
@@ -168,12 +182,12 @@ test("discovery APIs warn for missing configured folders without crashing", asyn
   });
   assert.equal(settingsPatch.statusCode, 200);
 
-  const modelsResponse = await app.inject({ method: "GET", url: "/api/discovery/models" });
+  const modelsResponse = await app.inject({ method: "GET", url: "/api/discovery/models", headers: authHeader() });
   assert.equal(modelsResponse.statusCode, 200);
   assert.deepEqual(modelsResponse.json().models, []);
   assert.equal(modelsResponse.json().warnings[0].code, "folder_missing");
 
-  const buildsResponse = await app.inject({ method: "GET", url: "/api/discovery/llama-builds" });
+  const buildsResponse = await app.inject({ method: "GET", url: "/api/discovery/llama-builds", headers: authHeader() });
   assert.equal(buildsResponse.statusCode, 200);
   assert.deepEqual(buildsResponse.json().builds, []);
   assert.equal(buildsResponse.json().warnings[0].code, "folder_missing");
@@ -184,14 +198,15 @@ test("profile creation API persists a llama.cpp profile from discovered fake pat
   const settingsPatch = await saveDiscoveryFolders(app, fixture);
   assert.equal(settingsPatch.statusCode, 200);
 
-  const modelsResponse = await app.inject({ method: "GET", url: "/api/discovery/models" });
-  const buildsResponse = await app.inject({ method: "GET", url: "/api/discovery/llama-builds" });
+  const modelsResponse = await app.inject({ method: "GET", url: "/api/discovery/models", headers: authHeader() });
+  const buildsResponse = await app.inject({ method: "GET", url: "/api/discovery/llama-builds", headers: authHeader() });
   const modelsBody = modelsResponse.json();
   const buildsBody = buildsResponse.json();
 
   const createProfile = await app.inject({
     method: "POST",
     url: "/api/discovery/profiles",
+    headers: authHeader(),
     payload: {
       name: "Qwen local test profile",
       modelPath: modelsBody.models[0].path,
@@ -218,7 +233,7 @@ test("profile creation API persists a llama.cpp profile from discovered fake pat
   assert.equal(createdProfile.command.executable, fixture.serverPath);
   assert.ok(createdProfile.command.args.includes(fixture.modelPath));
 
-  const profilesGet = await app.inject({ method: "GET", url: "/api/profiles" });
+  const profilesGet = await app.inject({ method: "GET", url: "/api/profiles", headers: authHeader() });
   assert.equal(profilesGet.statusCode, 200);
   assert.equal(profilesGet.json().profiles.length, 1);
   assert.equal(profilesGet.json().profiles[0].id, "qwen-local-test-profile");
@@ -226,6 +241,7 @@ test("profile creation API persists a llama.cpp profile from discovered fake pat
   const duplicateProfile = await app.inject({
     method: "POST",
     url: "/api/discovery/profiles",
+    headers: authHeader(),
     payload: {
       name: "Qwen local test profile",
       modelPath: fixture.modelPath,
@@ -256,6 +272,7 @@ test("profile creation API rejects paths that were not discovered from configure
   const rejectedProfile = await app.inject({
     method: "POST",
     url: "/api/discovery/profiles",
+    headers: authHeader(),
     payload: {
       name: "Rogue profile",
       modelPath: rogueModelPath,
@@ -268,7 +285,7 @@ test("profile creation API rejects paths that were not discovered from configure
   assert.ok(rejectedProfile.json().validation.errors.includes("modelPath must match a discovered GGUF model from a configured model folder."));
   assert.ok(rejectedProfile.json().validation.errors.includes("buildPath must match a discovered llama-server executable from a configured llama.cpp folder."));
 
-  const profilesGet = await app.inject({ method: "GET", url: "/api/profiles" });
+  const profilesGet = await app.inject({ method: "GET", url: "/api/profiles", headers: authHeader() });
   assert.equal(profilesGet.statusCode, 200);
   assert.deepEqual(profilesGet.json().profiles, []);
 });

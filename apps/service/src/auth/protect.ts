@@ -19,7 +19,12 @@ export async function registerAdminAuthProtection(app: FastifyInstance): Promise
 
     const settings = await loadSettings();
     if (!settings.adminTokenHash) {
-      return;
+      return reply.status(423).send({
+        error: "setup_required",
+        message: "Admin token setup is required before this API route can be used.",
+        configured: false,
+        authRequired: false
+      });
     }
 
     const token = extractBearerToken(request);

@@ -5,9 +5,14 @@ export type {
   JobDetailResponse,
   JobListResponse,
   JobLogsResponse,
+  JobResult,
   JobRecord,
   JobStatus,
-  JobType
+  JobType,
+  LlamaBenchArgs,
+  LlamaBenchJobResult,
+  LlamaBenchRequest,
+  LlamaBenchResultRow
 } from "./types/jobs.js";
 export type {
   CommandSpec,

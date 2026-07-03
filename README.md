@@ -46,7 +46,7 @@ These API routes remain public so the UI can check auth state, complete first-ru
 - `POST /api/auth/verify`
 - `POST /api/auth/logout`
 
-All other `/api/*` routes require the configured admin token once `adminTokenHash` is set. This applies on localhost and over Tailscale; Tailscale connectivity is not treated as authentication. External tools should still connect directly to llama.cpp at its OpenAI-compatible `/v1` endpoint rather than through ObsidianLM.
+Before first setup, all other `/api/*` routes are blocked with `423 setup_required`. After `adminTokenHash` is set, all other `/api/*` routes require the configured admin token. This applies on localhost and over Tailscale; Tailscale connectivity is not treated as authentication. External tools should still connect directly to llama.cpp at its OpenAI-compatible `/v1` endpoint rather than through ObsidianLM.
 
 ### Where the token hash is stored
 
@@ -82,7 +82,7 @@ Windows Service Mode:
 3. Edit that file and set `adminTokenHash` to `null`, or remove only the `adminTokenHash` property.
 4. Start the service again and complete setup from a trusted browser.
 
-Do not delete unrelated settings unless you intend to reset them. While `adminTokenHash` is unset, protected API routes are not locked yet, so complete setup before exposing the UI/API to other machines.
+Do not delete unrelated settings unless you intend to reset them. While `adminTokenHash` is unset, only the public setup/status/auth routes listed above are usable; all other `/api/*` routes return `423 setup_required` until setup is completed. Complete setup from a trusted browser before exposing the UI/API to other machines.
 
 ## Phase 0 Status
 
@@ -246,6 +246,25 @@ Implemented:
 
 Not implemented in Phase 9: multi-user accounts, role-based permissions, HTTPS/TLS termination, automatic token rotation, external identity providers, or using Tailscale as a substitute for the admin token.
 
+## Phase 10 Status
+
+Phase 10 adds setup-required API blocking before first-run auth setup and initial `llama-bench` one-shot job support.
+
+Implemented:
+
+- Before an admin token is configured, public auth/status routes remain available, but protected `/api/*` routes return `423 setup_required` instead of running control actions.
+- `llama-bench` can be started from the Jobs panel/API as a one-shot tool job using a discovered `llama-bench` executable and a discovered `.gguf` model.
+- `llama-bench` jobs run through the job queue and write job logs/results separately from long-running runtime logs.
+- `llama-bench`, `llama-perplexity`, and `llama-cli` are not classified as `llama-server` runtimes during process detection.
+
+Important boundaries:
+
+- `llama-bench` is a job/tool, not a runtime provider. Running a bench job does **not** start `llama-server`, expose an OpenAI-compatible API, or change the active runtime profile.
+- Real `llama-bench` execution requires both a discovered `llama-bench` executable from `llamaCppFolders` and a configured/discovered `.gguf` model from `modelFolders`.
+- CPU build testing is supported for local smoke tests. Actual deployment can use GPU-enabled llama.cpp builds later.
+
+Not implemented in Phase 10: `llama-perplexity` execution, parsed benchmark dashboards beyond stored job results, multi-job concurrency, automatic GPU build installation, Docker, Electron, or a database.
+
 ### Windows Service Setup
 
 Build before installing:
@@ -298,7 +317,7 @@ Installed service mode defaults to:
 Log types are separate:
 
 - Runtime logs are llama.cpp runtime stdout/stderr/system output for ObsidianLM-managed runtime processes.
-- Job logs are one-shot job output, such as Phase 6 test jobs and future llama.cpp tool jobs.
+- Job logs are one-shot job output, such as Phase 6 test jobs and Phase 10 `llama-bench` jobs.
 - Service wrapper logs are Windows service wrapper output for starting/stopping ObsidianLM itself; they are not llama.cpp runtime logs.
 
 ObsidianLM does not automatically migrate local project data into `%PROGRAMDATA%`. If you want the service to reuse development profiles or settings, stop ObsidianLM and manually copy the relevant JSON files from `data/` into `%PROGRAMDATA%\ObsidianLM\data` before starting the service.
@@ -348,8 +367,39 @@ Supported detected llama.cpp files in Phase 2:
 
 - `llama-server.exe` / `llama-server` — runtime provider, required for a discovered build to appear.
 - `llama-cli.exe` / `llama-cli` — detected companion tool.
-- `llama-bench.exe` / `llama-bench` — detected companion tool only; jobs are planned later.
+- `llama-bench.exe` / `llama-bench` — detected companion tool; Phase 10 can run it as a one-shot job.
 - `llama-perplexity.exe` / `llama-perplexity` — detected companion tool only; jobs are planned later.
+
+### Local manual laptop smoke-test example
+
+For a temporary local CPU smoke test on this laptop only, you can add this llama.cpp build folder in the dashboard **Discovery folders** panel or your local uncommitted `data/settings.json`:
+
+```text
+C:\Users\Naavil\Downloads\llama-b9859-bin-win-cpu-x64
+```
+
+This path is a local example only. Do not hardcode it into committed defaults, example settings, profiles, scripts, or tests. A real deployment can point `llamaCppFolders` at GPU-enabled llama.cpp builds later.
+
+You still need at least one configured model folder containing a `.gguf` model before `llama-bench` can run.
+
+## Run llama-bench as a One-shot Job
+
+`llama-bench` support uses the Jobs system, not runtime management. It does not start `llama-server` and does not make a model available at `http://localhost:8085/v1`.
+
+Requirements:
+
+1. Configure `llamaCppFolders` with a folder containing a discovered `llama-bench.exe` / `llama-bench` tool.
+2. Configure `modelFolders` with a folder containing the `.gguf` model to benchmark.
+3. Rescan builds and models from the dashboard.
+4. Open **Jobs**, select the discovered GGUF model and `llama-bench` tool, then click **Run llama-bench**.
+
+API route:
+
+```text
+POST /api/jobs/llama-bench
+```
+
+The request must select a discovered bench tool with `buildId` or `benchPath` and a discovered `modelPath`. If no discovered bench tool or GGUF model is available, the API returns a validation/conflict error instead of guessing paths or starting a runtime.
 
 ## Configure a llama.cpp Profile
 

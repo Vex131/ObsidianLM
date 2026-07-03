@@ -9,6 +9,12 @@ import { createServer } from "../src/server.js";
 import { registerJobRoutes } from "../src/api/jobs.js";
 import { JobManager, sanitizeJobForApi } from "../src/jobs/manager.js";
 
+const adminToken = "phase6-valid-admin-token";
+
+function authHeader(): { authorization: string } {
+  return { authorization: `Bearer ${adminToken}` };
+}
+
 async function makeFixture() {
   const root = await mkdtemp(path.join(tmpdir(), "obsidianlm-phase6-"));
   const dataDir = path.join(root, "data");
@@ -23,6 +29,8 @@ async function createFixtureApp(t: TestContext) {
   process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
   process.env.OBSIDIANLM_LOGS_DIR = fixture.logsDir;
   const app = await createServer();
+  const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
+  assert.equal(setup.statusCode, 201);
   t.after(async () => {
     await app.close();
     delete process.env.OBSIDIANLM_DATA_DIR;
@@ -61,7 +69,7 @@ async function waitForJob(manager: JobManager, id: string, predicate: (job: JobR
 async function waitForApiJob(app: Awaited<ReturnType<typeof createServer>>, id: string, predicate: (job: JobRecord) => boolean): Promise<JobRecord> {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
-    const response = await app.inject({ method: "GET", url: `/api/jobs/${id}` });
+    const response = await app.inject({ method: "GET", url: `/api/jobs/${id}`, headers: authHeader() });
     if (response.statusCode === 200) {
       const job = response.json().job as JobRecord;
       if (predicate(job)) {
@@ -81,7 +89,7 @@ test("jobs.json is created by default storage initialization", async (t) => {
 
 test("POST /api/jobs/test creates a safe test job", async (t) => {
   const { app } = await createFixtureApp(t);
-  const response = await app.inject({ method: "POST", url: "/api/jobs/test" });
+  const response = await app.inject({ method: "POST", url: "/api/jobs/test", headers: authHeader() });
   assert.equal(response.statusCode, 200);
   const body = response.json();
   assert.equal(body.ok, true);
@@ -92,11 +100,11 @@ test("POST /api/jobs/test creates a safe test job", async (t) => {
 
 test("test job completes successfully", async (t) => {
   const { app } = await createFixtureApp(t);
-  const created = await app.inject({ method: "POST", url: "/api/jobs/test" });
+  const created = await app.inject({ method: "POST", url: "/api/jobs/test", headers: authHeader() });
   const id = created.json().job.id as string;
   const job = await waitForApiJob(app, id, (item) => item.status === "completed");
   assert.equal(job.exitCode, 0);
-  const logs = await app.inject({ method: "GET", url: `/api/jobs/${id}/logs` });
+  const logs = await app.inject({ method: "GET", url: `/api/jobs/${id}/logs`, headers: authHeader() });
   assert.equal(logs.statusCode, 200);
   assert.match(logs.json().logs.join("\n"), /ObsidianLM test job completed/);
 });
@@ -136,8 +144,8 @@ test("second active job is rejected while one is running", async (t) => {
 test("parallel test job requests allow only one active job", async (t) => {
   const { app } = await createFixtureApp(t);
   const responses = await Promise.all([
-    app.inject({ method: "POST", url: "/api/jobs/test" }),
-    app.inject({ method: "POST", url: "/api/jobs/test" })
+    app.inject({ method: "POST", url: "/api/jobs/test", headers: authHeader() }),
+    app.inject({ method: "POST", url: "/api/jobs/test", headers: authHeader() })
   ]);
   const statusCodes = responses.map((response) => response.statusCode).sort();
   assert.deepEqual(statusCodes, [200, 409]);
@@ -212,10 +220,10 @@ test("startup restores queued and running jobs as interrupted failures", async (
 
 test("job logs endpoint redacts unsafe local command details", async (t) => {
   const { app, fixture } = await createFixtureApp(t);
-  const created = await app.inject({ method: "POST", url: "/api/jobs/test" });
+  const created = await app.inject({ method: "POST", url: "/api/jobs/test", headers: authHeader() });
   const id = created.json().job.id as string;
   await waitForApiJob(app, id, (item) => item.status === "completed");
-  const response = await app.inject({ method: "GET", url: `/api/jobs/${id}/logs` });
+  const response = await app.inject({ method: "GET", url: `/api/jobs/${id}/logs`, headers: authHeader() });
   assert.equal(response.statusCode, 200);
   const body = response.json();
   assert.equal(body.job.executable, path.basename(process.execPath));

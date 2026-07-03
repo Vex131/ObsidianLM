@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import type { JobRecord, JobType } from "@obsidianlm/shared";
+import type { JobRecord, JobResult, JobType } from "@obsidianlm/shared";
 import { getJobLogsDir } from "../config/paths.js";
 import { loadJobs, saveJobs } from "../config/storage.js";
 import { safeBasename } from "../api/sanitize.js";
@@ -13,6 +13,13 @@ export interface JobRunConfig {
   args?: string[];
   cwd?: string | null;
   resultPath?: string | null;
+  resultParser?: (output: string) => JobResult | null;
+}
+
+interface ActiveJobContext {
+  id: string;
+  resultParser?: (output: string) => JobResult | null;
+  output: string;
 }
 
 interface JobManagerOptions {
@@ -44,6 +51,19 @@ function sanitizeArg(arg: string): string {
   return looksLikeLocalPath(arg) ? "[redacted-local-path]" : redactLocalPaths(arg);
 }
 
+function sanitizeResult(value: unknown): unknown {
+  if (typeof value === "string") {
+    return redactLocalPaths(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeResult);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeResult(item)]));
+  }
+  return value;
+}
+
 export function sanitizeJobForApi(job: JobRecord): JobRecord {
   const executable = safeBasename(job.executable);
   const args = job.args.map(sanitizeArg);
@@ -55,6 +75,7 @@ export function sanitizeJobForApi(job: JobRecord): JobRecord {
     command: [executable, ...args].join(" "),
     logPath: job.logPath ? safeBasename(job.logPath) : null,
     resultPath: job.resultPath ? safeBasename(job.resultPath) : null,
+    result: job.result ? sanitizeResult(job.result) as JobRecord["result"] : job.result,
     errorMessage: job.errorMessage ? redactLocalPaths(job.errorMessage) : null
   };
 }
@@ -62,7 +83,7 @@ export function sanitizeJobForApi(job: JobRecord): JobRecord {
 export class JobManager {
   private jobs: JobRecord[] = [];
   private child: ChildProcessWithoutNullStreams | null = null;
-  private activeJobId: string | null = null;
+  private activeJob: ActiveJobContext | null = null;
   private startingJob = false;
   private readonly tails = new Map<string, string[]>();
 
@@ -129,12 +150,13 @@ export class JobManager {
         signal: null,
         logPath,
         resultPath: config.resultPath ?? null,
+        result: null,
         errorMessage: null
       };
 
       this.jobs = [job, ...this.jobs];
       await saveJobs(this.jobs);
-      await this.runQueuedJob(job);
+      await this.runQueuedJob(job, config);
       return { ok: true, message: "Job queued.", job: this.getJob(id) };
     } finally {
       this.startingJob = false;
@@ -146,7 +168,7 @@ export class JobManager {
     if (!job) {
       return { ok: false, message: "Job not found.", job: null };
     }
-    if (this.activeJobId !== id || !this.child) {
+    if (this.activeJob?.id !== id || !this.child) {
       return { ok: false, message: "Only the current in-memory managed job can be cancelled. No unknown process was killed.", job: this.getJob(id) };
     }
 
@@ -178,14 +200,14 @@ export class JobManager {
   }
 
   async shutdown(): Promise<void> {
-    if (!this.child || !this.activeJobId) {
+    if (!this.child || !this.activeJob) {
       return;
     }
-    await this.updateJob(this.activeJobId, { status: "cancelled", errorMessage: "Service shutdown cancelled current managed job." });
+    await this.updateJob(this.activeJob.id, { status: "cancelled", errorMessage: "Service shutdown cancelled current managed job." });
     this.child.kill("SIGTERM");
   }
 
-  private async runQueuedJob(job: JobRecord): Promise<void> {
+  private async runQueuedJob(job: JobRecord, config?: JobRunConfig): Promise<void> {
     await this.updateJob(job.id, { status: "running", startedAt: now() });
     await this.writeLog(job, `system: Starting ${safeBasename(job.executable)} with redacted local command details.`);
 
@@ -196,7 +218,7 @@ export class JobManager {
         windowsHide: true
       });
       this.child = child;
-      this.activeJobId = job.id;
+      this.activeJob = { id: job.id, resultParser: config?.resultParser, output: "" };
 
       child.stdout.on("data", (data: Buffer) => void this.captureOutput(job, "stdout", data));
       child.stderr.on("data", (data: Buffer) => void this.captureOutput(job, "stderr", data));
@@ -213,7 +235,7 @@ export class JobManager {
       await this.writeLog(job, `system: Job process error: ${error.message}`);
     }
     this.child = null;
-    this.activeJobId = null;
+    this.activeJob = null;
     await this.updateJob(id, { status: "failed", finishedAt: now(), errorMessage: error.message });
   }
 
@@ -223,21 +245,39 @@ export class JobManager {
     if (job) {
       await this.writeLog(job, `system: Job exited with code ${code ?? "null"} and signal ${signal ?? "null"}.`);
     }
+    const activeJob = this.activeJob?.id === id ? this.activeJob : null;
     this.child = null;
-    this.activeJobId = null;
+    this.activeJob = null;
+    const result = activeJob?.resultParser ? this.parseJobResult(activeJob.resultParser, activeJob.output, job) : undefined;
     await this.updateJob(id, {
       status: wasCancelled ? "cancelled" : code === 0 ? "completed" : "failed",
       finishedAt: now(),
       exitCode: code,
       signal,
+      ...(result !== undefined ? { result } : {}),
       errorMessage: wasCancelled ? job?.errorMessage ?? "Job cancelled." : code === 0 ? null : `Job exited with code ${code ?? "null"}.`
     });
   }
 
   private async captureOutput(job: JobRecord, stream: "stdout" | "stderr", data: Buffer): Promise<void> {
     const lines = data.toString("utf8").split(/\r?\n/u).filter(Boolean);
+    if (this.activeJob?.id === job.id) {
+      const nextOutput = `${this.activeJob.output}${data.toString("utf8")}`;
+      this.activeJob.output = nextOutput.length > 2_000_000 ? nextOutput.slice(-2_000_000) : nextOutput;
+    }
     for (const line of lines) {
       await this.writeLog(job, `${stream}: ${line}`);
+    }
+  }
+
+  private parseJobResult(parser: (output: string) => JobResult | null, output: string, job: JobRecord | undefined): JobResult | null {
+    try {
+      return parser(output);
+    } catch (error) {
+      if (job) {
+        void this.writeLog(job, `system: Job result parsing was incomplete: ${error instanceof Error ? error.message : "unknown error"}`);
+      }
+      return null;
     }
   }
 
