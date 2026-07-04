@@ -38,17 +38,28 @@
     StartupDetectionSummary,
     StatusResponse
   } from "@obsidianlm/shared";
-  import MetricRow from "./lib/components/MetricRow.svelte";
+  import { onMount } from "svelte";
   import Panel from "./lib/components/Panel.svelte";
-  import StatusPill from "./lib/components/StatusPill.svelte";
-  import TerminalBlock from "./lib/components/TerminalBlock.svelte";
   import ToolbarButton from "./lib/components/ToolbarButton.svelte";
-  import ProfileEditor from "./lib/components/profile/ProfileEditor.svelte";
-  import RuntimeDiagnosticsPanel from "./lib/components/runtime/RuntimeDiagnosticsPanel.svelte";
-  import ReadinessPanel from "./lib/components/readiness/ReadinessPanel.svelte";
-  import JobsPanel from "./lib/components/jobs/JobsPanel.svelte";
   import { friendlyRequestError, publicFetchJson } from "./lib/api";
-  import { formatBytes, formatDate, formatMiB, formatOptionalDate, formatPercent, formatPower, formatTemperature, gpuMemoryPercent } from "./lib/format";
+  import { formatBytes, formatDate, formatMiB } from "./lib/format";
+  import AppShell from "./lib/layout/AppShell.svelte";
+  import { defaultPage, pageFromHash, type PageId } from "./lib/navigation";
+  import DashboardInspector from "./lib/inspectors/DashboardInspector.svelte";
+  import RuntimeInspector from "./lib/inspectors/RuntimeInspector.svelte";
+  import ProfileInspector from "./lib/inspectors/ProfileInspector.svelte";
+  import ModelInspector from "./lib/inspectors/ModelInspector.svelte";
+  import BuildInspector from "./lib/inspectors/BuildInspector.svelte";
+  import DashboardPage from "./lib/pages/DashboardPage.svelte";
+  import RuntimePage from "./lib/pages/RuntimePage.svelte";
+  import ProfilesPage from "./lib/pages/ProfilesPage.svelte";
+  import ModelsPage from "./lib/pages/ModelsPage.svelte";
+  import BuildsPage from "./lib/pages/BuildsPage.svelte";
+  import JobsPage from "./lib/pages/JobsPage.svelte";
+  import LogsPage from "./lib/pages/LogsPage.svelte";
+  import TelemetryPage from "./lib/pages/TelemetryPage.svelte";
+  import SettingsPage from "./lib/pages/SettingsPage.svelte";
+  import SystemPage from "./lib/pages/SystemPage.svelte";
 
   interface ProfilesResponse {
     profiles: RuntimeProfile[];
@@ -123,7 +134,6 @@
 
   type JobRecordWithOptionalResult = JobRecord & { result?: LlamaBenchResultView | LlamaPerplexityJobResult | null };
 
-  const navItems = ["Overview", "Runtime", "Jobs", "GPU", "Processes", "Profiles", "Models", "Builds", "Logs", "Settings"];
   const adminTokenStorageKey = "obsidianlm.adminToken";
 
   type AuthMode = "checking" | "setup-required" | "logged-out" | "logged-in";
@@ -150,6 +160,7 @@
   let authMessage = $state<string | null>(null);
   let authErrorMessage = $state<string | null>(null);
   let authPendingAction = $state<"setup" | "login" | "logout" | null>(null);
+  let activePage = $state<PageId>(defaultPage);
   let logStreamAbortController: AbortController | null = null;
   let logStreamReconnectTimer: number | null = null;
   let logStreamState = $state<"connecting" | "connected" | "disconnected">("disconnected");
@@ -916,6 +927,14 @@
     actionMessage = "Visible runtime logs cleared. Log files were not deleted.";
   }
 
+  function syncActivePage(): void {
+    const nextPage = pageFromHash(window.location.hash);
+    activePage = nextPage;
+    if (!window.location.hash || window.location.hash !== `#${nextPage}`) {
+      history.replaceState(null, "", `#${nextPage}`);
+    }
+  }
+
   function setSelectedProfileId(id: string): void {
     selectedProfileId = id;
   }
@@ -931,6 +950,119 @@
   function setActionMessage(message: string): void {
     actionMessage = message;
   }
+
+  const pageData = $derived({
+    status,
+    runtime,
+    profiles,
+    selectedProfileId,
+    selectedProfile,
+    command,
+    commandLines,
+    logs,
+    filteredLogs,
+    logLines,
+    jobs,
+    selectedJobId,
+    selectedJob,
+    selectedJobBenchResult,
+    selectedJobPerplexityResult,
+    runningJob,
+    jobLogs,
+    jobLogLines,
+    errorMessage,
+    actionMessage,
+    validation,
+    isLoading,
+    pendingAction,
+    logSearch,
+    logStreamState,
+    logConnectionTone,
+    logStatusText,
+    lastLogHeartbeat,
+    settings,
+    modelFoldersText,
+    llamaCppFoldersText,
+    toolInputFoldersText,
+    discoveredModels,
+    discoveredBuilds,
+    discoveredToolInputs,
+    detection,
+    detectedProcesses,
+    portStatus,
+    gpuStatus,
+    runtimeHealth,
+    readiness,
+    testChatResult,
+    warnings,
+    detectionWarnings,
+    discoveryWarningLines,
+    gpuWarnings,
+    gpuTone,
+    selectedProfilePortConflict,
+    selectedProfilePortMessage,
+    apiUrl,
+    runtimeStatus,
+    runtimeTone,
+    serviceLabel,
+    serviceState,
+    runningModeLabel,
+    dataDirModeLabel,
+    logDirModeLabel,
+    selectedModelPath,
+    selectedBuildPath,
+    selectedModel,
+    selectedBuild,
+    profileForm,
+    createdProfilePreview,
+    selectedBenchModel,
+    selectedBenchTool,
+    selectedPerplexityModel,
+    selectedPerplexityTool,
+    selectedDataset,
+    benchToolOptions,
+    perplexityToolOptions,
+    benchForm,
+    perplexityForm,
+    formatBytes,
+    formatDate,
+    formatMiB
+  });
+
+  const pageActions = {
+    refreshAll,
+    logout,
+    loadLogs,
+    loadProfiles,
+    fetchJson,
+    runAction,
+    setSelectedProfileId,
+    setCommand,
+    setValidationResult,
+    setActionMessage,
+    validateSelectedProfile,
+    startSelectedProfile,
+    stopRuntime,
+    restartRuntime,
+    runTestJob,
+    runLlamaBenchJob,
+    runLlamaPerplexityJob,
+    cancelJob,
+    copyCommand,
+    copyLogs,
+    clearVisibleLogs,
+    saveDiscoveryFolders,
+    rescanModels,
+    rescanBuilds,
+    rescanToolInputs,
+    createProfileFromSelection,
+    refreshGpuStatus,
+    checkRuntimeHealth,
+    runRuntimeTestChat,
+    jobTone,
+    selectModel: (path: string) => (selectedModelPath = path),
+    selectBuild: (path: string) => (selectedBuildPath = path)
+  };
 
   function closeLogStream(): void {
     if (logStreamReconnectTimer !== null) {
@@ -1065,6 +1197,12 @@
     void initializeAuth();
   });
 
+  onMount(() => {
+    syncActivePage();
+    window.addEventListener("hashchange", syncActivePage);
+    return () => window.removeEventListener("hashchange", syncActivePage);
+  });
+
   $effect(() => {
     if (authMode !== "logged-in") {
       closeLogStream();
@@ -1105,492 +1243,94 @@
   });
 </script>
 
-<main class="app-shell">
-  <aside class="sidebar" aria-label="Primary navigation">
-    <div class="brand-block">
-      <div class="brand-mark" aria-hidden="true">OLM</div>
-      <div>
-        <strong>ObsidianLM</strong>
-        <span>Local runtime control</span>
-      </div>
-    </div>
-
-    <nav class="nav-list">
-      {#each navItems as item}
-        <a class={`nav-item ${item === "Overview" ? "active" : ""}`} href="/" aria-current={item === "Overview" ? "page" : undefined}>
-          <span class={`nav-dot ${item === "Overview" ? "" : "muted"}`} aria-hidden="true"></span>
-          {item}
-        </a>
-      {/each}
-    </nav>
-  </aside>
-
-  <section class="workspace">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">Phase 12 llama-perplexity jobs</p>
-        <h1>llama.cpp runtime, jobs, GPU monitor, and profile cockpit</h1>
-        <p class="subtitle">Manage long-running llama.cpp server profiles separately from one-shot llama-bench and llama-perplexity tool jobs. OpenCode and local tools still talk directly to llama.cpp.</p>
-      </div>
-
-      <div class="topbar-status" aria-live="polite">
-        <StatusPill tone={serviceState} label={serviceLabel} />
-        {#if authMode === "logged-in"}
-          <ToolbarButton variant="secondary" onclick={refreshAll} disabled={isLoading} title="Refresh dashboard state">
-            {isLoading ? "Checking..." : "Refresh"}
-          </ToolbarButton>
-          <ToolbarButton variant="ghost" onclick={logout} disabled={authPendingAction === "logout"} title="Clear saved admin token">
-            {authPendingAction === "logout" ? "Logging out..." : "Logout"}
-          </ToolbarButton>
-        {/if}
-      </div>
-    </header>
-
-    {#if authMode === "checking"}
-      <Panel tone="code" eyebrow="Authentication" title="Checking admin access" class="auth-panel">
-        <p class="empty-copy">Checking ObsidianLM authentication status...</p>
-      </Panel>
-    {:else if authMode === "setup-required"}
-      <Panel tone="live" eyebrow="Authentication" title="Set up admin token" class="auth-panel">
-        <form class="auth-form" onsubmit={(event) => { event.preventDefault(); void submitSetup(); }}>
-          <p class="empty-copy">Create the local admin token used to unlock protected ObsidianLM controls in this browser.</p>
-          <label class="form-field">Admin token<input type="password" autocomplete="new-password" bind:value={tokenInput} placeholder="Set up admin token" /></label>
-          <label class="form-field">Confirm token<input type="password" autocomplete="new-password" bind:value={tokenConfirmInput} placeholder="Repeat admin token" /></label>
-          {#if authErrorMessage}<p class="auth-error">{authErrorMessage}</p>{/if}
-          <div class="panel-actions inline-actions">
-            <ToolbarButton type="submit" variant="success" disabled={authPendingAction === "setup"}>{authPendingAction === "setup" ? "Saving..." : "Set up admin token"}</ToolbarButton>
-          </div>
-          <p class="helper-text">Stored in browser localStorage for v1 only. Token values are never placed in URLs.</p>
-        </form>
-      </Panel>
-    {:else if authMode === "logged-out"}
-      <Panel tone="code" eyebrow="Authentication" title="Enter admin token" class="auth-panel">
-        <form class="auth-form" onsubmit={(event) => { event.preventDefault(); void submitLogin(); }}>
-          {#if authMessage}<p class="auth-success">{authMessage}</p>{/if}
-          <p class="empty-copy">Enter admin token to load runtime profiles, jobs, settings, and live logs.</p>
-          <label class="form-field">Admin token<input type="password" autocomplete="current-password" bind:value={tokenInput} placeholder="Enter admin token" /></label>
-          {#if authErrorMessage}<p class="auth-error">{authErrorMessage}</p>{/if}
-          <div class="panel-actions inline-actions">
-            <ToolbarButton type="submit" variant="primary" disabled={authPendingAction === "login"}>{authPendingAction === "login" ? "Checking..." : "Login"}</ToolbarButton>
-          </div>
-        </form>
-      </Panel>
-    {:else}
+{#if authMode === "checking"}
+  <main class="auth-shell">
+    <Panel tone="code" eyebrow="Authentication" title="Checking admin access" class="auth-panel">
+      <p class="empty-copy">Checking ObsidianLM authentication status...</p>
+    </Panel>
+  </main>
+{:else if authMode === "setup-required"}
+  <main class="auth-shell">
+    <Panel tone="live" eyebrow="Authentication" title="Set up admin token" class="auth-panel">
+      <form class="auth-form" onsubmit={(event) => { event.preventDefault(); void submitSetup(); }}>
+        <p class="empty-copy">Create the local admin token used to unlock protected ObsidianLM controls in this browser.</p>
+        <label class="form-field">Admin token<input type="password" autocomplete="new-password" bind:value={tokenInput} placeholder="Set up admin token" /></label>
+        <label class="form-field">Confirm token<input type="password" autocomplete="new-password" bind:value={tokenConfirmInput} placeholder="Repeat admin token" /></label>
+        {#if authErrorMessage}<p class="auth-error">{authErrorMessage}</p>{/if}
+        <div class="panel-actions inline-actions"><ToolbarButton type="submit" variant="success" disabled={authPendingAction === "setup"}>{authPendingAction === "setup" ? "Saving..." : "Set up admin token"}</ToolbarButton></div>
+        <p class="helper-text">Stored in browser localStorage for v1 only. Token values are never placed in URLs.</p>
+      </form>
+    </Panel>
+  </main>
+{:else if authMode === "logged-out"}
+  <main class="auth-shell">
+    <Panel tone="code" eyebrow="Authentication" title="Enter admin token" class="auth-panel">
+      <form class="auth-form" onsubmit={(event) => { event.preventDefault(); void submitLogin(); }}>
+        {#if authMessage}<p class="auth-success">{authMessage}</p>{/if}
+        <p class="empty-copy">Enter admin token to load runtime profiles, jobs, settings, and live logs.</p>
+        <label class="form-field">Admin token<input type="password" autocomplete="current-password" bind:value={tokenInput} placeholder="Enter admin token" /></label>
+        {#if authErrorMessage}<p class="auth-error">{authErrorMessage}</p>{/if}
+        <div class="panel-actions inline-actions"><ToolbarButton type="submit" variant="primary" disabled={authPendingAction === "login"}>{authPendingAction === "login" ? "Checking..." : "Login"}</ToolbarButton></div>
+      </form>
+    </Panel>
+  </main>
+{:else}
+  <AppShell
+    {activePage}
+    runtimeStatus={runtimeStatus}
+    runtimeTone={runtimeTone}
+    serviceLabel={serviceLabel}
+    serviceState={serviceState}
+    port={`${portStatus?.port?.port ?? selectedProfile?.port ?? status?.managedLlamaPort ?? 8085}`}
+    isLoading={isLoading}
+    authPendingAction={authPendingAction}
+    onRefresh={refreshAll}
+    onLogout={logout}
+  >
+    {#snippet inspector()}
+      {#if activePage === "dashboard"}<DashboardInspector data={pageData} />{/if}
+      {#if activePage === "runtime"}<RuntimeInspector data={pageData} />{/if}
+      {#if activePage === "profiles"}<ProfileInspector data={pageData} actions={pageActions} />{/if}
+      {#if activePage === "models"}<ModelInspector model={selectedModel} {formatBytes} {formatDate} />{/if}
+      {#if activePage === "builds"}<BuildInspector build={selectedBuild} />{/if}
+    {/snippet}
 
     {#if errorMessage}
-      <Panel tone="danger" eyebrow="Notice" title="Action needs attention" class="offline-panel">
-        <p class="error-detail">{errorMessage}</p>
-      </Panel>
+      <Panel tone="danger" eyebrow="Notice" title="Action needs attention" class="offline-panel"><p class="error-detail">{errorMessage}</p></Panel>
     {/if}
-
     {#if actionMessage}
-      <Panel tone="live" eyebrow="Result" title="Latest action" class="offline-panel">
-        <p class="empty-copy">{actionMessage}</p>
-      </Panel>
+      <Panel tone="live" eyebrow="Result" title="Latest action" class="offline-panel"><p class="empty-copy">{actionMessage}</p></Panel>
     {/if}
 
-    <section class="dashboard-grid" aria-live="polite">
-      <Panel tone={runtimeTone === "online" ? "live" : runtimeTone === "danger" ? "danger" : runtimeTone === "warning" ? "warning" : "default"} eyebrow="Runtime status" title={runtimeStatus} class="runtime-status-card">
-        <div class="runtime-summary">
-          <div class={`runtime-orb runtime-${runtimeStatus}`} aria-hidden="true"></div>
-          <div>
-            <StatusPill tone={runtimeTone} label={runtimeStatus} />
-            <p>{status?.activeRuntime ? "ObsidianLM is managing a runtime from this service session." : "No active managed runtime is running in this service session."}</p>
-          </div>
-        </div>
-
-        <div class="metric-grid compact">
-          <MetricRow label="Active profile" value={status?.activeRuntime?.profileName ?? selectedProfile?.name ?? "None"} muted={!status?.activeRuntime && !selectedProfile} />
-          <MetricRow label="PID" value={status?.activeRuntime?.pid ? `${status.activeRuntime.pid}` : "--"} muted={!status?.activeRuntime?.pid} />
-          <MetricRow label="llama.cpp API" value={apiUrl} />
-          <MetricRow label="Command hash" value={runtime?.commandHash ?? command?.commandHash ?? "--"} muted={!runtime?.commandHash && !command?.commandHash} />
-        </div>
-      </Panel>
-
-      <Panel eyebrow="Profiles" title="Manual profiles" class="profiles-card">
-        {#if profiles.length}
-          <label class="field-label" for="profile-select">Selected profile</label>
-          <select id="profile-select" class="profile-select" bind:value={selectedProfileId} disabled={Boolean(pendingAction)}>
-            {#each profiles as profile}
-              <option value={profile.id}>{profile.name}</option>
-            {/each}
-          </select>
-          <p class="helper-text">Profiles are loaded from <code>data/profiles.json</code>. Discovery-created profiles are saved only after clicking Create profile.</p>
-        {:else}
-          <p class="empty-copy">No profiles are configured. Copy <code>data/profiles.example.json</code> into <code>data/profiles.json</code>, then replace the example paths with your local llama-server.exe and GGUF model paths.</p>
-        {/if}
-      </Panel>
-
-      <Panel eyebrow="System" title="Service mode" class="system-card">
-        <div class="metric-grid compact">
-          <MetricRow label="Running mode" value={runningModeLabel} />
-          <MetricRow label="Service mode" value={status?.serviceMode ? "Enabled" : "Disabled"} />
-          <MetricRow label="Data directory" value={dataDirModeLabel} />
-          <MetricRow label="Log directory" value={logDirModeLabel} />
-        </div>
-        <p class="helper-text">Windows Service Mode starts only ObsidianLM. llama.cpp profiles still require an explicit start action.</p>
-      </Panel>
-
-      <Panel eyebrow="Controls" title="Runtime actions" class="controls-card">
-        <div class="control-stack" aria-describedby="runtime-controls-help">
-          <ToolbarButton variant="secondary" onclick={validateSelectedProfile} disabled={!selectedProfileId || Boolean(pendingAction)}>{pendingAction === "validate" ? "Validating..." : "Validate profile"}</ToolbarButton>
-          <ToolbarButton variant="success" onclick={startSelectedProfile} disabled={!selectedProfileId || Boolean(pendingAction) || runtimeStatus === "running" || runtimeStatus === "starting" || selectedProfilePortConflict}>{pendingAction === "start" ? "Starting..." : "Start runtime"}</ToolbarButton>
-          <ToolbarButton variant="danger" onclick={stopRuntime} disabled={Boolean(pendingAction) || runtimeStatus === "stopped"}>{pendingAction === "stop" ? "Stopping..." : "Stop runtime"}</ToolbarButton>
-          <ToolbarButton variant="secondary" onclick={restartRuntime} disabled={Boolean(pendingAction) || runtimeStatus !== "running"}>{pendingAction === "restart" ? "Restarting..." : "Restart"}</ToolbarButton>
-        </div>
-        <p id="runtime-controls-help" class="helper-text">Stop only targets the active child process started by this running ObsidianLM service instance.</p>
-        {#if selectedProfilePortMessage}
-          <p class="port-conflict-copy">{selectedProfilePortMessage}</p>
-        {/if}
-      </Panel>
-
-      <RuntimeDiagnosticsPanel
-        health={runtimeHealth}
-        {testChatResult}
-        {pendingAction}
-        onCheckHealth={checkRuntimeHealth}
-        onRunTestChat={runRuntimeTestChat}
-      />
-
-      <ReadinessPanel {readiness} />
-
-      <JobsPanel
-        {jobs}
+    {#if activePage === "dashboard"}
+      <DashboardPage data={pageData} actions={pageActions} />
+    {:else if activePage === "runtime"}
+      <RuntimePage data={pageData} actions={pageActions} />
+    {:else if activePage === "profiles"}
+      <ProfilesPage data={pageData} actions={pageActions} />
+    {:else if activePage === "models"}
+      <ModelsPage data={pageData} actions={pageActions} />
+    {:else if activePage === "builds"}
+      <BuildsPage data={pageData} actions={pageActions} />
+    {:else if activePage === "jobs"}
+      <JobsPage
+        data={pageData}
+        actions={pageActions}
         bind:selectedJobId
-        {selectedJob}
-        selectedJobBenchResult={selectedJobBenchResult as never}
-        selectedJobPerplexityResult={selectedJobPerplexityResult as never}
-        {runningJob}
-        {jobLogs}
-        {jobLogLines}
-        {discoveredModels}
-        {discoveredToolInputs}
         bind:selectedBenchModelPath
-        {benchToolOptions}
         bind:selectedBenchPath
-        {selectedBenchModel}
-        {selectedBenchTool}
-        {benchForm}
         bind:selectedPerplexityModelPath
         bind:selectedPerplexityPath
         bind:selectedDatasetPath
-        {perplexityToolOptions}
-        {selectedPerplexityModel}
-        {selectedPerplexityTool}
-        {selectedDataset}
-        {perplexityForm}
-        {pendingAction}
-        {runTestJob}
-        {cancelJob}
-        {runLlamaBenchJob}
-        {runLlamaPerplexityJob}
-        {jobTone}
       />
-
-      <Panel tone={validation && !validation.valid ? "danger" : validation?.valid ? "live" : "default"} eyebrow="Validation" title="Profile checks">
-        {#if validation}
-          <p class="empty-copy">{validation.valid ? "Profile is valid." : "Profile is not valid."}</p>
-          {#if validation.errors.length}
-            <ul class="warning-list">
-              {#each validation.errors as validationError}
-                <li>{validationError}</li>
-              {/each}
-            </ul>
-          {/if}
-        {:else}
-          <p class="empty-copy">Run validation before starting a profile. The service checks shape, port, executable path, and model path without starting llama.cpp.</p>
-        {/if}
-      </Panel>
-
-      <Panel tone="code" eyebrow="Command preview" title="Launch command" class="command-card">
-        <div class="panel-actions">
-          <ToolbarButton variant="ghost" onclick={copyCommand} disabled={!command}>Copy command</ToolbarButton>
-        </div>
-        <TerminalBlock label={command?.executable ?? "llama-server.exe"} lines={commandLines} empty={!command} />
-      </Panel>
-
-      <ProfileEditor
-        {profiles}
-        {selectedProfileId}
-        {runtime}
-        {pendingAction}
-        {fetchJson}
-        {runAction}
-        onProfilesChanged={loadProfiles}
-        {setSelectedProfileId}
-        {setCommand}
-        setValidation={setValidationResult}
-        {setActionMessage}
-      />
-
-      <Panel tone={warnings.length || detectionWarnings.length ? "warning" : "default"} eyebrow="Startup Safety" title="Detection warnings">
-        {#if warnings.length || detectionWarnings.length}
-          <ul class="warning-list">
-            {#each [...warnings, ...detectionWarnings] as warning}
-              <li>{warning}</li>
-            {/each}
-          </ul>
-        {:else}
-          <p class="empty-copy">No warnings reported. ObsidianLM never kills unknown llama-server.exe processes and does not auto-start llama.cpp on service startup.</p>
-        {/if}
-        <div class="classification-strip" aria-label="Detection categories">
-          {#each detection?.categories ?? ["no_runtime_detected"] as category}
-            <span>{category}</span>
-          {/each}
-        </div>
-      </Panel>
-
-      <Panel tone={portStatus?.conflict ? "danger" : portStatus?.port.inUse ? "warning" : "default"} eyebrow="Port Monitor" title={`Port ${portStatus?.port.port ?? selectedProfile?.port ?? status?.managedLlamaPort ?? 8085}`} class="ports-card">
-        <div class="metric-grid compact">
-          <MetricRow label="Status" value={portStatus?.port.inUse ? "In use" : "Free"} />
-          <MetricRow label="Owner PID" value={portStatus?.port.ownerPid ? `${portStatus.port.ownerPid}` : "Unknown"} muted={!portStatus?.port.ownerPid} />
-          <MetricRow label="Host checked" value={portStatus?.port.host ?? "127.0.0.1"} />
-          <MetricRow label="Method" value={portStatus?.port.detectionMethod ?? "tcp_connect"} />
-        </div>
-        {#if portStatus?.conflictMessage}
-          <p class="port-conflict-copy">{portStatus.conflictMessage}</p>
-        {:else}
-          <p class="empty-copy">Profile starts are blocked only when the selected API port is already in use by something other than the current managed child process.</p>
-        {/if}
-      </Panel>
-
-      <Panel tone={gpuTone} eyebrow="GPU Monitor" title="NVIDIA GPU status" class="gpu-card">
-        <div class="panel-actions">
-          <ToolbarButton variant="ghost" onclick={refreshGpuStatus} disabled={Boolean(pendingAction)}>{pendingAction === "refresh-gpu" ? "Refreshing..." : "Refresh GPU"}</ToolbarButton>
-        </div>
-        <div class="metric-grid compact">
-          <MetricRow label="GPUs" value={`${gpuStatus?.summary.gpuCount ?? status?.gpu.gpuCount ?? 0}`} />
-          <MetricRow label="VRAM used" value={`${formatMiB(gpuStatus?.summary.usedMemoryMiB ?? status?.gpu.usedMemoryMiB)} / ${formatMiB(gpuStatus?.summary.totalMemoryMiB ?? status?.gpu.totalMemoryMiB)}`} />
-          <MetricRow label="Managed runtime VRAM" value={formatMiB(gpuStatus?.summary.currentManagedRuntimeGpuMemoryMiB ?? status?.gpu.currentManagedRuntimeGpuMemoryMiB)} muted={!gpuStatus?.summary.currentManagedRuntimeGpuMemoryMiB && !status?.gpu.currentManagedRuntimeGpuMemoryMiB} />
-          <MetricRow label="Unknown GPU processes" value={`${gpuStatus?.summary.unknownGpuProcessCount ?? status?.gpu.unknownGpuProcessCount ?? 0}`} />
-        </div>
-        {#if gpuStatus && !gpuStatus.available}
-          <p class="empty-copy">nvidia-smi is not available or no NVIDIA GPU was detected.</p>
-        {/if}
-        {#if gpuWarnings.length}
-          <ul class="warning-list gpu-warning-list">
-            {#each gpuWarnings as warning}
-              <li>{warning.message}</li>
-            {/each}
-          </ul>
-        {/if}
-        {#if gpuStatus?.gpus.length}
-          <div class="gpu-list">
-            {#each gpuStatus.gpus as gpu}
-              <article class="gpu-device-card">
-                <div class="gpu-heading">
-                  <div>
-                    <strong>GPU {gpu.index}: {gpu.name}</strong>
-                    <span>{gpu.uuid ?? "UUID unavailable"}</span>
-                  </div>
-                  <StatusPill tone={gpu.processes.some((process) => process.kind === "current_managed_runtime") ? "online" : "unknown"} label={gpu.processes.some((process) => process.kind === "current_managed_runtime") ? "Managed runtime" : "Read-only"} />
-                </div>
-                <div class="gpu-memory-bar" aria-label={`GPU ${gpu.index} memory usage`}>
-                  <span style={`width: ${gpuMemoryPercent(gpu)}%`}></span>
-                </div>
-                <div class="metric-grid compact">
-                  <MetricRow label="VRAM" value={`${formatMiB(gpu.memoryUsedMiB)} used / ${formatMiB(gpu.memoryTotalMiB)} total`} />
-                  <MetricRow label="Free VRAM" value={formatMiB(gpu.memoryFreeMiB)} />
-                  <MetricRow label="Utilization" value={formatPercent(gpu.utilizationGpuPercent)} />
-                  <MetricRow label="Temperature" value={formatTemperature(gpu.temperatureGpuC)} />
-                  <MetricRow label="Power" value={formatPower(gpu.powerDrawW, gpu.powerLimitW)} />
-                  <MetricRow label="Driver / CUDA" value={`${gpu.driverVersion ?? "--"} / ${gpu.cudaVersion ?? "--"}`} />
-                </div>
-              </article>
-            {/each}
-          </div>
-        {/if}
-        {#if gpuStatus?.processes.length}
-          <div class="gpu-process-table" aria-label="GPU compute processes">
-            <div class="gpu-process-row heading"><span>PID</span><span>Process</span><span>GPU</span><span>VRAM</span><span>Classification</span></div>
-            {#each gpuStatus.processes as process}
-              <div class={`gpu-process-row ${process.kind === "current_managed_runtime" ? "managed" : process.kind === "unknown_gpu_process" ? "unknown" : ""}`}>
-                <span>{process.pid}</span>
-                <span>{process.processName}</span>
-                <span>{process.gpuIndex === null ? "Unknown" : `GPU ${process.gpuIndex}`}</span>
-                <span>{formatMiB(process.usedMemoryMiB)}</span>
-                <span>{gpuProcessLabel(process)}</span>
-              </div>
-            {/each}
-          </div>
-        {:else if gpuStatus?.available}
-          <p class="empty-copy">No active GPU compute processes were reported by nvidia-smi.</p>
-        {/if}
-        <p class="helper-text">Read-only in Phase 4: ObsidianLM lists GPU processes but never kills, adopts, or changes GPU settings.</p>
-      </Panel>
-
-      <Panel tone={detectedProcesses.length ? "warning" : "default"} eyebrow="Processes" title="Detected llama-server processes" class="processes-card">
-        {#if detectedProcesses.length}
-          <div class="process-list">
-            {#each detectedProcesses as process}
-              <article class="process-card">
-                <div class="process-heading">
-                  <strong>PID {process.pid}</strong>
-                  <span>{process.confidence} confidence</span>
-                </div>
-                <p>{process.name}</p>
-                {#if process.executablePath}<code>{process.executablePath}</code>{/if}
-                {#if process.commandLine}<details><summary>Command line</summary><code>{process.commandLine}</code></details>{/if}
-                <small>{process.reasons.join(" ")}</small>
-              </article>
-            {/each}
-          </div>
-          <p class="helper-text">Read-only in Phase 3: no kill, adopt, or stop controls are offered for detected external processes.</p>
-        {:else}
-          <p class="empty-copy">No llama-server-like processes were detected. llama-bench, llama-perplexity, and llama-cli are not treated as server runtimes.</p>
-        {/if}
-      </Panel>
-
-      <Panel tone="warning" eyebrow="Settings" title="Discovery folders" class="discovery-settings-card">
-        <label class="field-label" for="model-folders">Model folders</label>
-        <textarea id="model-folders" class="folder-textarea" bind:value={modelFoldersText} placeholder="D:\Models" rows="4"></textarea>
-        <label class="field-label" for="build-folders">llama.cpp build folders</label>
-        <textarea id="build-folders" class="folder-textarea" bind:value={llamaCppFoldersText} placeholder="C:\llama.cpp" rows="4"></textarea>
-        <label class="field-label" for="tool-input-folders">Tool input folders</label>
-        <textarea id="tool-input-folders" class="folder-textarea" bind:value={toolInputFoldersText} placeholder="D:\Datasets" rows="4"></textarea>
-        <div class="panel-actions inline-actions">
-          <ToolbarButton variant="secondary" onclick={saveDiscoveryFolders} disabled={Boolean(pendingAction)}>{pendingAction === "save-discovery-folders" ? "Saving..." : "Save discovery folders"}</ToolbarButton>
-        </div>
-        <p class="helper-text">Only these folders are scanned. Missing folders are saved but reported as warnings during discovery.</p>
-        {#if settings && !settings.modelFolders.length && !settings.llamaCppFolders.length && !settings.toolInputFolders.length}
-          <p class="empty-copy">No discovery folders are configured yet.</p>
-        {/if}
-      </Panel>
-
-      <Panel eyebrow="Models" title="Discovered GGUF models" class="models-card">
-        <div class="panel-actions">
-          <ToolbarButton variant="ghost" onclick={rescanModels} disabled={Boolean(pendingAction)}>{pendingAction === "rescan-models" ? "Scanning..." : "Rescan models"}</ToolbarButton>
-        </div>
-        {#if discoveredModels.length}
-          <div class="discovery-list">
-            {#each discoveredModels as model}
-              <button class={`discovery-item ${selectedModelPath === model.path ? "selected" : ""}`} type="button" onclick={() => (selectedModelPath = model.path)}>
-                <strong>{model.name}</strong>
-                <span>{model.folder}</span>
-                <small>{formatBytes(model.sizeBytes)} • modified {formatDate(model.modifiedAt)}</small>
-                <code>{model.path}</code>
-              </button>
-            {/each}
-          </div>
-        {:else}
-          <p class="empty-copy">No .gguf models found in configured folders.</p>
-        {/if}
-      </Panel>
-
-      <Panel eyebrow="Tool inputs" title="Discovered datasets/tool inputs" class="models-card">
-        <div class="panel-actions">
-          <ToolbarButton variant="ghost" onclick={rescanToolInputs} disabled={Boolean(pendingAction)}>{pendingAction === "rescan-tool-inputs" ? "Scanning..." : "Rescan tool inputs"}</ToolbarButton>
-        </div>
-        {#if discoveredToolInputs.length}
-          <div class="discovery-list">
-            {#each discoveredToolInputs as input}
-              <button class={`discovery-item ${selectedDatasetPath === input.path ? "selected" : ""}`} type="button" onclick={() => (selectedDatasetPath = input.path)}>
-                <strong>{input.fileName}</strong>
-                <span>{input.folder}</span>
-                <small>{formatBytes(input.sizeBytes)} • {input.extension} • modified {formatDate(input.modifiedAt)}</small>
-                <code>{input.path}</code>
-              </button>
-            {/each}
-          </div>
-        {:else}
-          <p class="empty-copy">No .txt, .raw, .jsonl, or .md tool inputs found in configured folders.</p>
-        {/if}
-      </Panel>
-
-      <Panel eyebrow="Builds" title="Discovered llama.cpp builds" class="builds-card">
-        <div class="panel-actions">
-          <ToolbarButton variant="ghost" onclick={rescanBuilds} disabled={Boolean(pendingAction)}>{pendingAction === "rescan-builds" ? "Scanning..." : "Rescan builds"}</ToolbarButton>
-        </div>
-        {#if discoveredBuilds.length}
-          <div class="discovery-list">
-            {#each discoveredBuilds as build}
-              <button class={`discovery-item ${selectedBuildPath === build.serverPath ? "selected" : ""}`} type="button" onclick={() => (selectedBuildPath = build.serverPath)}>
-                <strong>{build.name}</strong>
-                <span>{build.folder}</span>
-                <small>Tools: {build.tools.map((tool) => tool.fileName).join(", ")}</small>
-                <code>{build.serverPath}</code>
-              </button>
-            {/each}
-          </div>
-        {:else}
-          <p class="empty-copy">No llama-server executable found in configured folders.</p>
-        {/if}
-      </Panel>
-
-      <Panel tone="live" eyebrow="Create profile" title="Selected model + build" class="create-profile-card">
-        <div class="metric-grid compact">
-          <MetricRow label="Model" value={selectedModel?.fileName ?? "None selected"} muted={!selectedModel} />
-          <MetricRow label="Build" value={selectedBuild?.name ?? "None selected"} muted={!selectedBuild} />
-        </div>
-        <div class="form-grid">
-          <label class="form-field">Profile name<input bind:value={profileForm.name} placeholder={selectedModel && selectedBuild ? `${selectedModel.name} ${selectedBuild.name}` : "Qwen local profile"} /></label>
-          <label class="form-field">Host<input bind:value={profileForm.host} /></label>
-          <label class="form-field">Port<input type="number" bind:value={profileForm.port} min="1" max="65535" /></label>
-          <label class="form-field">Context<input type="number" bind:value={profileForm.ctxSize} min="1" /></label>
-          <label class="form-field">GPU layers<input bind:value={profileForm.gpuLayers} /></label>
-          <label class="form-field">Batch<input type="number" bind:value={profileForm.batchSize} min="1" /></label>
-          <label class="form-field">UBatch<input type="number" bind:value={profileForm.ubatchSize} min="1" /></label>
-          <label class="form-field">Threads<input type="number" bind:value={profileForm.threads} min="1" /></label>
-          <label class="form-field">Threads batch<input type="number" bind:value={profileForm.threadsBatch} min="1" /></label>
-          <label class="checkbox-field"><input type="checkbox" bind:checked={profileForm.flashAttention} /> Flash attention</label>
-        </div>
-        <div class="panel-actions inline-actions">
-          <ToolbarButton variant="success" onclick={createProfileFromSelection} disabled={!selectedModel || !selectedBuild || Boolean(pendingAction)}>{pendingAction === "create-profile" ? "Creating..." : "Create profile"}</ToolbarButton>
-        </div>
-        <p class="helper-text">Creating a profile appends to <code>data/profiles.json</code>, validates through the Phase 1 profile path, and does not start llama.cpp.</p>
-        {#if createdProfilePreview}
-          <TerminalBlock label="created profile command" lines={[createdProfilePreview.displayCommand]} />
-        {/if}
-      </Panel>
-
-      <Panel tone={discoveryWarningLines.length ? "warning" : "default"} eyebrow="Discovery safety" title="Scan warnings">
-        {#if discoveryWarningLines.length}
-          <ul class="warning-list">
-            {#each discoveryWarningLines as warning}
-              <li>{warning}</li>
-            {/each}
-          </ul>
-        {:else}
-          <p class="empty-copy">Discovery is read-only: it scans configured folders only, skips symlink traversal, and never executes detected tools.</p>
-        {/if}
-      </Panel>
-
-      <Panel tone="code" eyebrow="Logs" title="Runtime output" class="logs-card">
-        <div class="logs-toolbar">
-          <div class="log-status-strip">
-            <StatusPill tone={logConnectionTone} label={`Live stream ${logStreamState}`} />
-            <span>{logStatusText}</span>
-            {#if lastLogHeartbeat}
-              <small>Heartbeat {formatDate(lastLogHeartbeat)}</small>
-            {/if}
-          </div>
-          <div class="panel-actions inline-actions logs-actions">
-            <ToolbarButton variant="ghost" onclick={loadLogs}>Refresh</ToolbarButton>
-            <ToolbarButton variant="ghost" onclick={copyLogs} disabled={!filteredLogs.length}>Copy visible</ToolbarButton>
-            <ToolbarButton variant="ghost" onclick={clearVisibleLogs} disabled={!logs.length}>Clear visible</ToolbarButton>
-          </div>
-        </div>
-
-        <label class="field-label" for="runtime-log-search">Search visible logs</label>
-        <input id="runtime-log-search" class="log-search-input" bind:value={logSearch} placeholder="Filter by message, source, or timestamp" />
-
-        <div class="log-viewer" aria-label="Runtime logs">
-          {#if filteredLogs.length}
-            {#each filteredLogs as entry (`${entry.timestamp}-${entry.sequence}`)}
-              <div class={`log-entry log-source-${entry.source}`}>
-                <span class="log-time">{entry.timestamp}</span>
-                <span class="log-source">{entry.source}</span>
-                <span class="log-message">{entry.message}</span>
-              </div>
-            {/each}
-          {:else}
-            <p class="empty-copy">{logs.length ? "No visible logs match the current filter." : "No runtime logs are available yet. Start a managed profile to stream stdout and stderr here."}</p>
-          {/if}
-        </div>
-
-        <p class="helper-text">Showing up to 500 visible entries. Clear only affects this UI buffer; persisted runtime log files are kept by the service.</p>
-      </Panel>
-    </section>
+    {:else if activePage === "logs"}
+      <LogsPage data={pageData} actions={pageActions} bind:logSearch />
+    {:else if activePage === "telemetry"}
+      <TelemetryPage data={pageData} actions={pageActions} />
+    {:else if activePage === "settings"}
+      <SettingsPage data={pageData} actions={pageActions} bind:modelFoldersText bind:llamaCppFoldersText bind:toolInputFoldersText />
+    {:else if activePage === "system"}
+      <SystemPage data={pageData} actions={pageActions} />
     {/if}
-  </section>
-</main>
+  </AppShell>
+{/if}

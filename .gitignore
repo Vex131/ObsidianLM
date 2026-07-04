@@ -48,3 +48,4 @@ Thumbs.db
 *.swp
 .agents/subagents-and-skills.md
 .serena/
+.playwright-mcp/
