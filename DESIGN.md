@@ -746,17 +746,477 @@ Before completing UI work, check:
 - Do not add Next.js, Electron, Docker, or a large component framework for design alone.
 - Do not use generic AI dashboard templates without adapting them to local runtime management.
 
-## 15. Phase 1 Design Target
+## 15. Phase 14 Design Target — Approved Operator Console Reference
 
-For the next implementation phase, aim for this minimum visual structure:
+Phase 14 supersedes the earlier Phase 1 visual target. The current implementation has enough functionality; the priority is now to make the interface feel like a real operator console instead of one long generated dashboard.
 
-1. Keep the dark ObsidianLM shell.
-2. Replace the large Phase 0 hero with a compact page header.
-3. Add a prominent Runtime Status Card.
-4. Add a Quick Actions strip for Start / Stop / Restart / Validate / Copy endpoint.
-5. Add a Command Preview panel.
-6. Add a Runtime Logs panel.
-7. Add a Warnings panel for stale/unmanaged process messaging.
-8. Keep future nav items visually quiet until implemented.
+### Approved Reference Screens
 
-The UI should feel like the beginning of a real operator console, not a placeholder dashboard.
+Use the three approved mockups as the primary visual reference for Phase 14 UI work:
+
+1. **Dashboard / Command Center** — compact operator overview with runtime status first, quick actions, profile summary, warnings, command preview, logs, telemetry, and right inspector.
+2. **Runtime / Managed Server** — operational runtime control page with status first, safe actions, validation checklist, command preview, startup safety, logs, and runtime inspector.
+3. **Profiles / Launch Configs** — precise profile editor with profile list, grouped editor sections, validation status, command preview, and change summary.
+
+The goal is close implementation alignment with these images: shell, density, hierarchy, grouped sidebar, top status strip, right inspector, panel rhythm, command/log surfaces, and calm developer-console tone.
+
+Do not treat the images as decorative inspiration only. They are the intended implementation direction.
+
+### Phase 14 Product Feel
+
+The UI should feel like:
+
+> A matte obsidian local runtime cockpit with developer-console clarity: state first, safe controls second, commands/logs/details always visible.
+
+It should not feel like:
+
+> A generic AI SaaS dashboard made of many nested cards.
+
+### Mandatory Shell Pattern
+
+Desktop pages should use this shell unless a page has a strong reason not to:
+
+```text
+┌───────────────┬────────────────────────────────────────────┬───────────────┐
+│ Sidebar       │ Top status strip / page content             │ Inspector     │
+│ 240-256px     │ flexible main workspace                     │ 320-360px     │
+└───────────────┴────────────────────────────────────────────┴───────────────┘
+```
+
+Required shell elements:
+
+- Left grouped sidebar.
+- Compact top status strip visible on logged-in pages.
+- Page header with small eyebrow, title, and short subtitle.
+- Main workspace using fewer, stronger panels.
+- Optional right inspector for selected/runtime/page details.
+
+### Sidebar Grouping
+
+Preferred Phase 14 navigation structure:
+
+```text
+CORE
+  Dashboard
+  Runtime
+  Profiles
+  Models
+
+LIBRARY
+  Builds
+  Jobs
+  Tool Inputs
+
+OBSERVABILITY
+  Logs
+  Telemetry
+  Processes
+
+SYSTEM
+  Settings
+  System
+```
+
+Rules:
+
+- The sidebar must be functional, not decorative.
+- Active item uses violet fill and subtle border.
+- Runtime item includes a small status dot for running/stopped/warning/error.
+- Do not show future sections unless they are useful and visually quiet.
+- Use page-local tabs for dense subsections instead of overloading the sidebar.
+
+### Top Status Strip
+
+The top status strip should be compact and persistent:
+
+```text
+● Service healthy | ● Runtime running | Port 8085 | Uptime 02h 41m 32s
+```
+
+It may also contain compact icon actions such as terminal, notifications, settings, and operator/session.
+
+Rules:
+
+- Runtime/service status must remain visible across pages.
+- The strip should not become a second navbar.
+- Avoid large hero headers; page titles stay compact.
+
+### Right Inspector Pattern
+
+Use a right inspector to remove detail clutter from the main canvas.
+
+Good inspector content:
+
+- Endpoint
+- Process details
+- Active profile
+- Model path
+- Build path
+- Port/network
+- Validation summary
+- Runtime facts
+- Selected model/build/job details
+
+Inspector rules:
+
+- Use compact detail rows, not nested cards.
+- Paths and IDs should be copyable.
+- Inspector can collapse or stack below content on smaller screens.
+
+## 16. Phase 14 Page Blueprints
+
+### 16.1 Dashboard / Command Center
+
+Goal: answer the operational questions immediately.
+
+Page header:
+
+- Eyebrow: `Command center`
+- Title: `ObsidianLM operator console`
+- Subtitle: `Control and monitor your local llama.cpp runtimes with precision.`
+
+Main content order:
+
+1. Runtime Status Card
+2. Quick Actions Strip
+3. Active Profile Summary
+4. Safety & Warnings
+5. Command Preview
+6. Recent Runtime Logs
+7. GPU / Telemetry Summary
+
+Right inspector:
+
+- Endpoint
+- Process
+- Profile
+- Model
+- Build
+- Validation
+
+Dashboard rules:
+
+- Dashboard summarizes. It must not contain full profile editors, full discovery lists, full job forms, or large settings textareas.
+- Runtime Status Card must be visually dominant.
+- There should be one obvious next action.
+
+### 16.2 Runtime / Managed Server
+
+Goal: operate the managed llama.cpp server safely.
+
+Page header:
+
+- Eyebrow: `Managed server`
+- Title: `Control llama.cpp runtime`
+- Subtitle: `Manage and operate your local llama.cpp server with precision.`
+
+Main content order:
+
+1. Runtime Status Card
+2. Runtime action bar: Start runtime, Stop runtime, Restart, Validate, Copy endpoint
+3. Validation Checklist
+4. Command Preview
+5. Startup & Safety
+6. Runtime Logs
+
+Right inspector:
+
+- Active Profile
+- Model Path
+- Build Path
+- Port & Network
+- Runtime Facts
+
+Runtime rules:
+
+- State before controls is mandatory.
+- Stop/restart actions must explain scope.
+- Logs should be visible without passing through unrelated UI.
+- Command preview is first-class, not hidden behind a disclosure.
+
+### 16.3 Profiles / Launch Configs
+
+Goal: configure repeatable launch profiles with precision.
+
+Page header:
+
+- Eyebrow: `Launch configs`
+- Title: `Manage runtime profiles`
+- Subtitle: `Create, edit, and manage runtime launch configurations.`
+
+Desktop layout:
+
+```text
+Profile list  | Profile editor                              | Validation / Command / Changes
+280-320px     | flexible main editor                         | 320-360px
+```
+
+Profile editor sections:
+
+- Identity
+- Model & Build
+- Runtime Parameters
+- KV Cache Settings
+- GPU / Offload Settings
+- Advanced Flags
+
+Right inspector:
+
+- Validation Status
+- Command Preview
+- Change Summary
+
+Profiles rules:
+
+- This page should feel like a configuration editor, not a dashboard.
+- Use section rows and grouped fields instead of nested cards.
+- `Save profile` is primary.
+- `Duplicate` is secondary.
+- `Delete` is danger and visually separated.
+- Show `Requires restart` indicators for settings that cannot hot reload.
+
+### 16.4 Models
+
+Goal: browse and select local GGUF model files.
+
+Must include:
+
+- Folder/search/rescan toolbar.
+- Compact model table/list.
+- Selected model inspector.
+- Quantization hint when derivable.
+- Size and modified time.
+- Profile usage if known.
+
+### 16.5 Builds
+
+Goal: browse detected llama.cpp builds/tools.
+
+Must include:
+
+- Rescan toolbar.
+- Build list/table.
+- Detected executables/tools.
+- Build/version/compiler metadata if available.
+- Selected build inspector.
+
+### 16.6 Jobs
+
+Goal: run one-shot llama.cpp tools without confusing them with the managed runtime.
+
+Must include:
+
+- Job type selector or tabs.
+- Running job summary.
+- llama-bench form.
+- llama-perplexity form.
+- Job history.
+- Job details/logs.
+
+Required copy:
+
+> Jobs are one-shot tools. They do not start or replace the managed llama.cpp server runtime.
+
+### 16.7 Logs
+
+Goal: diagnose runtime/service behavior.
+
+Must include:
+
+- Source/severity/search toolbar.
+- Full log viewer.
+- Pause/resume streaming.
+- Copy visible.
+- Clear visible.
+
+### 16.8 Telemetry / Processes
+
+Goal: inspect local machine state.
+
+Must include:
+
+- GPU devices.
+- GPU processes.
+- llama.cpp-like process detection.
+- Port status.
+- Clear read-only safety copy for external processes.
+
+### 16.9 Settings / System
+
+Goal: configure low-frequency app and service settings.
+
+Must include:
+
+- Auth/session controls.
+- Service mode metadata.
+- Data/log directory mode.
+- Default managed runtime port.
+- Discovery folders if not housed under Models/Builds/Tool Inputs.
+
+## 17. Phase 14 Visual Rules
+
+### Reduce Nested Cards
+
+Avoid the current “card maze” look.
+
+Use:
+
+- Fewer page-level panels.
+- Detail rows inside panels.
+- Inspector panels for secondary details.
+- Tables/lists for repeated items.
+- Terminal surfaces for commands/logs.
+
+Avoid:
+
+- Cards inside cards inside cards.
+- Equal visual weight for every feature.
+- Turning every metric into a bordered box.
+- Multiple unrelated forms on the same page.
+
+### Panel Hierarchy
+
+Use these panel levels:
+
+1. **Hero/status panel** — only for runtime status or page-critical state.
+2. **Section panel** — major page region.
+3. **Code/log surface** — command preview, logs, raw output.
+4. **Detail row/list row** — metadata inside a panel.
+
+Only level 1 and floating overlays should use noticeable glow/shadow.
+
+### Action Placement
+
+- Primary action belongs in the page header or dominant status panel.
+- Runtime actions belong directly under runtime state.
+- Destructive actions must be visually separated from safe actions.
+- Copy/open/refresh actions should be compact toolbar actions.
+
+### Density
+
+- Compact is good; cramped is not.
+- Use 12–16px gaps between related regions.
+- Use 16–20px panel padding.
+- Use compact rows for metadata.
+- Keep page headers short.
+
+### Matching the Reference Images
+
+For Dashboard, Runtime, and Profiles, implementation should be visually compared against the approved reference images before completion.
+
+Check:
+
+- Sidebar grouping.
+- Top status strip.
+- Page header size.
+- Dominant runtime status card.
+- Right inspector presence and content.
+- Reduced nested cards.
+- Command/log surfaces.
+- Semantic accent colors.
+
+## 18. Phase 14 Implementation Guidance
+
+### Routing
+
+Use lightweight hash navigation first:
+
+```text
+#dashboard
+#runtime
+#profiles
+#models
+#builds
+#jobs
+#logs
+#telemetry
+#settings
+#system
+```
+
+Do not add a routing dependency just for Phase 14.
+
+### Recommended Layout Components
+
+```text
+apps/web/src/lib/layout/
+  AppShell.svelte
+  SidebarNav.svelte
+  PageHeader.svelte
+  TopStatusStrip.svelte
+  InspectorPanel.svelte
+```
+
+### Recommended Page Components
+
+```text
+apps/web/src/lib/pages/
+  DashboardPage.svelte
+  RuntimePage.svelte
+  ProfilesPage.svelte
+  ModelsPage.svelte
+  BuildsPage.svelte
+  JobsPage.svelte
+  LogsPage.svelte
+  TelemetryPage.svelte
+  SettingsPage.svelte
+  SystemPage.svelte
+```
+
+### Recommended Shared Components
+
+```text
+apps/web/src/lib/components/
+  ActionTile.svelte
+  CommandPreview.svelte
+  CopyButton.svelte
+  DetailRow.svelte
+  LogViewer.svelte
+  PathField.svelte
+  SectionPanel.svelte
+  StatusBadge.svelte
+  ValidationChecklist.svelte
+```
+
+### Refactor Order
+
+1. Update design source of truth.
+2. Add hash navigation and shell.
+3. Extract shared visual primitives.
+4. Build Dashboard page.
+5. Build Runtime page.
+6. Build Profiles page.
+7. Move remaining panels to focused pages.
+8. Update E2E smoke tests and capture comparison screenshots.
+
+### State Management Rule
+
+Do not rewrite all data loading at the same time as the UI refactor.
+
+Recommended first pass:
+
+- Keep existing API calls/state in `App.svelte` if needed.
+- Pass state/actions into page components.
+- Extract state into modules only after the page structure is stable.
+
+## 19. Phase 14 Acceptance Checklist
+
+- [ ] Sidebar navigation is functional.
+- [ ] Dashboard, Runtime, and Profiles match the approved reference direction.
+- [ ] The app is no longer one long page.
+- [ ] Dashboard summarizes instead of hosting every tool.
+- [ ] Runtime page has state before controls.
+- [ ] Profiles page feels like an editor.
+- [ ] Right inspector is used for dense details.
+- [ ] Commands, paths, ports, validation, warnings, and logs remain visible and copyable.
+- [ ] Nested card usage is reduced.
+- [ ] No fake analytics or decorative charts are added.
+- [ ] No new heavy frontend framework or router dependency is added.
+- [ ] Mobile layout remains usable at 320px width.
+- [ ] Keyboard focus is visible.
+- [ ] `npm run typecheck` passes.
+- [ ] `npm run lint` passes.
+- [ ] `npm run build` passes.
+- [ ] `npm run test` passes.
+- [ ] `npm run test:e2e` passes or any failure is documented accurately.
+
