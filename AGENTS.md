@@ -36,7 +36,7 @@ Follow the global OpenCode rules first. This file only adds ObsidianLM-specific 
 
 ## Context Tools
 
-- Use Serena for symbol lookup, references, project memories, and targeted code navigation before broad source reads.
+- Use Serena for symbol lookup, references, project memories, and targeted code navigation before broad source reads; skip full onboarding during implementation if required.
 - This repo has a Graphify graph in `graphify-out/` with god nodes, community structure, and cross-file relationships.
 - When the user types `/graphify`, invoke the Graphify skill/tool before doing anything else.
 - For codebase questions, first run `graphify query "<question>"` when `graphify-out/graph.json` exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts.
@@ -45,37 +45,36 @@ Follow the global OpenCode rules first. This file only adds ObsidianLM-specific 
 - If `graphify-out/wiki/index.md` exists, use it for broad navigation instead of raw source browsing.
 - Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` when Graphify is available; it is AST-only and has no API cost.
+- Check Graphify files with plain PowerShell checks such as `Test-Path "graphify-out\graph.json"`; do not echo help text or placeholder `<question>` in shell commands.
+- If a Graphify check fails from shell syntax, fix the syntax and retry once before deciding Graphify is unavailable.
 
 ## Subagent Routing for Phase Work
 
-Phase work often spans service, web, shared contracts, tests, docs, and verification. Use subagents when they are likely to reduce main-context tokens or prevent repeated broad reads.
+Phase work can span service, web, shared contracts, tests, docs, and verification. Use subagents to reduce total context, not to multiply discovery.
 
-For any phase or task touching 3+ of these areas, use at least one focused subagent unless the reason to stay direct is clear and stated: `apps/service`, `apps/web`, `packages/shared`, `scripts/windows`, tests, README/docs, browser smoke, runtime/process management, storage/settings/auth.
+Default flow:
 
-Recommended phase pipeline:
+1. Use context tools first for targeted context.
+2. Use direct work when ownership and edit locations are clear.
+3. If context is unclear, use one initial `@explore` for a compact edit map only.
+4. Main agent implements connected changes with targeted reads.
+5. Use `@tester` after edits or for specific failures.
+6. Use `@reviewer` only after a diff exists or a concrete risk is identified.
+7. Use `@docs` or `@e2e` only for bounded docs or smoke work.
 
-1. Use Graphify or Serena first for targeted context when available.
-2. Use `@explore` for a concise implementation map when file ownership, API flow, or UI/data flow is not already obvious.
-3. Keep tightly coupled integration in the main agent or one `@coder`; do not split one connected change across many coders.
-4. Use `@tester` after implementation for focused tests, failures, typecheck/lint/build interpretation, and regression gaps.
-5. Use `@reviewer` before final response when changes touch protected APIs, auth, settings/storage, runtime/job/process behavior, Windows service behavior, or broad UI refactors.
-6. Use `@docs` for README-heavy phases when docs would otherwise bloat the main context.
-7. Use `@e2e` only for bounded browser smoke checks with guaranteed cleanup; do not leave dev servers or browser sessions running.
+Hard budget rules:
 
-Subagent handoffs should be narrow and token-efficient. Ask for file paths, relevant symbols, risks, commands, and recommended next steps. Avoid full-file dumps, long logs, and broad diffs in handoff responses.
-
-Do not use subagents for tiny single-file edits, obvious copy changes, or small fixes where the handoff costs more than direct work.
-
-### Phase Subagent Budget Rules
-
-For ObsidianLM phase work, subagents are used to reduce total context, not to duplicate inspection.
-
-- `@explore` must return a compact edit map. After it returns, the main agent should not broadly re-read mapped files. Use targeted reads only.
-- `@reviewer` must be scoped to changed files and explicit risks, such as auth, storage mutation, path leaks, runtime/process safety, API compatibility, or missing tests.
-- `@tester` should report commands, failures, minimal relevant output, and recommended fixes. Do not paste full passing logs.
-- `@docs` should return final doc text or patch guidance, not broad README dumps.
-- `@e2e` should own browser smoke execution and cleanup when used. The main agent should not also repeat the same browser checks manually.
-- Prefer one focused subagent over several. Avoid using both a broad subagent and broad main-context reads for the same area.
+- Do not start with multiple parallel `@explore` agents.
+- Do not split initial discovery into service/web/shared/tests/docs explorers.
+- Initial `@explore` output should be under 800 words: target files, symbols, risks, edit order, and verification.
+- After `@explore`, treat its map as cached context; use targeted reads only.
+- Count every pre-edit retrieval action: read, grep/search, glob, Serena, Graphify, and shell inspection.
+- For phase work, aim to start the first safe edit within 8 retrieval actions. If still uncertain, state the missing file/symbol/risk and do one narrow lookup.
+- If reporting retrieval counts, report the actual count from tool use, not an estimate.
+- Avoid full reads of large files like `App.svelte` or long tests before editing; use grep, symbols, or line ranges first.
+- If compaction is approaching before edits, stop exploring and produce a compact plan or partial patch.
+- Prefer one focused subagent. Use 2-3 only for later bounded work. Use more only with explicit user approval.
+- `@tester`, `@reviewer`, `@docs`, and `@e2e` must report minimal relevant output, not full passing logs, broad diffs, or architecture reports.
 
 ## Git
 
