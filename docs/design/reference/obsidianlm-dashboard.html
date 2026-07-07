@@ -1,0 +1,1393 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ObsidianLM Dashboard Balanced Mockup</title>
+  <style>
+    :root {
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+      --color-bg: #050914;
+      --color-bg-elevated: #07101d;
+      --color-panel: rgba(17, 27, 43, 0.86);
+      --color-panel-strong: rgba(14, 23, 38, 0.96);
+      --color-line: rgba(116, 137, 171, 0.18);
+      --color-line-strong: rgba(133, 153, 184, 0.24);
+
+      --color-text: #e8eefb;
+      --color-muted: #a5b1c7;
+      --color-dim: #69758b;
+
+      --color-purple: #8f5cff;
+      --color-purple-strong: #6c3ee7;
+      --color-green: #59dc7a;
+      --color-amber: #f4b95f;
+      --color-red: #ff6b7a;
+      --color-cyan: #42d7e8;
+
+      --sidebar-width: 296px;
+      --topbar-height: 68px;
+      --brand-height: 75px;
+      --nav-item-height: 38px;
+
+      --radius-sm: 7px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --shadow-panel: 0 22px 70px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+
+      color: var(--color-text);
+      background: var(--color-bg);
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      background:
+        radial-gradient(circle at 74% 3%, rgba(72, 86, 132, 0.18), transparent 25%),
+        linear-gradient(135deg, #04070f 0%, #07101b 52%, #050913 100%);
+      color: var(--color-text);
+    }
+
+    body { overflow: hidden; }
+    button { font: inherit; }
+    svg { display: block; }
+    p, h1, h2, h3 { margin: 0; }
+
+    .app-shell {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    /* Current project-style sidebar */
+    .sidebar {
+      position: relative;
+      width: var(--sidebar-width);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--color-line);
+      background:
+        linear-gradient(180deg, rgba(15, 24, 40, 0.98), rgba(6, 12, 24, 0.96)),
+        rgba(8, 14, 26, 0.96);
+      box-shadow: 18px 0 60px rgba(0, 0, 0, 0.24);
+      z-index: 3;
+    }
+
+    .brand-row {
+      position: relative;
+      height: var(--brand-height);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 19px 20px 15px 30px;
+    }
+
+    .brand-row::after {
+      content: "";
+      position: absolute;
+      left: 30px;
+      right: 24px;
+      bottom: 0;
+      height: 1px;
+      background: rgba(123, 143, 176, 0.13);
+    }
+
+    .brand {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: var(--color-text);
+      text-decoration: none;
+    }
+
+    .brand-mark {
+      width: 35px;
+      height: 39px;
+      filter: drop-shadow(0 0 20px rgba(151, 111, 255, .38));
+      flex: 0 0 auto;
+    }
+
+    .brand-copy {
+      display: grid;
+      gap: 2px;
+      line-height: 1;
+    }
+
+    .brand-copy strong {
+      font-size: 20px;
+      letter-spacing: -0.03em;
+    }
+
+    .brand-copy span {
+      color: var(--color-muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .menu-button {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      color: var(--color-muted);
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      cursor: default;
+    }
+
+    .nav-stack {
+      flex: 1;
+      min-height: 0;
+      padding: 20px 18px 88px 18px;
+      overflow-y: auto;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .nav-stack::-webkit-scrollbar { display: none; }
+    .nav-section + .nav-section { margin-top: 26px; }
+
+    .nav-section p {
+      margin: 0 0 10px 10px;
+      color: var(--color-dim);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .nav-items { display: grid; }
+
+    .nav-items a {
+      position: relative;
+      height: var(--nav-item-height);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 12px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      color: var(--color-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
+    .nav-items a + a { margin-top: 8px; }
+
+    .nav-items a.active {
+      color: white;
+      background: linear-gradient(90deg, #6b45d6, #7d48d8 60%, #693dc0);
+      box-shadow: 0 8px 26px rgba(97, 64, 209, .30), inset 0 1px 0 rgba(255,255,255,.16);
+    }
+
+    .nav-items a svg { color: currentColor; opacity: .96; }
+
+    .nav-status {
+      margin-left: auto;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--color-green);
+      box-shadow: 0 0 12px rgba(89, 220, 122, .7);
+    }
+
+    .operator-card {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 20px;
+      height: 72px;
+      border-top: 1px solid rgba(133, 153, 188, 0.14);
+      padding-top: 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--color-muted);
+    }
+
+    .operator-icon {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      color: #c5d1e5;
+    }
+
+    .operator-copy {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .operator-copy strong {
+      color: #c8d2e4;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .operator-copy span {
+      color: #748197;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .content-shell {
+      min-width: 0;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: var(--topbar-height) minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    /* Current project-style header */
+    .top-header {
+      position: relative;
+      height: var(--topbar-height);
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center;
+      gap: 18px;
+      padding: 0 26px 0 22px;
+      border-bottom: 1px solid rgba(141, 161, 195, 0.11);
+      background: linear-gradient(180deg, rgba(7, 13, 24, 0.96), rgba(7, 13, 24, 0.64));
+      box-shadow: none;
+      backdrop-filter: blur(18px);
+    }
+
+    .header-micro-status {
+      grid-column: 2;
+      justify-self: center;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      height: 34px;
+      border: 1px solid rgba(132, 153, 188, 0.14);
+      border-radius: var(--radius-md);
+      background: rgba(18, 29, 48, 0.62);
+      overflow: hidden;
+      color: #a7b3c5;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .status-segment {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 100%;
+      padding: 0 14px;
+      border-right: 1px solid rgba(132, 153, 188, 0.12);
+      white-space: nowrap;
+    }
+
+    .status-segment:last-child { border-right: 0; }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--color-green);
+      box-shadow: 0 0 12px rgba(89, 220, 122, .72);
+      flex: 0 0 auto;
+    }
+
+    .header-actions {
+      grid-column: 3;
+      justify-self: end;
+      position: absolute;
+      top: 17px;
+      right: 26px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-actions button,
+    .header-actions a {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(132, 153, 188, 0.18);
+      border-radius: var(--radius-md);
+      color: var(--color-muted);
+      background: rgba(18, 29, 48, 0.82);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      cursor: default;
+      text-decoration: none;
+    }
+
+    .notification-button span {
+      position: absolute;
+      top: -7px;
+      right: -6px;
+      min-width: 16px;
+      height: 19px;
+      padding: 0 5px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      color: white;
+      background: linear-gradient(135deg, #9b6cff, #6b45d6);
+      font-size: 10px;
+      font-weight: 800;
+      box-shadow: 0 6px 14px rgba(96, 61, 216, 0.44);
+    }
+
+    .avatar {
+      width: 39px;
+      height: 39px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(132, 153, 188, 0.2);
+      border-radius: 999px;
+      color: white;
+      background: rgba(18, 29, 48, 0.88);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: 0.05em;
+    }
+
+    /* Current project heading */
+    .page-surface {
+      min-width: 0;
+      min-height: 0;
+      padding: 16px 16px 13px 16px;
+      overflow: auto;
+    }
+
+    .page-header { min-width: 0; }
+
+    .page-title {
+      margin: 0;
+      color: #f3f6fd;
+      font-size: 29px;
+      font-weight: 650;
+      line-height: 1.1;
+      letter-spacing: -0.025em;
+    }
+
+    .page-subtitle {
+      max-width: 680px;
+      margin: 8px 0 0;
+      color: #a7b3c5;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .dashboard-grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(340px, .9fr);
+      gap: 10px;
+      padding-bottom: 26px;
+    }
+
+    .panel {
+      position: relative;
+      border: 1px solid var(--color-line-strong);
+      border-radius: var(--radius-md);
+      background:
+        linear-gradient(180deg, rgba(18, 29, 47, .95), rgba(12, 20, 34, .96)),
+        rgba(12, 20, 34, .96);
+      box-shadow: var(--shadow-panel);
+      overflow: hidden;
+    }
+
+    .panel.soft {
+      background:
+        linear-gradient(180deg, rgba(17, 28, 46, .76), rgba(10, 17, 30, .88)),
+        rgba(10, 17, 30, .92);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 15px 16px 0;
+    }
+
+    .section-title {
+      color: #c7d0df;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: .10em;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .mini-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 25px;
+      padding: 0 10px;
+      border: 1px solid rgba(132, 153, 188, 0.16);
+      border-radius: 999px;
+      background: rgba(12, 22, 38, .78);
+      color: #a7b3c6;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .left-column, .right-column {
+      min-width: 0;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .hero {
+      min-height: 214px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(310px, .8fr);
+      gap: 16px;
+      padding: 18px;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      background:
+        radial-gradient(circle at 20% 15%, rgba(143, 92, 255, .16), transparent 28%),
+        radial-gradient(circle at 78% 10%, rgba(66, 215, 232, .11), transparent 30%);
+      pointer-events: none;
+    }
+
+    .hero-main, .hero-side { position: relative; z-index: 1; }
+
+    .hero-status-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--color-green);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+
+    .hero-title {
+      margin-top: 13px;
+      font-size: 25px;
+      font-weight: 760;
+      color: #f4f7ff;
+      letter-spacing: -0.03em;
+    }
+
+    .hero-subtitle {
+      margin-top: 6px;
+      color: #9fabc0;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .endpoint-copy {
+      margin-top: 16px;
+      width: min(100%, 560px);
+      min-height: 43px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 12px 0 14px;
+      border: 1px solid rgba(66, 215, 232, .22);
+      border-radius: var(--radius-md);
+      color: #85e9f4;
+      background: rgba(8, 18, 31, .78);
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 13px;
+      cursor: pointer;
+      box-shadow: inset 0 1px 18px rgba(0, 0, 0, .24);
+    }
+
+    .endpoint-copy span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .copy-state {
+      color: #b9c7d9;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: Inter, "Segoe UI", sans-serif;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .hero-meta {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .hero-stat {
+      min-height: 58px;
+      padding: 10px 11px;
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 16, 28, .58);
+    }
+
+    .hero-stat .label {
+      color: #7f8da3;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .hero-stat .value {
+      margin-top: 7px;
+      color: #e1e8f5;
+      font-size: 13px;
+      font-weight: 760;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .runtime-control {
+      min-height: 100%;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      padding: 14px;
+      border: 1px solid rgba(132, 153, 188, 0.14);
+      border-radius: var(--radius-md);
+      background: rgba(8, 16, 29, .66);
+      box-shadow: inset 0 1px 20px rgba(0, 0, 0, .18);
+    }
+
+    .control-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 3px;
+    }
+
+    .control-title-row strong {
+      color: #e8eefb;
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .btn {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 12px;
+      border: 1px solid rgba(132, 153, 188, 0.18);
+      border-radius: var(--radius-sm);
+      color: #d8e1ee;
+      background: rgba(14, 24, 40, .78);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+      font-size: 13px;
+      font-weight: 780;
+    }
+
+    .btn.primary {
+      color: #fff;
+      border-color: rgba(177, 137, 255, .52);
+      background: linear-gradient(180deg, rgba(127, 75, 232, .95), rgba(79, 49, 147, .95));
+      box-shadow: 0 10px 26px rgba(101, 63, 209, .22), inset 0 1px 0 rgba(255,255,255,.18);
+    }
+
+    .btn.disabled {
+      opacity: .42;
+      filter: saturate(.65);
+    }
+
+    .btn.wide { grid-column: span 2; }
+
+    .runtime-micro {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      row-gap: 9px;
+      column-gap: 14px;
+      padding-top: 6px;
+      color: #9cabc0;
+      font-size: 12px;
+    }
+
+    .runtime-micro span:nth-child(even) {
+      color: #d6dfec;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      text-align: right;
+    }
+
+    .quick-actions {
+      padding: 15px 16px 16px;
+    }
+
+    .quick-grid {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 9px;
+    }
+
+    .quick-action {
+      min-height: 70px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 12px;
+      border: 1px solid rgba(132, 153, 188, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(10, 20, 36, .68);
+    }
+
+    .quick-icon {
+      width: 35px;
+      height: 35px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(143, 92, 255, .26);
+      border-radius: 9px;
+      color: #a073ff;
+      background: rgba(143, 92, 255, .12);
+      flex: 0 0 auto;
+    }
+
+    .quick-icon.cyan {
+      color: #83e7f2;
+      border-color: rgba(66, 215, 232, .25);
+      background: rgba(66, 215, 232, .10);
+    }
+
+    .quick-text {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+
+    .quick-text strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #e4ebf6;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .quick-text span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #8795aa;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .profile-details {
+      padding: 15px 16px 16px;
+    }
+
+    .profile-grid {
+      margin-top: 13px;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 10px;
+    }
+
+    .detail-group {
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 16, 29, .52);
+      overflow: hidden;
+    }
+
+    .detail-group h3 {
+      padding: 11px 12px 8px;
+      color: #c6d0df;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.11);
+    }
+
+    .kv-list { padding: 6px 12px 10px; }
+
+    .kv-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) auto;
+      gap: 16px;
+      padding: 7px 0;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.08);
+      font-size: 13px;
+    }
+
+    .kv-row:last-child { border-bottom: 0; }
+    .kv-row span:first-child { color: #8997ac; font-weight: 650; }
+    .kv-row span:last-child {
+      color: #dbe5f4;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .path-value {
+      max-width: 330px;
+      display: inline-block;
+      vertical-align: bottom;
+    }
+
+    .note-card {
+      margin-top: 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 11px 12px;
+      border: 1px solid rgba(244, 185, 95, .21);
+      border-radius: var(--radius-sm);
+      background: rgba(244, 185, 95, .065);
+      color: #c8b899;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .note-card svg { color: var(--color-amber); flex: 0 0 auto; }
+
+    .resource-snapshot { padding: 15px 16px 16px; }
+
+    .resource-body {
+      margin-top: 12px;
+      display: grid;
+      gap: 9px;
+    }
+
+    .device-card {
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 16, 29, .55);
+      overflow: hidden;
+    }
+
+    .device-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 39px;
+      padding: 10px 11px;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.09);
+    }
+
+    .device-title {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #e3ebf7;
+      font-size: 13px;
+      font-weight: 820;
+    }
+
+    .device-title strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .device-role {
+      color: #8c9ab0;
+      font-size: 11px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      white-space: nowrap;
+    }
+
+    .meter-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 14px;
+      padding: 11px;
+    }
+
+    .meter {
+      min-width: 0;
+    }
+
+    .meter-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: #8d9bae;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .meter-top span:last-child {
+      color: #d3deec;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .bar {
+      margin-top: 6px;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(103, 122, 154, .22);
+      overflow: hidden;
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(116, 230, 240, .9), rgba(143, 92, 255, .72));
+      box-shadow: 0 0 12px rgba(116, 230, 240, .18);
+    }
+
+    .system-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+    }
+
+    .health-card { padding: 15px 16px 16px; }
+
+    .health-list {
+      margin-top: 13px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .health-item {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 11px;
+      border: 1px solid rgba(132, 153, 188, 0.12);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 16, 29, .46);
+      color: #b6c2d4;
+      font-size: 13px;
+      font-weight: 690;
+    }
+
+    .health-item strong {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 850;
+      color: var(--color-green);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .health-item.warn strong { color: var(--color-amber); }
+    .health-item .dot.warn { background: var(--color-amber); box-shadow: 0 0 12px rgba(244, 185, 95, .58); }
+
+    .performance-log { padding: 15px 16px 16px; }
+
+    .perf-summary {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .perf-stat {
+      min-height: 67px;
+      padding: 12px;
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 16, 29, .54);
+    }
+
+    .perf-stat span {
+      color: #8997ac;
+      font-size: 11px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    .perf-stat strong {
+      display: block;
+      margin-top: 8px;
+      color: #e2ebf8;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 17px;
+      letter-spacing: -0.03em;
+    }
+
+    .perf-table {
+      margin-top: 10px;
+      border: 1px solid rgba(132, 153, 188, 0.12);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: rgba(5, 10, 18, .44);
+    }
+
+    .perf-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 86px 86px;
+      gap: 12px;
+      align-items: center;
+      min-height: 35px;
+      padding: 0 11px;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.08);
+      color: #a9b6c9;
+      font-size: 12px;
+    }
+
+    .perf-row:last-child { border-bottom: 0; }
+    .perf-row.header {
+      color: #7d8ca2;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      background: rgba(12, 22, 38, .55);
+    }
+
+    .perf-row span:not(:nth-child(2)) {
+      font-family: "Cascadia Mono", Consolas, monospace;
+    }
+
+    .events-card { padding: 15px 16px 16px; }
+
+    .event-stream {
+      margin-top: 12px;
+      height: 430px;
+      padding: 12px;
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background: rgba(4, 7, 12, .62);
+      overflow: hidden;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      box-shadow: inset 0 1px 22px rgba(0, 0, 0, .32);
+    }
+
+    .event-line {
+      display: grid;
+      grid-template-columns: 78px 54px minmax(0, 1fr);
+      gap: 10px;
+      min-height: 25px;
+      color: #c6d0de;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .event-time { color: #8998ab; }
+    .event-type { font-weight: 900; }
+    .event-type.info { color: #54d983; }
+    .event-type.warn { color: var(--color-amber); }
+    .event-type.run { color: #82e9f4; }
+    .event-message { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    @media (max-width: 1380px) {
+      .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+      .right-column { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+      .resource-snapshot { grid-column: span 2; }
+    }
+
+    @media (max-width: 1120px) {
+      .app-shell { grid-template-columns: 86px minmax(0, 1fr); }
+      .sidebar { width: 86px; }
+      .brand-row { padding: 18px 20px; justify-content: center; }
+      .brand-copy, .menu-button, .nav-section p, .nav-label, .operator-copy, .operator-card > svg { display: none; }
+      .nav-stack { padding: 20px 18px 88px; }
+      .nav-items a { justify-content: center; padding: 0; }
+      .nav-status { position: absolute; right: 8px; }
+      .operator-card { justify-content: center; }
+      .header-micro-status { display: none; }
+      .hero { grid-template-columns: minmax(0, 1fr); }
+      .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .profile-grid { grid-template-columns: minmax(0, 1fr); }
+      .right-column { grid-template-columns: minmax(0, 1fr); }
+      .resource-snapshot { grid-column: auto; }
+    }
+
+    @media (max-width: 720px) {
+      body { overflow: auto; }
+      .app-shell { min-height: 100vh; height: auto; grid-template-columns: minmax(0, 1fr); }
+      .sidebar { display: none; }
+      .content-shell { height: auto; min-height: 100vh; }
+      .page-surface { overflow: visible; padding: 14px; }
+      .hero-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero { padding: 14px; }
+      .control-grid, .quick-grid, .meter-grid, .system-row, .perf-summary { grid-template-columns: minmax(0, 1fr); }
+      .perf-row { grid-template-columns: 70px 1fr; }
+      .perf-row span:nth-child(3), .perf-row span:nth-child(4) { display: none; }
+      .event-line { grid-template-columns: 66px 48px 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+    <defs>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="4" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="4" y="14" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M5 17a8 8 0 1 1 14 0" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m12 13 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="13" r="1.7" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-cube" viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 12 4.5 7.8M12 12l7.5-4.2M12 12v8" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-artifact" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 7h6M9 11h6M9 15h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-log" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 8h6M9 12h6M9 16h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m9 15 2.5-3 2 2 2.5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19 12a7.5 7.5 0 0 0-.1-1l2-1.6-2-3.5-2.5 1a8 8 0 0 0-1.8-1L14.3 3h-4.6l-.4 2.9a8 8 0 0 0-1.8 1L5 5.9l-2 3.5L5 11a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.5 2.5-1a8 8 0 0 0 1.8 1l.4 2.9h4.6l.4-2.9a8 8 0 0 0 1.8-1l2.5 1 2-3.5-2-1.6c.1-.3.1-.7.1-1Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 9a2 2 0 1 1 3 1.7c-.8.5-1.1 1-1.1 1.8M12 16.7h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m7 9 3 3-3 3M12 15h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 1 0-12 0c0 7-2 7-2 8h16c0-1-2-1-2-8Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 20a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 21h8M12 17v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-chevron-up" viewBox="0 0 24 24"><path d="m7 14 5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14.5 4.7M4 12A8 8 0 0 1 18.5 7.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 17H2v-3M19 7h3v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="8" y="8" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7-11-7Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="5" y="5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" opacity=".65"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M19 14v5H5V5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-zap" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="i-load" viewBox="0 0 24 24"><path d="M6 9V4h5M18 15v5h-5M8 5a8 8 0 0 1 11 7M16 19a8 8 0 0 1-11-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="8" y="9" width="8" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v5c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m9 12 2 2 4-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 3 22 20H2L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v5M12 17.5h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-gpu" viewBox="0 0 24 24"><rect x="4" y="7" width="13" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M17 10h3v4h-3M8 17v3M13 17v3M8 4v3M13 4v3M8 11h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="brand-row">
+        <a class="brand" href="#dashboard" aria-label="ObsidianLM dashboard">
+          <svg class="brand-mark" viewBox="0 0 42 48" aria-hidden="true">
+            <path d="M21 2 38 13v22L21 46 4 35V13L21 2Z" fill="#7d63dc"/>
+            <path d="M21 2v44L4 35V13L21 2Z" fill="#a998ff"/>
+            <path d="M21 2 38 13 21 20 4 13 21 2Z" fill="#ece8ff" opacity=".95"/>
+            <path d="M21 20 38 13v22L21 46V20Z" fill="#6045c6"/>
+            <path d="M21 20 4 13v22l17 11V20Z" fill="#8a77e8"/>
+            <path d="m21 2 8 23-8 21-8-21L21 2Z" fill="#f6f2ff" opacity=".58"/>
+          </svg>
+          <span class="brand-copy"><strong>ObsidianLM</strong><span>Operator</span></span>
+        </a>
+        <button class="menu-button" type="button" aria-label="Menu"><svg width="19" height="19"><use href="#i-menu"/></svg></button>
+      </div>
+
+      <nav class="nav-stack">
+        <section class="nav-section" aria-label="Core">
+          <p>Core</p>
+          <div class="nav-items">
+            <a class="active" href="#dashboard"><svg width="19" height="19"><use href="#i-grid"/></svg><span class="nav-label">Dashboard</span></a>
+            <a href="#runtime"><svg width="19" height="19"><use href="#i-gauge"/></svg><span class="nav-label">Runtime</span><span class="nav-status"></span></a>
+            <a href="#profiles"><svg width="19" height="19"><use href="#i-layers"/></svg><span class="nav-label">Profiles</span></a>
+            <a href="#models"><svg width="19" height="19"><use href="#i-cube"/></svg><span class="nav-label">Models</span></a>
+          </div>
+        </section>
+        <section class="nav-section" aria-label="Library">
+          <p>Library</p>
+          <div class="nav-items">
+            <a href="#builds"><svg width="19" height="19"><use href="#i-database"/></svg><span class="nav-label">Builds</span></a>
+            <a href="#artifacts"><svg width="19" height="19"><use href="#i-artifact"/></svg><span class="nav-label">Artifacts</span></a>
+          </div>
+        </section>
+        <section class="nav-section" aria-label="Observability">
+          <p>Observability</p>
+          <div class="nav-items">
+            <a href="#logs"><svg width="19" height="19"><use href="#i-log"/></svg><span class="nav-label">Logs</span></a>
+            <a href="#telemetry"><svg width="19" height="19"><use href="#i-chart"/></svg><span class="nav-label">Telemetry</span></a>
+          </div>
+        </section>
+        <section class="nav-section" aria-label="System">
+          <p>System</p>
+          <div class="nav-items">
+            <a href="#settings"><svg width="19" height="19"><use href="#i-gear"/></svg><span class="nav-label">Settings</span></a>
+            <a href="#system"><svg width="19" height="19"><use href="#i-help"/></svg><span class="nav-label">System</span></a>
+          </div>
+        </section>
+      </nav>
+
+      <footer class="operator-card">
+        <div class="operator-icon"><svg width="25" height="25"><use href="#i-monitor"/></svg></div>
+        <div class="operator-copy"><strong>obx-operator</strong><span>v0.8.2</span></div>
+        <svg width="15" height="15"><use href="#i-chevron-up"/></svg>
+      </footer>
+    </aside>
+
+    <div class="content-shell">
+      <header class="top-header">
+        <div class="header-micro-status" aria-label="Status summary">
+          <div class="status-segment"><span class="dot"></span>Service healthy</div>
+          <div class="status-segment"><span class="dot"></span>Runtime running</div>
+          <div class="status-segment">Port <strong style="color:#dce4f0">8085</strong></div>
+        </div>
+        <div class="header-actions" aria-label="Header actions">
+          <button type="button" aria-label="Open terminal"><svg width="18" height="18"><use href="#i-terminal"/></svg></button>
+          <button class="notification-button" type="button" aria-label="Notifications"><svg width="18" height="18"><use href="#i-bell"/></svg><span>2</span></button>
+          <a href="#settings" aria-label="Open settings"><svg width="18" height="18"><use href="#i-gear"/></svg></a>
+          <div class="avatar" aria-label="Operator profile">OP</div>
+        </div>
+      </header>
+
+      <main class="page-surface dashboard-page" aria-label="Dashboard">
+        <div class="page-header">
+          <h1 class="page-title">Dashboard</h1>
+          <p class="page-subtitle">Control and monitor your local llama.cpp runtimes with precision.</p>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="left-column">
+            <section class="panel hero" aria-label="Runtime control hero">
+              <div class="hero-main">
+                <div class="hero-status-line"><span class="dot"></span>Runtime running</div>
+                <h2 class="hero-title">Qwen 3.6 Coding 200K</h2>
+                <p class="hero-subtitle">llama.cpp CUDA runtime is active with the selected coding profile. Endpoint is ready for local tools and agents.</p>
+
+                <button class="endpoint-copy" type="button" data-copy="http://127.0.0.1:8085" aria-label="Copy endpoint">
+                  <span>http://127.0.0.1:8085</span>
+                  <span class="copy-state"><svg width="15" height="15"><use href="#i-copy"/></svg><span>Copy</span></span>
+                </button>
+
+                <div class="hero-meta">
+                  <div class="hero-stat"><div class="label">Profile</div><div class="value">Coding 200K</div></div>
+                  <div class="hero-stat"><div class="label">Port</div><div class="value">8085</div></div>
+                  <div class="hero-stat"><div class="label">PID</div><div class="value">21748</div></div>
+                  <div class="hero-stat"><div class="label">Uptime</div><div class="value">02h 41m</div></div>
+                </div>
+              </div>
+
+              <div class="hero-side">
+                <div class="runtime-control">
+                  <div class="control-title-row">
+                    <strong>Runtime controls</strong>
+                    <span class="mini-pill"><span class="dot"></span>Healthy</span>
+                  </div>
+                  <div class="control-grid">
+                    <button class="btn primary" type="button"><svg width="16" height="16"><use href="#i-refresh"/></svg>Restart</button>
+                    <button class="btn" type="button"><svg width="16" height="16"><use href="#i-stop"/></svg>Stop</button>
+                    <button class="btn disabled wide" type="button"><svg width="16" height="16"><use href="#i-play"/></svg>Start runtime</button>
+                  </div>
+                  <div class="runtime-micro">
+                    <span>Runtime</span><span>llama-server</span>
+                    <span>Build</span><span>b9763 CUDA 13.3</span>
+                    <span>Model</span><span>Qwen3.6-35B Q4_K_S</span>
+                    <span>Last started</span><span>Today 09:41</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel quick-actions" aria-label="Quick actions">
+              <div class="panel-head" style="padding:0">
+                <h2 class="section-title">Quick Actions</h2>
+              </div>
+              <div class="quick-grid">
+                <div class="quick-action"><div class="quick-icon"><svg width="20" height="20"><use href="#i-zap"/></svg></div><div class="quick-text"><strong>Switch profile</strong><span>Change active profile</span></div></div>
+                <div class="quick-action"><div class="quick-icon"><svg width="20" height="20"><use href="#i-load"/></svg></div><div class="quick-text"><strong>Load model</strong><span>Select GGUF file</span></div></div>
+                <div class="quick-action"><div class="quick-icon cyan"><svg width="20" height="20"><use href="#i-shield"/></svg></div><div class="quick-text"><strong>Validate setup</strong><span>Run health checks</span></div></div>
+              </div>
+            </section>
+
+            <section class="panel profile-details" aria-label="Active profile details">
+              <div class="panel-head" style="padding:0">
+                <h2 class="section-title">Active Profile Details</h2>
+              </div>
+              <div class="profile-grid">
+                <div class="detail-group">
+                  <h3>Launch configuration</h3>
+                  <div class="kv-list">
+                    <div class="kv-row"><span>Context size</span><span>204,800</span></div>
+                    <div class="kv-row"><span>GPU offload</span><span>5 / 40 layers</span></div>
+                    <div class="kv-row"><span>Context reuse</span><span>Disabled</span></div>
+                    <div class="kv-row"><span>Parallel slots</span><span>1</span></div>
+                    <div class="kv-row"><span>Batch / ubatch</span><span>4096 / 1024</span></div>
+                  </div>
+                </div>
+                <div class="detail-group">
+                  <h3>Memory & model</h3>
+                  <div class="kv-list">
+                    <div class="kv-row"><span>KV cache</span><span>q8_0 / q8_0</span></div>
+                    <div class="kv-row"><span>Flash attention</span><span>Enabled</span></div>
+                    <div class="kv-row"><span>Tensor split</span><span>5,3</span></div>
+                    <div class="kv-row"><span>Model path</span><span class="path-value">D:\Models\Qwen3.6-35B...</span></div>
+                    <div class="kv-row"><span>Profile file</span><span>coding-200k.json</span></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel events-card" aria-label="Recent events">
+              <div class="panel-head" style="padding:0">
+                <h2 class="section-title">Recent Events</h2>
+                <span class="mini-pill"><span class="dot"></span>Live tail</span>
+              </div>
+              <div class="event-stream">
+                <div class="event-line"><span class="event-time">11:22:18</span><span class="event-type info">INFO</span><span class="event-message">POST /completion 200 · 2.03s · slot 0 released</span></div>
+                <div class="event-line"><span class="event-time">11:22:11</span><span class="event-type warn">WARN</span><span class="event-message">High VRAM pressure on RTX 5080 · 14.7 / 15.9 GB</span></div>
+                <div class="event-line"><span class="event-time">11:21:45</span><span class="event-type info">INFO</span><span class="event-message">POST /completion 200 · 1.24s · 683 tokens generated</span></div>
+                <div class="event-line"><span class="event-time">11:21:34</span><span class="event-type run">RUN</span><span class="event-message">HTTP server listening on http://127.0.0.1:8085</span></div>
+                <div class="event-line"><span class="event-time">11:21:33</span><span class="event-type info">INFO</span><span class="event-message">GPU offload configured · 5 / 40 layers</span></div>
+                <div class="event-line"><span class="event-time">11:21:33</span><span class="event-type info">INFO</span><span class="event-message">KV cache type_k=q8_0 type_v=q8_0 · context reuse disabled</span></div>
+                <div class="event-line"><span class="event-time">11:21:32</span><span class="event-type run">RUN</span><span class="event-message">Loaded model Qwen3.6-35B-A3B-Q4_K_S.gguf</span></div>
+                <div class="event-line"><span class="event-time">11:21:32</span><span class="event-type run">RUN</span><span class="event-message">Runtime started with profile Qwen 3.6 Coding 200K</span></div>
+                <div class="event-line"><span class="event-time">11:20:58</span><span class="event-type info">INFO</span><span class="event-message">Setup validation completed · 7 checks passed · 1 warning</span></div>
+                <div class="event-line"><span class="event-time">11:20:42</span><span class="event-type info">INFO</span><span class="event-message">Operator selected profile coding-200k.json</span></div>
+                <div class="event-line"><span class="event-time">11:19:58</span><span class="event-type info">INFO</span><span class="event-message">Endpoint copied to clipboard · http://127.0.0.1:8085</span></div>
+                <div class="event-line"><span class="event-time">11:19:21</span><span class="event-type info">INFO</span><span class="event-message">Model path verified · D:\Models\Qwen3.6-35B-A3B-Q4_K_S.gguf</span></div>
+                <div class="event-line"><span class="event-time">11:18:44</span><span class="event-type run">RUN</span><span class="event-message">Runtime preflight completed · CUDA devices 0,1 available</span></div>
+                <div class="event-line"><span class="event-time">11:17:59</span><span class="event-type info">INFO</span><span class="event-message">Profile saved · context 204,800 · gpu offload 5/40</span></div>
+                <div class="event-line"><span class="event-time">11:17:31</span><span class="event-type warn">WARN</span><span class="event-message">Context reuse disabled by active profile</span></div>
+              </div>
+            </section>
+          </div>
+
+          <div class="right-column">
+            <section class="panel health-card" aria-label="Health checklist">
+              <div class="panel-head" style="padding:0">
+                <h2 class="section-title">Health Checklist</h2>
+                <span class="mini-pill">7/8 OK</span>
+              </div>
+              <div class="health-list">
+                <div class="health-item"><span class="dot"></span>Backend API reachable <strong>OK</strong></div>
+                <div class="health-item"><span class="dot"></span>Runtime process detected <strong>OK</strong></div>
+                <div class="health-item"><span class="dot"></span>Endpoint responding <strong>OK</strong></div>
+                <div class="health-item"><span class="dot"></span>Model file exists <strong>OK</strong></div>
+                <div class="health-item"><span class="dot"></span>Build path configured <strong>OK</strong></div>
+                <div class="health-item warn"><span class="dot warn"></span>VRAM headroom low <strong>Warn</strong></div>
+                <div class="health-item"><span class="dot"></span>Admin token loaded <strong>OK</strong></div>
+                <div class="health-item"><span class="dot"></span>No stale process <strong>OK</strong></div>
+              </div>
+            </section>
+
+            <section class="panel resource-snapshot" aria-label="Resource snapshot">
+              <div class="panel-head" style="padding:0">
+                <h2 class="section-title">Resource Snapshot</h2>
+                <span class="mini-pill"><span class="dot"></span>Multi-device</span>
+              </div>
+              <div class="resource-body">
+                <div class="device-card">
+                  <div class="device-head"><div class="device-title"><svg width="18" height="18"><use href="#i-gpu"/></svg><strong>RTX 5080</strong></div><div class="device-role">Primary GPU</div></div>
+                  <div class="meter-grid">
+                    <div class="meter"><div class="meter-top"><span>VRAM</span><span>14.7 / 15.9 GB</span></div><div class="bar"><span style="width:92%"></span></div></div>
+                    <div class="meter"><div class="meter-top"><span>Core usage</span><span>76%</span></div><div class="bar"><span style="width:76%"></span></div></div>
+                    <div class="meter"><div class="meter-top"><span>Temperature</span><span>58 °C</span></div><div class="bar"><span style="width:58%"></span></div></div>
+                    <div class="meter"><div class="meter-top"><span>Power</span><span>286 W</span></div><div class="bar"><span style="width:64%"></span></div></div>
+                  </div>
+                </div>
+                <div class="device-card">
+                  <div class="device-head"><div class="device-title"><svg width="18" height="18"><use href="#i-gpu"/></svg><strong>RTX 3060</strong></div><div class="device-role">Secondary GPU</div></div>
+                  <div class="meter-grid">
+                    <div class="meter"><div class="meter-top"><span>VRAM</span><span>8.8 / 12.0 GB</span></div><div class="bar"><span style="width:73%"></span></div></div>
+                    <div class="meter"><div class="meter-top"><span>Core usage</span><span>41%</span></div><div class="bar"><span style="width:41%"></span></div></div>
+                    <div class="meter"><div class="meter-top"><span>Temperature</span><span>54 °C</span></div><div class="bar"><span style="width:54%"></span></div></div>
+                    <div class="meter"><div class="meter-top"><span>Power</span><span>122 W</span></div><div class="bar"><span style="width:38%"></span></div></div>
+                  </div>
+                </div>
+                <div class="device-card">
+                  <div class="device-head"><div class="device-title"><svg width="18" height="18"><use href="#i-gpu"/></svg><strong>Intel UHD 770</strong></div><div class="device-role">iGPU</div></div>
+                  <div class="meter-grid">
+                    <div class="meter"><div class="meter-top"><span>Shared memory</span><span>0.4 / 16.0 GB</span></div><div class="bar"><span style="width:3%"></span></div></div>
+                    <div class="meter"><div class="meter-top"><span>Core usage</span><span>4%</span></div><div class="bar"><span style="width:4%"></span></div></div>
+                  </div>
+                </div>
+                <div class="system-row">
+                  <div class="device-card">
+                    <div class="device-head"><div class="device-title"><svg width="18" height="18"><use href="#i-cpu"/></svg><strong>CPU</strong></div><div class="device-role">i7-12700K</div></div>
+                    <div class="meter-grid" style="grid-template-columns:1fr">
+                      <div class="meter"><div class="meter-top"><span>Usage</span><span>18%</span></div><div class="bar"><span style="width:18%"></span></div></div>
+                      <div class="meter"><div class="meter-top"><span>Package temp</span><span>62 °C</span></div><div class="bar"><span style="width:62%"></span></div></div>
+                    </div>
+                  </div>
+                  <div class="device-card">
+                    <div class="device-head"><div class="device-title"><svg width="18" height="18"><use href="#i-database"/></svg><strong>RAM</strong></div><div class="device-role">System</div></div>
+                    <div class="meter-grid" style="grid-template-columns:1fr">
+                      <div class="meter"><div class="meter-top"><span>Memory</span><span>21.8 / 32.0 GB</span></div><div class="bar"><span style="width:68%"></span></div></div>
+                      <div class="meter"><div class="meter-top"><span>Commit</span><span>74%</span></div><div class="bar"><span style="width:74%"></span></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel performance-log" aria-label="Performance log">
+              <div class="panel-head" style="padding:0">
+                <h2 class="section-title">Performance Log</h2>
+                <span class="mini-pill">Last 5 runs</span>
+              </div>
+              <div class="perf-summary">
+                <div class="perf-stat"><span>Prompt proc.</span><strong>4,500 pp/s</strong></div>
+                <div class="perf-stat"><span>Decode</span><strong>120 t/s</strong></div>
+                <div class="perf-stat"><span>Active slots</span><strong>0 / 1</strong></div>
+              </div>
+              <div class="perf-table">
+                <div class="perf-row header"><span>Time</span><span>Task</span><span>PP</span><span>Decode</span></div>
+                <div class="perf-row"><span>11:22</span><span>opencode planning prompt</span><span>4,500</span><span>120 t/s</span></div>
+                <div class="perf-row"><span>11:18</span><span>codebase review</span><span>4,180</span><span>114 t/s</span></div>
+                <div class="perf-row"><span>11:06</span><span>long context summary</span><span>3,920</span><span>109 t/s</span></div>
+                <div class="perf-row"><span>10:51</span><span>runtime validation</span><span>4,420</span><span>118 t/s</span></div>
+                <div class="perf-row"><span>10:44</span><span>profile smoke test</span><span>4,310</span><span>117 t/s</span></div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('[data-copy]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const text = button.getAttribute('data-copy') || '';
+        const label = button.querySelector('.copy-state span');
+        const original = label ? label.textContent : '';
+        try {
+          await navigator.clipboard.writeText(text);
+          if (label) label.textContent = 'Copied';
+        } catch (_) {
+          if (label) label.textContent = 'Copy failed';
+        }
+        window.setTimeout(() => {
+          if (label) label.textContent = original || 'Copy';
+        }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>

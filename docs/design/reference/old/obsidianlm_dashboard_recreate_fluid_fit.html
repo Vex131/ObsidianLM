@@ -1,0 +1,1317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ObsidianLM Operator Console Recreation</title>
+  <style>
+    :root {
+      --base-w: 1920;
+      --base-h: 1080;
+      --scale: 1;
+      --stage-w: 1920px;
+      --bg: #050914;
+      --bg-2: #07101d;
+      --panel: rgba(17, 27, 43, 0.86);
+      --panel-2: rgba(14, 23, 38, 0.96);
+      --panel-3: rgba(10, 16, 28, 0.94);
+      --line: rgba(116, 137, 171, 0.18);
+      --line-2: rgba(133, 153, 184, 0.24);
+      --text: #e8eefb;
+      --muted: #a5b1c7;
+      --dim: #69758b;
+      --purple: #8f5cff;
+      --purple-2: #6c3ee7;
+      --purple-soft: rgba(143, 92, 255, 0.22);
+      --green: #59dc7a;
+      --green-soft: rgba(89, 220, 122, 0.16);
+      --cyan: #78e2ee;
+      --cyan-soft: rgba(120, 226, 238, 0.16);
+      --amber: #ffbd4a;
+      --red: #ff6262;
+      --shadow: 0 22px 80px rgba(0, 0, 0, 0.42);
+      --radius: 8px;
+      --radius-lg: 10px;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #050914;
+    }
+
+    body {
+      margin: 0;
+      width: 100vw;
+      min-height: 100vh;
+      overflow-x: hidden;
+      overflow-y: auto;
+      background:
+        radial-gradient(circle at 72% 6%, rgba(80, 87, 143, .25), transparent 28%),
+        radial-gradient(circle at 35% 18%, rgba(75, 42, 135, .18), transparent 30%),
+        linear-gradient(135deg, #04070f 0%, #07101b 52%, #050913 100%);
+      color: var(--text);
+    }
+
+    .stage-wrap {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      overflow: hidden;
+      background: #050914;
+    }
+
+    .stage {
+      width: var(--stage-w);
+      height: 1080px;
+      transform: scale(var(--scale));
+      transform-origin: top left;
+      position: absolute;
+      inset: 0 auto auto 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 47% 9%, rgba(78, 97, 148, 0.18), transparent 20%),
+        radial-gradient(circle at 90% 0%, rgba(59, 70, 124, 0.25), transparent 20%),
+        linear-gradient(180deg, #07101c 0%, #050a13 100%);
+      border: 1px solid rgba(132, 154, 190, 0.11);
+    }
+
+    .stage::before,
+    .stage::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+      inset: 0;
+    }
+
+    .stage::before {
+      background-image:
+        linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+      background-size: 64px 64px;
+      opacity: .22;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.9), rgba(0,0,0,.25));
+    }
+
+    .stage::after {
+      background: radial-gradient(circle at 54% 46%, transparent 0, rgba(0,0,0,.42) 78%);
+    }
+
+    svg { display: block; }
+
+    .topbar {
+      position: absolute;
+      left: 296px;
+      right: 0;
+      top: 0;
+      height: 68px;
+      z-index: 3;
+      background: linear-gradient(180deg, rgba(7, 13, 24, .96), rgba(7, 13, 24, .64));
+      border-bottom: 1px solid rgba(141, 161, 195, .11);
+    }
+
+    .status-strip {
+      position: absolute;
+      top: 17px;
+      left: 50%;
+      transform: translateX(-50%);
+      height: 36px;
+      display: flex;
+      align-items: center;
+      border: 1px solid rgba(133, 153, 188, 0.16);
+      background: rgba(15, 25, 42, .78);
+      border-radius: 8px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+      overflow: hidden;
+      color: #aeb8c9;
+      font-size: 13px;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 18px;
+      height: 100%;
+      border-right: 1px solid rgba(143, 161, 192, .12);
+      white-space: nowrap;
+    }
+
+    .status-pill:last-child { border-right: 0; }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 12px rgba(89, 220, 122, .62);
+      display: inline-block;
+    }
+
+    .top-actions {
+      position: absolute;
+      top: 17px;
+      right: 26px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .top-icon, .avatar {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      color: #b6c1d5;
+      background: rgba(18, 29, 48, .82);
+      border: 1px solid rgba(132, 153, 188, .18);
+      border-radius: 8px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+      position: relative;
+    }
+
+    .top-icon svg { width: 17px; height: 17px; stroke-width: 1.9; }
+
+    .notif-badge {
+      position: absolute;
+      right: -6px;
+      top: -7px;
+      min-width: 19px;
+      height: 19px;
+      border-radius: 10px;
+      padding: 0 5px;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      color: #fff;
+      background: linear-gradient(135deg, #9c6bff, #5e38d8);
+      box-shadow: 0 4px 14px rgba(111, 65, 226, .45);
+    }
+
+    .avatar {
+      border-radius: 50%;
+      width: 39px;
+      height: 39px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #d9e1ef;
+    }
+
+    .sidebar {
+      position: absolute;
+      z-index: 4;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 296px;
+      background: linear-gradient(180deg, rgba(9, 17, 31, .98), rgba(6, 12, 22, .98));
+      border-right: 1px solid rgba(139, 158, 190, .17);
+      box-shadow: 18px 0 80px rgba(0,0,0,.24);
+    }
+
+    .brand {
+      height: 75px;
+      padding: 19px 20px 15px 30px;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid rgba(123, 143, 176, .13);
+      gap: 16px;
+    }
+
+    .brand-mark {
+      width: 35px;
+      height: 39px;
+      filter: drop-shadow(0 0 20px rgba(151, 111, 255, .38));
+      flex: 0 0 auto;
+    }
+
+    .brand-name {
+      line-height: 1;
+      flex: 1;
+    }
+
+    .brand-name strong {
+      display: block;
+      font-size: 20px;
+      letter-spacing: .1px;
+      color: #f3f6ff;
+      margin-bottom: 4px;
+    }
+
+    .brand-name span {
+      color: #8490a5;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .menu-btn {
+      width: 28px;
+      height: 28px;
+      color: #b8c3d5;
+      display: grid;
+      place-items: center;
+      opacity: .95;
+    }
+
+    .menu-btn svg { width: 19px; height: 19px; }
+
+    .nav {
+      padding: 20px 18px 88px 18px;
+      height: calc(100% - 75px);
+      overflow: hidden;
+    }
+
+    .nav-section { margin-bottom: 26px; }
+
+    .section-label {
+      color: #708096;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .11em;
+      margin: 0 0 10px 10px;
+      text-transform: uppercase;
+    }
+
+    .nav-item {
+      height: 38px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 12px;
+      color: #a9b5c9;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -.1px;
+      margin-bottom: 8px;
+      position: relative;
+    }
+
+    .nav-item svg {
+      width: 19px;
+      height: 19px;
+      stroke-width: 1.8;
+      color: #c2cbee;
+    }
+
+    .nav-item.active {
+      color: #fff;
+      background: linear-gradient(90deg, #6b45d6, #7d48d8 60%, #693dc0);
+      box-shadow: 0 8px 26px rgba(97, 64, 209, .3), inset 0 1px 0 rgba(255,255,255,.16);
+    }
+
+    .nav-item.active svg { color: #fff; }
+
+    .nav-item .side-dot {
+      margin-left: auto;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 12px rgba(89, 220, 122, .6);
+    }
+
+    .sidebar-footer {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 20px;
+      height: 72px;
+      border-top: 1px solid rgba(133, 153, 188, .14);
+      padding-top: 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #a7b3c8;
+    }
+
+    .footer-screen {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      color: #c5d1e5;
+    }
+
+    .footer-title {
+      font-size: 13px;
+      line-height: 1.2;
+      flex: 1;
+    }
+
+    .footer-title strong { display: block; color: #c8d2e4; font-size: 13px; font-weight: 700; }
+    .footer-title span { color: #748197; font-size: 12px; font-weight: 700; }
+
+    .main {
+      position: absolute;
+      z-index: 2;
+      left: 312px;
+      right: 334px;
+      top: 74px;
+      width: auto;
+      bottom: 22px;
+    }
+
+    .eyebrow {
+      color: #9c74ff;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .14em;
+      font-weight: 900;
+      margin-bottom: 3px;
+    }
+
+    .page-title {
+      font-size: 29px;
+      line-height: 1.1;
+      margin: 0;
+      font-weight: 650;
+      color: #f3f6fd;
+      letter-spacing: -.02em;
+    }
+
+    .subtitle {
+      color: #a7b3c5;
+      margin: 8px 0 0;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .card {
+      background:
+        linear-gradient(180deg, rgba(18, 29, 47, .96), rgba(12, 20, 34, .98));
+      border: 1px solid var(--line-2);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.035);
+      overflow: hidden;
+      position: absolute;
+    }
+
+    .card-title {
+      color: #c7d0df;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: .10em;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .runtime-card {
+      top: 85px;
+      left: 0;
+      right: 0;
+      height: 180px;
+      padding: 18px 19px;
+    }
+
+    .runtime-inner {
+      display: grid;
+      grid-template-columns: 250px 1fr 330px;
+      gap: 24px;
+      height: 100%;
+      align-items: center;
+      padding-top: 4px;
+    }
+
+    .health-block {
+      display: flex;
+      align-items: center;
+      gap: 23px;
+    }
+
+    .status-orb {
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      border: 6px solid #57d879;
+      display: grid;
+      place-items: center;
+      color: #61e083;
+      box-shadow:
+        0 0 26px rgba(88, 218, 121, .36),
+        inset 0 0 35px rgba(80, 220, 125, .11);
+      background: rgba(31, 55, 57, .16);
+    }
+
+    .status-orb svg { width: 37px; height: 37px; stroke-width: 2.25; }
+
+    .health-copy h2 {
+      margin: 1px 0 9px;
+      color: var(--green);
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .health-copy p {
+      margin: 0;
+      color: #c1cbda;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .runtime-meta {
+      height: 100%;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: 58px 1px 64px;
+      column-gap: 26px;
+      align-content: center;
+      padding-top: 18px;
+      min-width: 0;
+    }
+
+    .meta-sep {
+      grid-column: 1 / -1;
+      height: 1px;
+      background: rgba(119, 139, 173, .15);
+      margin: 0 0 12px;
+    }
+
+    .meta-item .label {
+      color: #8f9caf;
+      font-size: 13px;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .meta-item .value {
+      color: #d5deed;
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .meta-item .value.purple { color: #a06dff; }
+    .meta-item .value.cyan { color: var(--cyan); }
+
+    .endpoint-line {
+      grid-column: 1 / 3;
+      padding-top: 2px;
+    }
+
+    .endpoint-value {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #8fe9f6;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 14px;
+      letter-spacing: -.02em;
+    }
+
+    .action-grid {
+      align-self: center;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .btn {
+      height: 38px;
+      border-radius: 6px;
+      border: 1px solid rgba(131, 151, 184, .18);
+      background: rgba(13, 23, 38, .72);
+      color: #d7dfec;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+    }
+
+    .btn svg { width: 16px; height: 16px; color: #bcc7d9; }
+
+    .btn.primary {
+      background: linear-gradient(180deg, rgba(127, 75, 232, .95), rgba(79, 49, 147, .95));
+      border-color: rgba(177, 137, 255, .54);
+      color: #fff;
+      box-shadow: 0 10px 26px rgba(101, 63, 209, .25), inset 0 1px 0 rgba(255,255,255,.20);
+    }
+
+    .btn.disabled {
+      opacity: .38;
+      filter: saturate(.6);
+    }
+
+    .btn.wide { grid-column: span 2; }
+
+    .quick-card {
+      top: 272px;
+      left: 0;
+      right: 0;
+      height: 112px;
+      padding: 18px 16px;
+    }
+
+    .quick-title { margin-bottom: 11px; }
+
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+    }
+
+    .quick-action {
+      height: 55px;
+      border: 1px solid rgba(131, 151, 184, .18);
+      background: rgba(12, 22, 38, .72);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 13px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+      min-width: 0;
+    }
+
+    .quick-icon {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      color: #9b68ff;
+      flex: 0 0 auto;
+    }
+
+    .quick-icon.cyan { color: #81d9fb; }
+    .quick-action svg { width: 28px; height: 28px; stroke-width: 1.65; }
+
+    .quick-text { min-width: 0; }
+    .quick-text strong {
+      display: block;
+      color: #e5ebf5;
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.1;
+    }
+    .quick-text span {
+      display: block;
+      margin-top: 4px;
+      color: #97a3b6;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mid-grid {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 395px;
+      height: 300px;
+      display: grid;
+      grid-template-columns: 374px 374px 1fr;
+      gap: 10px;
+    }
+
+    .mid-card {
+      position: relative;
+      height: 300px;
+      padding: 19px 17px 16px;
+    }
+
+    .profile-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 24px;
+      margin-bottom: 18px;
+    }
+
+    .cube-badge {
+      width: 41px;
+      height: 41px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, rgba(149, 92, 255, .35), rgba(80, 52, 151, .35));
+      border: 1px solid rgba(158, 115, 255, .34);
+      color: #a572ff;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
+
+    .cube-badge svg { width: 25px; height: 25px; }
+
+    .profile-name {
+      font-size: 18px;
+      color: #a16cff;
+      font-weight: 750;
+      flex: 1;
+    }
+
+    .active-badge {
+      color: var(--green);
+      border: 1px solid rgba(89, 220, 122, .42);
+      background: rgba(89, 220, 122, .13);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .info-table { margin-top: 4px; }
+    .info-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(121, 141, 173, .12);
+      color: #aab5c7;
+      font-size: 13px;
+    }
+
+    .info-row span:last-child {
+      color: #cbd5e6;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 13px;
+    }
+
+    .card-foot-btn {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 15px;
+      height: 38px;
+      border-radius: 6px;
+      border: 1px solid rgba(131, 151, 184, .18);
+      background: rgba(13, 23, 38, .72);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #cbd5e8;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .card-foot-btn svg { position: absolute; right: 12px; width: 15px; height: 15px; }
+
+    .warning-box {
+      margin-top: 30px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: var(--amber);
+      font-size: 18px;
+      font-weight: 750;
+    }
+
+    .warning-box svg { width: 37px; height: 37px; stroke-width: 1.8; }
+
+    .warning-copy {
+      margin-top: 23px;
+      color: #9eaabe;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .bullet-line {
+      margin-top: 21px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      color: #b7c1d2;
+      font-size: 13px;
+    }
+    .bullet-line .warn-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-top: 4px;
+      background: var(--amber);
+      box-shadow: 0 0 12px rgba(255, 189, 74, .45);
+      flex: 0 0 auto;
+    }
+
+    .command-card { padding: 19px 17px 16px; }
+
+    .code-box {
+      position: absolute;
+      left: 17px;
+      right: 17px;
+      top: 42px;
+      bottom: 58px;
+      border: 1px solid rgba(123, 143, 173, .18);
+      background: rgba(4, 7, 12, .77);
+      border-radius: 7px;
+      padding: 13px 15px;
+      overflow: hidden;
+      font-family: "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 1.42;
+      color: #b9c9e2;
+      white-space: pre;
+      box-shadow: inset 0 1px 22px rgba(0,0,0,.34);
+    }
+
+    .code-purple { color: #bc7cff; }
+    .code-cyan { color: #6ddfeb; }
+    .code-green { color: #7ee195; }
+    .code-comment { color: #8491a4; }
+
+    .copy-command {
+      position: absolute;
+      left: 17px;
+      right: 17px;
+      bottom: 14px;
+      height: 37px;
+      border-radius: 6px;
+      border: 1px solid rgba(131, 151, 184, .18);
+      background: rgba(13, 23, 38, .82);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #cbd5e8;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .copy-command svg { position: absolute; right: 13px; width: 16px; height: 16px; }
+
+    .bottom-grid {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 705px;
+      height: 300px;
+      display: grid;
+      grid-template-columns: 768px 1fr;
+      gap: 10px;
+    }
+
+    .bottom-card {
+      position: relative;
+      height: 300px;
+      padding: 20px 17px 16px;
+    }
+
+    .card-tools {
+      position: absolute;
+      right: 18px;
+      top: 14px;
+      display: flex;
+      gap: 9px;
+      align-items: center;
+    }
+
+    .small-btn {
+      height: 35px;
+      border: 1px solid rgba(131, 151, 184, .18);
+      background: rgba(14, 24, 40, .8);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 14px;
+      color: #c4cedf;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .small-btn svg { width: 15px; height: 15px; }
+
+    .log-box {
+      position: absolute;
+      left: 15px;
+      right: 15px;
+      bottom: 13px;
+      top: 57px;
+      border-radius: 7px;
+      border: 1px solid rgba(123, 143, 173, .19);
+      background: rgba(4, 7, 12, .72);
+      padding: 12px 12px;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.52;
+      color: #c4cfdf;
+      overflow: hidden;
+      box-shadow: inset 0 1px 20px rgba(0,0,0,.34);
+    }
+
+    .log-time { color: #9aabbf; }
+    .log-info { color: #51d987; font-weight: 800; }
+    .log-warn { color: #ffbe4b; font-weight: 800; }
+    .log-bracket { color: #aeb7c5; }
+    .log-path { color: #d2dbe9; }
+
+    .live-badge {
+      position: absolute;
+      right: 19px;
+      top: 15px;
+      height: 26px;
+      border-radius: 999px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #a9b6c9;
+      font-size: 12px;
+      border: 1px solid rgba(133, 153, 188, .16);
+      background: rgba(13, 23, 38, .72);
+    }
+
+    .telemetry {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 13px;
+      top: 58px;
+      border-radius: 7px;
+      border: 1px solid rgba(123, 143, 173, .16);
+      background: rgba(8, 14, 24, .44);
+      padding: 11px 13px;
+    }
+
+    .tele-row {
+      display: grid;
+      grid-template-columns: 150px 112px 1fr 45px;
+      align-items: center;
+      gap: 16px;
+      height: 27px;
+      font-size: 13px;
+      color: #c5cedd;
+    }
+
+    .tele-row .name { color: #aab5c6; }
+    .tele-row .value { color: #d3dce9; font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+
+    .bar {
+      height: 4px;
+      background: rgba(103, 122, 154, .23);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(116, 230, 240, .9), rgba(103, 215, 235, .55));
+      box-shadow: 0 0 12px rgba(116, 230, 240, .25);
+    }
+
+    .inspector {
+      position: absolute;
+      z-index: 4;
+      top: 68px;
+      right: 10px;
+      width: 306px;
+      bottom: 13px;
+      border: 1px solid rgba(133, 153, 188, .19);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(12, 21, 35, .94), rgba(7, 13, 23, .98));
+      box-shadow: -18px 0 80px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.035);
+      overflow: hidden;
+    }
+
+    .inspector-head {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 15px;
+      border-bottom: 1px solid rgba(133,153,188,.12);
+      color: #d3dbe8;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .11em;
+      font-weight: 900;
+    }
+
+    .inspector-body { padding: 13px 14px 14px; }
+
+    .inspect-section {
+      padding: 0 0 14px;
+      margin-bottom: 15px;
+      border-bottom: 1px solid rgba(133,153,188,.13);
+    }
+    .inspect-section:last-child { border-bottom: 0; margin-bottom: 0; }
+
+    .inspect-label {
+      color: #cdd5e2;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      font-size: 11px;
+      font-weight: 900;
+      margin-bottom: 12px;
+    }
+
+    .inspect-row {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: 10px;
+      align-items: center;
+      min-height: 24px;
+      color: #9eabbc;
+      font-size: 13px;
+    }
+
+    .inspect-row .val {
+      color: #d8e1ee;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+      text-align: right;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .inspect-row .ok {
+      color: var(--green);
+      font-family: "Inter", "Segoe UI", sans-serif;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .inspect-row .ok::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 12px rgba(89,220,122,.55);
+    }
+
+    .inspect-copy {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      align-items: center;
+    }
+    .inspect-copy svg { width: 15px; height: 15px; color: #a8b5c7; flex: 0 0 auto; }
+
+    .validate-btn {
+      height: 34px;
+      border-radius: 6px;
+      border: 1px solid rgba(133,153,188,.16);
+      background: rgba(15, 25, 41, .88);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: #d4dce8;
+      font-size: 13px;
+      font-weight: 700;
+      margin-top: 12px;
+    }
+    .validate-btn svg { width: 15px; height: 15px; }
+
+    .noise {
+      position: absolute;
+      inset: 0;
+      opacity: .055;
+      z-index: 5;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+    <defs>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-linecap="round"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5" fill="none" stroke="currentColor"/><rect x="14" y="4" width="6" height="6" rx="1.5" fill="none" stroke="currentColor"/><rect x="4" y="14" width="6" height="6" rx="1.5" fill="none" stroke="currentColor"/><rect x="14" y="14" width="6" height="6" rx="1.5" fill="none" stroke="currentColor"/></symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M5 17a8 8 0 1 1 14 0" fill="none" stroke="currentColor"/><path d="m12 13 4-4" fill="none" stroke="currentColor" stroke-linecap="round"/><circle cx="12" cy="13" r="1.7" fill="none" stroke="currentColor"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z" fill="none" stroke="currentColor"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor"/></symbol>
+      <symbol id="i-cube" viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" fill="none" stroke="currentColor"/><path d="M12 12 4.5 7.8M12 12l7.5-4.2M12 12v8" fill="none" stroke="currentColor"/></symbol>
+      <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3" fill="none" stroke="currentColor"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" fill="none" stroke="currentColor"/></symbol>
+      <symbol id="i-artifact" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2" fill="none" stroke="currentColor"/><path d="M9 7h6M9 11h6M9 15h4" fill="none" stroke="currentColor" stroke-linecap="round"/></symbol>
+      <symbol id="i-log" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2" fill="none" stroke="currentColor"/><path d="M9 8h6M9 12h6M9 16h4" fill="none" stroke="currentColor" stroke-linecap="round"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2" fill="none" stroke="currentColor"/><path d="m9 15 2.5-3 2 2 2.5-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor"/><path d="M19 12a7.5 7.5 0 0 0-.1-1l2-1.6-2-3.5-2.5 1a8 8 0 0 0-1.8-1L14.3 3h-4.6l-.4 2.9a8 8 0 0 0-1.8 1L5 5.9l-2 3.5L5 11a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.5 2.5-1a8 8 0 0 0 1.8 1l.4 2.9h4.6l.4-2.9a8 8 0 0 0 1.8-1l2.5 1 2-3.5-2-1.6c.1-.3.1-.7.1-1Z" fill="none" stroke="currentColor" stroke-linejoin="round"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor"/><path d="M10 9a2 2 0 1 1 3 1.7c-.8.5-1.1 1-1.1 1.8M12 16.7h.01" fill="none" stroke="currentColor" stroke-linecap="round"/></symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor"/><path d="m7 9 3 3-3 3M12 15h5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 1 0-12 0c0 7-2 7-2 8h16c0-1-2-1-2-8Z" fill="none" stroke="currentColor"/><path d="M10 20a2 2 0 0 0 4 0" fill="none" stroke="currentColor"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4 10-10" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14.5 4.7M4 12A8 8 0 0 1 18.5 7.3" fill="none" stroke="currentColor" stroke-linecap="round"/><path d="M5 17H2v-3M19 7h3v3" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="8" y="8" width="8" height="8" rx="1" fill="none" stroke="currentColor"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7-11-7Z" fill="none" stroke="currentColor" stroke-linejoin="round"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor"/><rect x="5" y="5" width="11" height="11" rx="2" fill="none" stroke="currentColor" opacity=".65"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9" fill="none" stroke="currentColor" stroke-linecap="round"/><path d="M19 14v5H5V5h5" fill="none" stroke="currentColor" stroke-linecap="round"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chevron-up" viewBox="0 0 24 24"><path d="m7 14 5-5 5 5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-zap" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z" fill="none" stroke="currentColor" stroke-linejoin="round"/></symbol>
+      <symbol id="i-load" viewBox="0 0 24 24"><path d="M6 9V4h5M18 15v5h-5M8 5a8 8 0 0 1 11 7M16 19a8 8 0 0 1-11-7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/><rect x="8" y="9" width="8" height="6" rx="1.5" fill="none" stroke="currentColor"/></symbol>
+      <symbol id="i-nodes" viewBox="0 0 24 24"><circle cx="7" cy="7" r="3" fill="none" stroke="currentColor"/><circle cx="17" cy="8" r="3" fill="none" stroke="currentColor"/><circle cx="12" cy="17" r="3" fill="none" stroke="currentColor"/><path d="m10 8 4 .5M8.5 10l2.2 4.2M15.5 10.5l-2 3.8" fill="none" stroke="currentColor"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v5c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3Z" fill="none" stroke="currentColor"/><path d="m9 12 2 2 4-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" fill="none" stroke="currentColor" stroke-linecap="round"/><path d="M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-linecap="round"/></symbol>
+      <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 3 22 20H2L12 3Z" fill="none" stroke="currentColor" stroke-linejoin="round"/><path d="M12 9v5M12 17.5h.01" fill="none" stroke="currentColor" stroke-linecap="round"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2" fill="none" stroke="currentColor"/><path d="M8 21h8M12 17v4" fill="none" stroke="currentColor" stroke-linecap="round"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="stage-wrap">
+    <div class="stage">
+      <header class="topbar">
+        <div class="status-strip">
+          <div class="status-pill"><span class="dot"></span>Service healthy</div>
+          <div class="status-pill"><span class="dot"></span>Runtime running</div>
+          <div class="status-pill">Port&nbsp; <strong style="color:#dce4f0;font-weight:700">8085</strong></div>
+          <div class="status-pill">Uptime&nbsp; <strong style="color:#dce4f0;font-weight:700">02h 41m 32s</strong></div>
+        </div>
+        <div class="top-actions">
+          <div class="top-icon"><svg><use href="#i-terminal"/></svg></div>
+          <div class="top-icon"><svg><use href="#i-bell"/></svg><span class="notif-badge">2</span></div>
+          <div class="top-icon"><svg><use href="#i-gear"/></svg></div>
+          <div class="avatar">OP</div>
+        </div>
+      </header>
+
+      <aside class="sidebar">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 42 48" aria-hidden="true">
+            <path d="M21 2 38 13v22L21 46 4 35V13L21 2Z" fill="#7d63dc"/>
+            <path d="M21 2v44L4 35V13L21 2Z" fill="#a998ff"/>
+            <path d="M21 2 38 13 21 20 4 13 21 2Z" fill="#ece8ff" opacity=".95"/>
+            <path d="M21 20 38 13v22L21 46V20Z" fill="#6045c6"/>
+            <path d="M21 20 4 13v22l17 11V20Z" fill="#8a77e8"/>
+            <path d="m21 2 8 23-8 21-8-21L21 2Z" fill="#f6f2ff" opacity=".58"/>
+          </svg>
+          <div class="brand-name"><strong>ObsidianLM</strong><span>Operator</span></div>
+          <div class="menu-btn"><svg><use href="#i-menu"/></svg></div>
+        </div>
+        <nav class="nav">
+          <section class="nav-section">
+            <div class="section-label">Core</div>
+            <div class="nav-item active"><svg><use href="#i-grid"/></svg>Dashboard</div>
+            <div class="nav-item"><svg><use href="#i-gauge"/></svg>Runtime<span class="side-dot"></span></div>
+            <div class="nav-item"><svg><use href="#i-layers"/></svg>Profiles</div>
+            <div class="nav-item"><svg><use href="#i-cube"/></svg>Models</div>
+          </section>
+          <section class="nav-section">
+            <div class="section-label">Library</div>
+            <div class="nav-item"><svg><use href="#i-database"/></svg>Builds</div>
+            <div class="nav-item"><svg><use href="#i-artifact"/></svg>Artifacts</div>
+          </section>
+          <section class="nav-section">
+            <div class="section-label">Observability</div>
+            <div class="nav-item"><svg><use href="#i-log"/></svg>Logs</div>
+            <div class="nav-item"><svg><use href="#i-chart"/></svg>Telemetry</div>
+          </section>
+          <section class="nav-section">
+            <div class="section-label">System</div>
+            <div class="nav-item"><svg><use href="#i-gear"/></svg>Settings</div>
+            <div class="nav-item"><svg><use href="#i-help"/></svg>System</div>
+          </section>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="footer-screen"><svg width="25" height="25"><use href="#i-monitor"/></svg></div>
+          <div class="footer-title"><strong>obx-operator</strong><span>v0.8.2</span></div>
+          <svg width="16" height="16" style="color:#9eabc0"><use href="#i-chevron-up"/></svg>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="eyebrow">Command Center</div>
+        <h1 class="page-title">ObsidianLM operator console</h1>
+        <p class="subtitle">Control and monitor your local llama.cpp runtimes with precision.</p>
+
+        <section class="card runtime-card">
+          <div class="card-title">Runtime Status</div>
+          <div class="runtime-inner">
+            <div class="health-block">
+              <div class="status-orb"><svg><use href="#i-check"/></svg></div>
+              <div class="health-copy"><h2>Service healthy</h2><p>Runtime running</p></div>
+            </div>
+            <div class="runtime-meta">
+              <div class="meta-item"><div class="label">Active profile</div><div class="value purple">Qwen 3.6 Coding 65K</div></div>
+              <div class="meta-item"><div class="label">Port</div><div class="value cyan">8085</div></div>
+              <div class="meta-item"><div class="label">PID</div><div class="value">21748</div></div>
+              <div class="meta-item"><div class="label">Uptime</div><div class="value">02h 41m 32s</div></div>
+              <div class="meta-sep"></div>
+              <div class="meta-item endpoint-line"><div class="label">Endpoint</div><div class="endpoint-value">http://127.0.0.1:8085 <svg width="15" height="15"><use href="#i-copy"/></svg></div></div>
+            </div>
+            <div class="action-grid">
+              <div class="btn primary"><svg><use href="#i-refresh"/></svg>Restart</div>
+              <div class="btn"><svg><use href="#i-stop"/></svg>Stop</div>
+              <div class="btn disabled wide"><svg><use href="#i-play"/></svg>Start</div>
+              <div class="btn"><span>Copy endpoint</span><svg><use href="#i-copy"/></svg></div>
+              <div class="btn"><span>Open logs</span><svg><use href="#i-external"/></svg></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card quick-card">
+          <div class="card-title quick-title">Quick Actions</div>
+          <div class="quick-actions">
+            <div class="quick-action"><div class="quick-icon"><svg><use href="#i-zap"/></svg></div><div class="quick-text"><strong>Switch profile</strong><span>Change active profile</span></div></div>
+            <div class="quick-action"><div class="quick-icon"><svg><use href="#i-load"/></svg></div><div class="quick-text"><strong>Load model</strong><span>Load a different model</span></div></div>
+            <div class="quick-action"><div class="quick-icon"><svg><use href="#i-nodes"/></svg></div><div class="quick-text"><strong>Build runtime</strong><span>Compile llama.cpp</span></div></div>
+            <div class="quick-action"><div class="quick-icon cyan"><svg><use href="#i-shield"/></svg></div><div class="quick-text"><strong>Validate setup</strong><span>Run health checks</span></div></div>
+            <div class="quick-action"><div class="quick-icon"><svg><use href="#i-artifact"/></svg></div><div class="quick-text"><strong>Open config</strong><span>Edit active profile</span></div></div>
+            <div class="quick-action"><div class="quick-icon"><svg><use href="#i-list"/></svg></div><div class="quick-text"><strong>View logs</strong><span>Tail runtime logs</span></div></div>
+          </div>
+        </section>
+
+        <div class="mid-grid">
+          <section class="card mid-card">
+            <div class="card-title">Active Profile Summary</div>
+            <div class="profile-head">
+              <div class="cube-badge"><svg><use href="#i-cube"/></svg></div>
+              <div class="profile-name">Qwen 3.6 Coding 65K</div>
+              <div class="active-badge">Active</div>
+            </div>
+            <div class="info-table">
+              <div class="info-row"><span>Context length</span><span>65,536</span></div>
+              <div class="info-row"><span>Threads</span><span>12</span></div>
+              <div class="info-row"><span>Batch size</span><span>512</span></div>
+              <div class="info-row"><span>GPU layers</span><span>99% (46/46)</span></div>
+              <div class="info-row"><span>Prompt cache</span><span>Enabled</span></div>
+              <div class="info-row"><span>Last loaded</span><span>Today, 09:41 AM</span></div>
+            </div>
+            <div class="card-foot-btn">View profile details <svg><use href="#i-chevron"/></svg></div>
+          </section>
+
+          <section class="card mid-card">
+            <div class="card-title">Safety &amp; Warnings</div>
+            <div class="warning-box"><svg><use href="#i-warning"/></svg><span>1 warning</span></div>
+            <div class="warning-copy">Your runtime is running with non-default settings.</div>
+            <div class="bullet-line"><span class="warn-dot"></span><span>GPU offload is set to 99%. Monitor VRAM usage.</span></div>
+            <div class="card-foot-btn">View all checks <svg><use href="#i-chevron"/></svg></div>
+          </section>
+
+          <section class="card mid-card command-card">
+            <div class="card-title">Command Preview</div>
+            <div class="code-box"><span class="code-purple">llama-server</span> \
+  <span class="code-cyan">--model</span> "D:/Models/Qwen3-3.6B-Coding.Q4_K_M.gguf" \
+  <span class="code-cyan">--port</span> 8085 \
+  <span class="code-cyan">--ctx-size</span> 65536 \
+  <span class="code-cyan">--threads</span> 12 \
+  <span class="code-cyan">--batch-size</span> 512 \
+  <span class="code-cyan">--n-gpu-layers</span> 46 \
+  <span class="code-cyan">--cache-type-k</span> q8_0 \
+  <span class="code-cyan">--cache-type-v</span> q8_0 \
+  <span class="code-cyan">--parallel</span> 1</div>
+            <div class="copy-command">Copy command <svg><use href="#i-copy"/></svg></div>
+          </section>
+        </div>
+
+        <div class="bottom-grid">
+          <section class="card bottom-card">
+            <div class="card-title">Recent Runtime Logs</div>
+            <div class="card-tools">
+              <div class="small-btn"><svg><use href="#i-stop"/></svg>Pause</div>
+              <div class="small-btn">Open full logs <svg><use href="#i-external"/></svg></div>
+            </div>
+            <div class="log-box">
+<span class="log-time">2025-05-17 11:21:32</span>  <span class="log-info">INFO</span>  <span class="log-bracket">[main]</span> llama_server started on http://127.0.0.1:8085
+<span class="log-time">2025-05-17 11:21:32</span>  <span class="log-info">INFO</span>  <span class="log-bracket">[model]</span> loaded 'D:/Models/Qwen3-3.6B-Coding.Q4_K_M.gguf'
+<span class="log-time">2025-05-17 11:21:33</span>  <span class="log-info">INFO</span>  <span class="log-bracket">[model]</span> context size = 65536
+<span class="log-time">2025-05-17 11:21:33</span>  <span class="log-info">INFO</span>  <span class="log-bracket">[gpu]</span> offloaded 46/46 layers to GPU
+<span class="log-time">2025-05-17 11:21:33</span>  <span class="log-info">INFO</span>  <span class="log-bracket">[kv-cache]</span> type_k=q8_0 type_v=q8_0
+<span class="log-time">2025-05-17 11:21:34</span>  <span class="log-info">INFO</span>  <span class="log-bracket">[http]</span> listening on port 8085
+<span class="log-time">2025-05-17 11:21:45</span>  <span class="log-info">INFO</span>  <span class="log-bracket">[request]</span> POST /completion 200 (1.24s)
+<span class="log-time">2025-05-17 11:22:11</span>  <span class="log-warn">WARN</span>  <span class="log-bracket">[gpu]</span> high VRAM usage: 14.7 / 15.9 GB (92%)
+<span class="log-time">2025-05-17 11:22:18</span>  <span class="log-info">INFO</span>  <span class="log-bracket">[request]</span> POST /completion 200 (2.03s)</div>
+          </section>
+
+          <section class="card bottom-card">
+            <div class="card-title">GPU / Telemetry</div>
+            <div class="live-badge"><span class="dot" style="width:7px;height:7px"></span>Live</div>
+            <div class="telemetry">
+              <div class="tele-row"><span class="name">GPU</span><span class="value">NVIDIA GeForce RTX 4090</span><div></div><span></span></div>
+              <div class="tele-row"><span class="name">VRAM Usage</span><span class="value">14.7 / 15.9 GB</span><div class="bar"><span style="width:92%"></span></div><span class="value">92%</span></div>
+              <div class="tele-row"><span class="name">GPU Temp</span><span class="value">58 °C</span><div></div><span></span></div>
+              <div class="tele-row"><span class="name">Utilization</span><span class="value">76%</span><div class="bar"><span style="width:76%"></span></div><span class="value">76%</span></div>
+              <div class="tele-row"><span class="name">Power Draw</span><span class="value">286 W</span><div></div><span></span></div>
+              <div class="tele-row"><span class="name">System RAM</span><span class="value">26.1 / 64.0 GB</span><div class="bar"><span style="width:41%"></span></div><span class="value">41%</span></div>
+              <div class="tele-row"><span class="name">CPU</span><span class="value">12%</span><div></div><span></span></div>
+              <div class="tele-row"><span class="name">Disk (D:)</span><span class="value">512.3 / 1.9 TB</span><div class="bar"><span style="width:26%"></span></div><span class="value">26%</span></div>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <aside class="inspector">
+        <div class="inspector-head"><span>Inspector</span><svg width="16" height="16"><use href="#i-chevron-up"/></svg></div>
+        <div class="inspector-body">
+          <section class="inspect-section">
+            <div class="inspect-label">Endpoint</div>
+            <div class="inspect-row"><span>URL</span><span class="val inspect-copy">http://127.0.0.1:8085 <svg><use href="#i-copy"/></svg></span></div>
+            <div class="inspect-row"><span>Health</span><span class="val ok">OK</span></div>
+          </section>
+
+          <section class="inspect-section">
+            <div class="inspect-label">Process</div>
+            <div class="inspect-row"><span>PID</span><span class="val">21748</span></div>
+            <div class="inspect-row"><span>Uptime</span><span class="val">02h 41m 32s</span></div>
+            <div class="inspect-row"><span>Started</span><span class="val">Today, 09:41 AM</span></div>
+            <div class="inspect-row"><span>User</span><span class="val">operator</span></div>
+            <div class="inspect-row"><span>Priority</span><span class="val">Normal</span></div>
+          </section>
+
+          <section class="inspect-section">
+            <div class="inspect-label">Profile</div>
+            <div class="inspect-row"><span>Name</span><span class="val">Qwen 3.6 Coding 65K</span></div>
+            <div class="inspect-row"><span>Context length</span><span class="val">65,536</span></div>
+            <div class="inspect-row"><span>Threads</span><span class="val">12</span></div>
+            <div class="inspect-row"><span>Batch size</span><span class="val">512</span></div>
+            <div class="inspect-row"><span>GPU layers</span><span class="val">46 (99%)</span></div>
+            <div class="inspect-row"><span>Prompt cache</span><span class="val">Enabled</span></div>
+          </section>
+
+          <section class="inspect-section">
+            <div class="inspect-label">Model</div>
+            <div class="inspect-row"><span>Path</span><span class="val inspect-copy">D:/Models/Qwen3-3.6B-... <svg><use href="#i-copy"/></svg></span></div>
+            <div class="inspect-row"><span>File size</span><span class="val">2.72 GB</span></div>
+            <div class="inspect-row"><span>File type</span><span class="val">Q4_K_M</span></div>
+            <div class="inspect-row"><span>Loaded</span><span class="val" style="color:var(--green);font-family:Inter,Segoe UI,sans-serif;font-weight:700">Yes</span></div>
+          </section>
+
+          <section class="inspect-section">
+            <div class="inspect-label">Build</div>
+            <div class="inspect-row"><span>llama.cpp</span><span class="val">b4632 (2025-05-12)</span></div>
+            <div class="inspect-row"><span>Compiler</span><span class="val">MSVC 19.38.33135</span></div>
+            <div class="inspect-row"><span>Build type</span><span class="val">Release</span></div>
+            <div class="inspect-row"><span>Build path</span><span class="val inspect-copy">D:/llama.cpp/build/bin/... <svg><use href="#i-copy"/></svg></span></div>
+          </section>
+
+          <section class="inspect-section">
+            <div class="inspect-label">Validation</div>
+            <div class="inspect-row"><span>Runtime binary</span><span class="val ok">OK</span></div>
+            <div class="inspect-row"><span>Model file</span><span class="val ok">OK</span></div>
+            <div class="inspect-row"><span>Port availability</span><span class="val ok">OK</span></div>
+            <div class="inspect-row"><span>GPU compatibility</span><span class="val ok">OK</span></div>
+            <div class="inspect-row"><span>Dependencies</span><span class="val ok">OK</span></div>
+            <div class="validate-btn">Run validation <svg><use href="#i-refresh"/></svg></div>
+          </section>
+        </div>
+      </aside>
+      <div class="noise"></div>
+    </div>
+  </div>
+
+  <script>
+    function resizeStage() {
+      // Fit the 1080px-tall mockup into the visible browser viewport, then
+      // widen the logical canvas before scaling so it still fills the full
+      // browser width. This avoids both side letterboxing and vertical scrollbars
+      // when the browser chrome leaves less than 1080px of usable height.
+      const viewportW = window.innerWidth || 1920;
+      const viewportH = window.innerHeight || 1080;
+      const s = Math.min(1, viewportH / 1080);
+      const logicalW = Math.max(1920, Math.ceil(viewportW / s));
+      document.documentElement.style.setProperty('--scale', s);
+      document.documentElement.style.setProperty('--stage-w', `${logicalW}px`);
+    }
+    window.addEventListener('resize', resizeStage, { passive: true });
+    resizeStage();
+  </script>
+</body>
+</html>

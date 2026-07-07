@@ -1,62 +1,55 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
-  import type { PageId } from "../navigation";
-  import SidebarNav from "./SidebarNav.svelte";
-  import TopStatusStrip from "./TopStatusStrip.svelte";
+  import Sidebar from "./Sidebar.svelte";
+  import TopHeader from "./TopHeader.svelte";
+  import { defaultShellStatus, type ShellStatusSummary } from "./shell-status";
 
-  let {
-    activePage,
-    runtimeStatus,
-    runtimeTone,
-    serviceLabel,
-    serviceState,
-    port,
-    uptime,
-    isLoading,
-    authPendingAction,
-    onRefresh,
-    onLogout,
-    inspector,
-    children
-  }: {
-    activePage: PageId;
-    runtimeStatus: string;
-    runtimeTone: string;
-    serviceLabel: string;
-    serviceState: string;
-    port: string;
-    uptime?: string;
-    isLoading: boolean;
-    authPendingAction: string | null;
-    onRefresh: () => Promise<void> | void;
-    onLogout: () => Promise<void> | void;
-    inspector?: Snippet;
-    children?: Snippet;
-  } = $props();
+  export let activeHash = "#dashboard";
+  export let shellStatus: ShellStatusSummary = defaultShellStatus;
 </script>
 
-<main class="operator-shell">
-  <SidebarNav {activePage} {runtimeStatus} {runtimeTone} />
-  <section class="operator-workspace">
-    <TopStatusStrip
-      {serviceLabel}
-      {serviceState}
-      {runtimeStatus}
-      {runtimeTone}
-      {port}
-      {uptime}
-      {isLoading}
-      {authPendingAction}
-      {onRefresh}
-      {onLogout}
-    />
-    <div class="operator-content">
-      {@render children?.()}
-    </div>
-  </section>
-  {#if inspector}
-    <aside class="operator-inspector-shell" aria-label="Page inspector">
-      {@render inspector()}
-    </aside>
-  {/if}
-</main>
+<div class="app-shell">
+  <Sidebar {activeHash} {shellStatus} />
+  <div class="app-main-column">
+    <TopHeader {shellStatus} />
+    <section class="app-content">
+      <slot />
+    </section>
+  </div>
+</div>
+
+<style>
+  .app-shell {
+    height: 100vh;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    grid-template-rows: var(--topbar-height) minmax(0, 1fr);
+    background: linear-gradient(180deg, #07101c 0%, #050a13 100%);
+  }
+
+  .app-shell > :global(.sidebar) {
+    grid-row: 1 / -1;
+  }
+
+  .app-main-column {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    min-width: 0;
+    display: grid;
+    grid-template-rows: var(--topbar-height) minmax(0, 1fr);
+    background: transparent;
+  }
+
+  .app-content {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  @media (max-width: 900px) {
+    .app-shell {
+      grid-template-columns: 86px minmax(0, 1fr);
+    }
+  }
+</style>

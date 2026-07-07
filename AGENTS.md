@@ -30,7 +30,20 @@ Follow the global OpenCode rules first. This file only adds ObsidianLM-specific 
 - Run frontend commands from `apps/web`.
 - Run shared/package commands from the relevant package folder.
 - Use the existing package manager and scripts already present in the repo.
-- Do not start dev servers, service processes, watchers, or queue workers unless explicitly asked or required for a bounded smoke test with guaranteed cleanup.
+- Do not run `npm run dev`, `npm run start`, watchers, service processes, or queue workers as foreground verification commands.
+- Only start a dev/service process when explicitly asked or when required for a bounded smoke/e2e check.
+- For bounded smoke/e2e checks:
+  - Start the service as a temporary background process using `Start-Process -PassThru` (do NOT use `-RedirectStandardOutput` or `-RedirectStandardError` with `Start-Process` on Windows — those flags wait for the process to exit, causing the command to hang indefinitely).
+  - On Windows, use `npm.cmd`, not bare `npm`, when using `Start-Process`.
+  - Use disposable `.tmp/` data and log directories when possible.
+  - Use a non-default local test port unless the task requires a specific port.
+  - Poll a health endpoint such as `/api/auth/status` with a hard timeout.
+  - Record the PID from `Start-Process -PassThru` for later cleanup.
+  - Run the required check.
+  - Always stop the full process tree afterward with `Stop-Process -Id <PID> -Force`, even if the check fails.
+  - If startup fails after the timeout, the process should already be stopped or can be killed by PID.
+
+- If the required port is already in use, verify whether it is the intended isolated test service before reusing it. Otherwise stop the stale process or choose a different test port.
 - Prefer the repo’s existing tests, typechecks, lint/build scripts, or targeted service/web checks for files changed.
 - Only claim commands passed if they were actually run.
 

@@ -10,6 +10,8 @@ const publicApiRoutes = new Set([
   "POST /api/auth/logout"
 ]);
 
+const authDisabled = process.env.DISABLE_AUTH === "true";
+
 export async function registerAdminAuthProtection(app: FastifyInstance): Promise<void> {
   app.addHook("preHandler", async (request, reply) => {
     const path = request.routeOptions.url ?? request.url.split("?")[0] ?? request.url;
@@ -17,14 +19,13 @@ export async function registerAdminAuthProtection(app: FastifyInstance): Promise
       return;
     }
 
+    if (authDisabled) {
+      return;
+    }
+
     const settings = await loadSettings();
     if (!settings.adminTokenHash) {
-      return reply.status(423).send({
-        error: "setup_required",
-        message: "Admin token setup is required before this API route can be used.",
-        configured: false,
-        authRequired: false
-      });
+      return;
     }
 
     const token = extractBearerToken(request);
