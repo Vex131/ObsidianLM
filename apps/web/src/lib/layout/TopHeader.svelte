@@ -1,11 +1,17 @@
 <script lang="ts">
   import Icon from "../components/Icon.svelte";
+  import StatusDot from "../components/StatusDot.svelte";
   import { defaultShellStatus, type ShellStatusSummary } from "./shell-status";
 
   export let shellStatus: ShellStatusSummary = defaultShellStatus;
 </script>
 
 <header class="top-header">
+  <div class="header-micro-status" aria-label="Status summary">
+    <div class="status-segment"><StatusDot tone={shellStatus.serviceTone} />{shellStatus.serviceLabel}</div>
+    <div class="status-segment"><StatusDot tone={shellStatus.runtimeTone} />{shellStatus.runtimeLabel}</div>
+    <div class="status-segment">Port <strong>{shellStatus.portLabel}</strong></div>
+  </div>
   <div class="header-actions" aria-label="Header actions">
     <button type="button" aria-label="Open terminal">
       <Icon name="terminal" size={18} />
@@ -48,6 +54,41 @@
     display: flex;
     align-items: center;
     gap: 12px;
+  }
+
+  .header-micro-status {
+    grid-column: 2;
+    justify-self: center;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 34px;
+    border: 1px solid rgba(132, 153, 188, 0.14);
+    border-radius: var(--radius-md);
+    background: rgba(18, 29, 48, 0.62);
+    overflow: hidden;
+    color: #a7b3c5;
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .status-segment {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 100%;
+    padding: 0 14px;
+    border-right: 1px solid rgba(132, 153, 188, 0.12);
+    white-space: nowrap;
+  }
+
+  .status-segment:last-child {
+    border-right: 0;
+  }
+
+  .status-segment strong {
+    color: #dce4f0;
+    font-weight: 800;
   }
 
   .header-actions button,
@@ -97,11 +138,15 @@
     letter-spacing: 0.05em;
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1120px) {
     .top-header {
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 12px;
       padding: 0 14px;
+    }
+
+    .header-micro-status {
+      display: none;
     }
 
     .header-actions {

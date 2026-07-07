@@ -68,7 +68,7 @@ export async function fetchDashboardData(activeProfileIdFallback: string | null 
 
   const [runtimeResponse, logsResponse, gpuStatus, profilesResponse] = await Promise.all([
     protectedFetch<RuntimeStateResponse>(API_ENDPOINTS.runtime.state, token),
-    protectedFetch<RuntimeLogsResponse>(API_ENDPOINTS.runtime.logs(9), token),
+    protectedFetch<RuntimeLogsResponse>(API_ENDPOINTS.runtime.logs(24), token),
     protectedFetch<GpuMonitoringStatus>(API_ENDPOINTS.monitoring.gpu, token),
     protectedFetch<ProfileListResponse>(API_ENDPOINTS.profiles.list, token)
   ]);

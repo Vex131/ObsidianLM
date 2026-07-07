@@ -40,6 +40,12 @@ ObsidianLM should combine these reference directions without copying any one pro
 
 **Chosen direction:** **Obsidian Operator** — a matte dark runtime cockpit with command-palette speed and developer-console clarity.
 
+### Current Dashboard Baseline
+
+`docs/design/reference/obsidianlm-dashboard.html` is the current dashboard visual baseline. The implemented Dashboard page establishes the reusable shell, sidebar, top header, page heading, panel, status, meter, card, and dense data-row conventions for future pages.
+
+Common visual primitives and tokens belong in `apps/web/src/styles.css`; component-local styles should only cover page- or component-specific layout. Later pages should follow the Dashboard heading rhythm, 10px dashboard card gaps, matte panel treatment, mini status pills, mono value styling, and compact log/table surfaces unless a page has a specific reason to diverge.
+
 ## 3. Core UX Principles
 
 ### 3.1 State Before Controls
@@ -92,38 +98,35 @@ Use CSS custom properties. Keep the palette small and semantic.
 ```css
 :root {
   /* Backgrounds */
-  --color-bg: #06070d;
-  --color-bg-elevated: #0a0d16;
-  --color-bg-panel: #0e1320;
-  --color-bg-panel-strong: #111827;
-  --color-bg-hover: #151d2e;
+  --color-bg: #050914;
+  --color-bg-elevated: #07101d;
+  --color-panel: rgba(17, 27, 43, 0.86);
+  --color-panel-strong: rgba(14, 23, 38, 0.96);
 
   /* Borders */
-  --color-border-subtle: rgba(148, 163, 184, 0.14);
-  --color-border: rgba(148, 163, 184, 0.22);
-  --color-border-strong: rgba(203, 213, 225, 0.32);
+  --color-line: rgba(116, 137, 171, 0.18);
+  --color-line-strong: rgba(133, 153, 184, 0.24);
 
   /* Text */
-  --color-text: #eef2ff;
-  --color-text-muted: #aab6ca;
-  --color-text-subtle: #748198;
-  --color-text-disabled: #4f5b6f;
+  --color-text: #e8eefb;
+  --color-muted: #a5b1c7;
+  --color-dim: #69758b;
 
   /* Brand accents */
-  --color-brand: #8b5cf6;
-  --color-brand-soft: rgba(139, 92, 246, 0.16);
-  --color-cyan: #38bdf8;
-  --color-cyan-soft: rgba(56, 189, 248, 0.14);
+  --color-purple: #8f5cff;
+  --color-purple-strong: #6c3ee7;
+  --color-cyan: #42d7e8;
 
   /* Runtime states */
-  --color-success: #22c55e;
-  --color-success-soft: rgba(34, 197, 94, 0.14);
-  --color-warning: #f59e0b;
-  --color-warning-soft: rgba(245, 158, 11, 0.14);
-  --color-danger: #ef4444;
-  --color-danger-soft: rgba(239, 68, 68, 0.14);
-  --color-info: #38bdf8;
-  --color-info-soft: rgba(56, 189, 248, 0.14);
+  --color-green: #59dc7a;
+  --color-amber: #f4b95f;
+  --color-red: #ff6b7a;
+
+  /* Shell */
+  --sidebar-width: 296px;
+  --topbar-height: 68px;
+  --brand-height: 75px;
+  --nav-item-height: 38px;
 }
 ```
 
@@ -147,9 +150,8 @@ Recommended base:
 ```css
 body {
   background:
-    radial-gradient(circle at 12% 0%, rgba(139, 92, 246, 0.16), transparent 34rem),
-    radial-gradient(circle at 88% 8%, rgba(56, 189, 248, 0.12), transparent 28rem),
-    linear-gradient(135deg, #06070d 0%, #0a0d16 46%, #0e1320 100%);
+    radial-gradient(circle at 74% 3%, rgba(72, 86, 132, 0.18), transparent 25%),
+    linear-gradient(135deg, #04070f 0%, #07101b 52%, #050913 100%);
 }
 ```
 
@@ -247,7 +249,7 @@ Use shadows only for elevated panels, modals, popovers, and command palette.
 
 ### 5.1 App Shell
 
-Desktop shell:
+Desktop shell follows the dashboard reference:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -258,16 +260,19 @@ Desktop shell:
 └─────────┴────────────────────────────────────────────────────┘
 ```
 
-Recommended desktop columns:
+Desktop dimensions:
 
-- Sidebar: 240px
-- Main content: flexible, max readable width where needed
-- Right inspector: 320px–380px, optional per page
+- Sidebar: `296px`
+- Top header: `68px`
+- Brand row: `75px`
+- Nav item height: `38px`
+- Dashboard grid: `minmax(0, 1.45fr) minmax(340px, .9fr)` with `10px` gaps
 
 Mobile shell:
 
-- Collapse sidebar into top bar or bottom navigation.
-- Runtime state summary must remain visible near the top.
+- At tablet widths, collapse sidebar to `86px`, hide labels/headings/brand copy, and keep centered icons with the Runtime status indicator.
+- At mobile widths, hide the sidebar and stack cards.
+- Runtime state summary must remain visible near the top through the dashboard hero; the centered top-header status strip hides on tablet/mobile.
 - Critical actions should stack in a safe order.
 - Logs should be scrollable with sticky controls.
 
@@ -280,8 +285,11 @@ Primary sections:
 3. Profiles
 4. Models
 5. Builds
-6. Logs
-7. Settings
+6. Artifacts
+7. Logs
+8. Telemetry
+9. Settings
+10. System
 
 Future sections may include:
 
@@ -294,7 +302,7 @@ Future sections may include:
 Navigation rules:
 
 - Show disabled future sections only if they help explain roadmap; otherwise hide until implemented.
-- Active nav item uses violet/cyan accent border and subtle filled background.
+- Active nav item uses the reference violet gradient fill and soft purple shadow.
 - Include small status dot beside Runtime when it is running, stopped, errored, or warning.
 
 ### 5.3 Dashboard Composition
@@ -311,11 +319,12 @@ The dashboard should answer these questions immediately:
 Recommended dashboard sections:
 
 - Runtime hero/status panel
-- Quick actions row
-- Active profile summary
-- Telemetry cards
-- Recent logs preview
-- Warnings/safety panel
+- Quick Actions
+- Active Profile Details
+- Recent Events
+- Health Checklist
+- Resource Snapshot
+- Performance Log
 
 ### 5.4 Runtime Page Composition
 
@@ -347,9 +356,9 @@ Panels are the core surface.
 
 ```css
 .panel {
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-xl);
-  background: linear-gradient(180deg, rgba(17, 24, 39, 0.86), rgba(10, 13, 22, 0.86));
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(18, 29, 47, .95), rgba(12, 20, 34, .96));
   box-shadow: var(--shadow-panel);
 }
 ```
@@ -746,19 +755,19 @@ Before completing UI work, check:
 - Do not add Next.js, Electron, Docker, or a large component framework for design alone.
 - Do not use generic AI dashboard templates without adapting them to local runtime management.
 
-## 15. Phase 14 Design Target — Approved Operator Console Reference
+## 15. Dashboard Reference Baseline
 
-Phase 14 supersedes the earlier Phase 1 visual target. The current implementation has enough functionality; the priority is now to make the interface feel like a real operator console instead of one long generated dashboard.
+The dashboard reference in `docs/design/reference/obsidianlm-dashboard.html` supersedes earlier Phase 14 shell dimensions where they conflict. The current priority is to keep the interface aligned with this real operator-console baseline.
 
 ### Approved Reference Screens
 
-Use the three approved mockups as the primary visual reference for Phase 14 UI work:
+Use the dashboard reference as the primary visual reference for shell and dashboard UI work:
 
-1. **Dashboard / Command Center** — compact operator overview with runtime status first, quick actions, profile summary, warnings, command preview, logs, telemetry, and right inspector.
-2. **Runtime / Managed Server** — operational runtime control page with status first, safe actions, validation checklist, command preview, startup safety, logs, and runtime inspector.
-3. **Profiles / Launch Configs** — precise profile editor with profile list, grouped editor sections, validation status, command preview, and change summary.
+1. **Dashboard / Command Center** — compact operator overview with runtime status first, quick actions, active profile details, recent events, health checklist, resource snapshot, and performance log.
+2. **Runtime / Managed Server** — should reuse the shell, heading, panel, status, and log conventions established by the dashboard.
+3. **Profiles / Launch Configs** — should reuse the same matte panels, grouped detail sections, compact rows, and status pills.
 
-The goal is close implementation alignment with these images: shell, density, hierarchy, grouped sidebar, top status strip, right inspector, panel rhythm, command/log surfaces, and calm developer-console tone.
+The goal is close implementation alignment with the reference: shell, density, hierarchy, grouped sidebar, top status strip, panel rhythm, card/log surfaces, and calm developer-console tone.
 
 Do not treat the images as decorative inspiration only. They are the intended implementation direction.
 
@@ -777,19 +786,19 @@ It should not feel like:
 Desktop pages should use this shell unless a page has a strong reason not to:
 
 ```text
-┌───────────────┬────────────────────────────────────────────┬───────────────┐
-│ Sidebar       │ Top status strip / page content             │ Inspector     │
-│ 240-256px     │ flexible main workspace                     │ 320-360px     │
-└───────────────┴────────────────────────────────────────────┴───────────────┘
+┌────────────────┬───────────────────────────────────────────────────────────┐
+│ Sidebar        │ Top status strip / scrollable page content                │
+│ 296px          │ flexible dashboard/page workspace                         │
+└────────────────┴───────────────────────────────────────────────────────────┘
 ```
 
 Required shell elements:
 
 - Left grouped sidebar.
 - Compact top status strip visible on logged-in pages.
-- Page header with small eyebrow, title, and short subtitle.
+- Page header with title and short subtitle.
 - Main workspace using fewer, stronger panels.
-- Optional right inspector for selected/runtime/page details.
+- Optional right-column panels or inspector content inside the page workspace when the page needs dense details.
 
 ### Sidebar Grouping
 
@@ -804,13 +813,11 @@ CORE
 
 LIBRARY
   Builds
-  Jobs
-  Tool Inputs
+  Artifacts
 
 OBSERVABILITY
   Logs
   Telemetry
-  Processes
 
 SYSTEM
   Settings
@@ -1219,4 +1226,3 @@ Recommended first pass:
 - [ ] `npm run build` passes.
 - [ ] `npm run test` passes.
 - [ ] `npm run test:e2e` passes or any failure is documented accurately.
-

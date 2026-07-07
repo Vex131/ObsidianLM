@@ -27,6 +27,8 @@
     | "shield"
     | "list"
     | "warning"
+    | "cpu"
+    | "gpu"
     | "chevron";
 </script>
 
@@ -58,9 +60,9 @@
     <rect x="4" y="14" width="6" height="6" rx="1.5" />
     <rect x="14" y="14" width="6" height="6" rx="1.5" />
   {:else if name === "gauge"}
-    <path d="M4 14a8 8 0 0 1 16 0" />
-    <path d="M12 14l4-5" />
-    <path d="M7 19h10" />
+    <path d="M5 17a8 8 0 1 1 14 0" />
+    <path d="m12 13 4-4" />
+    <circle cx="12" cy="13" r="1.7" />
   {:else if name === "layers"}
     <path d="M12 3 3.5 7.5 12 12l8.5-4.5L12 3Z" />
     <path d="m3.5 12 8.5 4.5 8.5-4.5" />
@@ -75,39 +77,32 @@
     <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6" />
     <path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
   {:else if name === "artifact"}
-    <path d="M7 4h10l3 5-8 11L4 9l3-5Z" />
-    <path d="M4 9h16" />
-    <path d="m9 9 3 11 3-11" />
+    <rect x="6" y="3" width="12" height="18" rx="2" />
+    <path d="M9 7h6" />
+    <path d="M9 11h6" />
+    <path d="M9 15h4" />
   {:else if name === "log"}
     <path d="M6 4h12v16H6z" />
     <path d="M9 8h6" />
     <path d="M9 12h6" />
     <path d="M9 16h4" />
   {:else if name === "chart"}
-    <path d="M4 19h16" />
-    <path d="M7 16V9" />
-    <path d="M12 16V5" />
-    <path d="M17 16v-4" />
+    <rect x="5" y="4" width="14" height="16" rx="2" />
+    <path d="m9 15 2.5-3 2 2 2.5-5" />
   {:else if name === "gear"}
-    <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
-    <path d="M12 2.5v3" />
-    <path d="M12 18.5v3" />
-    <path d="m4.8 4.8 2.1 2.1" />
-    <path d="m17.1 17.1 2.1 2.1" />
-    <path d="M2.5 12h3" />
-    <path d="M18.5 12h3" />
-    <path d="m4.8 19.2 2.1-2.1" />
-    <path d="m17.1 6.9 2.1-2.1" />
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19 12a7.5 7.5 0 0 0-.1-1l2-1.6-2-3.5-2.5 1a8 8 0 0 0-1.8-1L14.3 3h-4.6l-.4 2.9a8 8 0 0 0-1.8 1L5 5.9l-2 3.5L5 11a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.5 2.5-1a8 8 0 0 0 1.8 1l.4 2.9h4.6l.4-2.9a8 8 0 0 0 1.8-1l2.5 1 2-3.5-2-1.6c.1-.3.1-.7.1-1Z" />
   {:else if name === "help"}
     <circle cx="12" cy="12" r="9" />
     <path d="M9.5 9a2.7 2.7 0 0 1 5.1 1.4c0 1.9-2.6 2.2-2.6 4" />
     <path d="M12 18h.01" />
   {:else if name === "terminal"}
-    <path d="m5 7 5 5-5 5" />
-    <path d="M12 17h7" />
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="m7 9 3 3-3 3" />
+    <path d="M12 15h5" />
   {:else if name === "bell"}
-    <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
-    <path d="M10 21h4" />
+    <path d="M18 9a6 6 0 1 0-12 0c0 7-2 7-2 8h16c0-1-2-1-2-8Z" />
+    <path d="M10 20a2 2 0 0 0 4 0" />
   {:else if name === "monitor"}
     <rect x="3" y="4" width="18" height="13" rx="2" />
     <path d="M8 21h8" />
@@ -117,12 +112,12 @@
   {:else if name === "check"}
     <path d="m5 12.5 4.2 4.2L19 6.8" />
   {:else if name === "refresh"}
-    <path d="M20 6v5h-5" />
-    <path d="M4 18v-5h5" />
-    <path d="M18.3 9A7 7 0 0 0 6.2 6.7L4 9" />
-    <path d="M5.7 15A7 7 0 0 0 17.8 17.3L20 15" />
+    <path d="M20 12a8 8 0 0 1-14.5 4.7" />
+    <path d="M4 12A8 8 0 0 1 18.5 7.3" />
+    <path d="M5 17H2v-3" />
+    <path d="M19 7h3v3" />
   {:else if name === "stop"}
-    <rect x="6" y="6" width="12" height="12" rx="2" />
+    <rect x="8" y="8" width="8" height="8" rx="1" />
   {:else if name === "play"}
     <path d="m8 5 11 7-11 7V5Z" />
   {:else if name === "copy"}
@@ -135,9 +130,11 @@
   {:else if name === "zap"}
     <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
   {:else if name === "load"}
-    <path d="M12 3v7" />
-    <path d="m8 7 4 4 4-4" />
-    <path d="M5 15v2a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-2" />
+    <path d="M6 9V4h5" />
+    <path d="M18 15v5h-5" />
+    <path d="M8 5a8 8 0 0 1 11 7" />
+    <path d="M16 19a8 8 0 0 1-11-7" />
+    <rect x="8" y="9" width="8" height="6" rx="1.5" />
   {:else if name === "nodes"}
     <circle cx="6" cy="7" r="3" />
     <circle cx="18" cy="7" r="3" />
@@ -159,6 +156,24 @@
     <path d="M12 3 22 20H2L12 3Z" />
     <path d="M12 9v5" />
     <path d="M12 17h.01" />
+  {:else if name === "cpu"}
+    <rect x="7" y="7" width="10" height="10" rx="2" />
+    <path d="M9 1v4" />
+    <path d="M15 1v4" />
+    <path d="M9 19v4" />
+    <path d="M15 19v4" />
+    <path d="M1 9h4" />
+    <path d="M1 15h4" />
+    <path d="M19 9h4" />
+    <path d="M19 15h4" />
+  {:else if name === "gpu"}
+    <rect x="4" y="7" width="13" height="10" rx="2" />
+    <path d="M17 10h3v4h-3" />
+    <path d="M8 17v3" />
+    <path d="M13 17v3" />
+    <path d="M8 4v3" />
+    <path d="M13 4v3" />
+    <path d="M8 11h5" />
   {:else if name === "chevron"}
     <path d="m9 6 6 6-6 6" />
   {/if}

@@ -120,6 +120,7 @@
       linear-gradient(180deg, rgba(15, 24, 40, 0.98), rgba(6, 12, 24, 0.96)),
       rgba(8, 14, 26, 0.96);
     box-shadow: 18px 0 60px rgba(0, 0, 0, 0.24);
+    z-index: 3;
   }
 
   .brand-row {
@@ -189,6 +190,12 @@
     min-height: 0;
     padding: 20px 18px 88px 18px;
     overflow-y: auto;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .nav-stack::-webkit-scrollbar {
+    display: none;
   }
 
   .nav-section + .nav-section {
@@ -220,9 +227,13 @@
     border-radius: var(--radius-sm);
     color: var(--color-muted);
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 650;
+    letter-spacing: -0.01em;
     text-decoration: none;
-    margin-bottom: 8px;
+  }
+
+  .nav-items a + a {
+    margin-top: 8px;
   }
 
   .nav-items a :global(.icon) {
@@ -296,23 +307,23 @@
   .operator-copy strong {
     color: #c8d2e4;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 750;
   }
 
   .operator-copy span {
     color: #748197;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 750;
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1120px) {
     .sidebar {
       width: 86px;
     }
 
     .brand-row {
       justify-content: center;
-      padding: 0;
+      padding: 18px 20px;
     }
 
     .brand-copy,
@@ -325,7 +336,7 @@
     }
 
     .nav-stack {
-      padding: 16px 14px 108px;
+      padding: 20px 18px 88px;
     }
 
     .nav-items a {
@@ -335,16 +346,12 @@
 
     .nav-status {
       position: absolute;
-      transform: translate(12px, -10px);
-      margin: 0;
+      right: 8px;
+      margin-left: 0;
     }
 
     .operator-card {
       justify-content: center;
-      padding: 0;
-      left: 14px;
-      right: 14px;
-      bottom: 14px;
     }
   }
 </style>
