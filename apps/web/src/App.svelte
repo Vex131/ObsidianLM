@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import AppShell from "./lib/layout/AppShell.svelte";
   import DashboardPage from "./lib/pages/DashboardPage.svelte";
+  import RuntimePage from "./lib/pages/RuntimePage.svelte";
   import PlaceholderPage from "./lib/pages/PlaceholderPage.svelte";
   import { defaultShellStatus, type ShellStatusSummary, type ShellStatusTone } from "./lib/layout/shell-status";
   import { API_ENDPOINTS, fetchJson, publicFetchJson, readStoredAdminToken, type RuntimeState, type StatusResponse } from "./lib/api";
@@ -169,6 +170,8 @@
 <AppShell {activeHash} {shellStatus}>
   {#if activeHash === "#dashboard"}
     <DashboardPage {shellStatus} {status} {runtimeState} {runtimeWarnings} />
+  {:else if activeHash === "#runtime"}
+    <RuntimePage {shellStatus} {status} {runtimeState} {runtimeWarnings} />
   {:else}
     <PlaceholderPage title={currentPageLabel} />
   {/if}

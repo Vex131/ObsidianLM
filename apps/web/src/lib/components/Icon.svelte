@@ -21,6 +21,8 @@
     | "play"
     | "copy"
     | "external"
+    | "search"
+    | "x"
     | "zap"
     | "load"
     | "nodes"
@@ -127,6 +129,12 @@
     <path d="M14 4h6v6" />
     <path d="m10 14 10-10" />
     <path d="M20 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4" />
+  {:else if name === "search"}
+    <circle cx="11" cy="11" r="6" />
+    <path d="m16 16 4 4" />
+  {:else if name === "x"}
+    <path d="M7 7l10 10" />
+    <path d="M17 7 7 17" />
   {:else if name === "zap"}
     <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
   {:else if name === "load"}

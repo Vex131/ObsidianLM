@@ -1,0 +1,1705 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ObsidianLM Runtime Reference v5</title>
+  <style>
+    :root {
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+      --color-bg: #050914;
+      --color-bg-elevated: #07101d;
+      --color-panel: rgba(17, 27, 43, 0.86);
+      --color-panel-strong: rgba(14, 23, 38, 0.96);
+      --color-line: rgba(116, 137, 171, 0.18);
+      --color-line-strong: rgba(133, 153, 184, 0.24);
+
+      --color-text: #e8eefb;
+      --color-muted: #a5b1c7;
+      --color-dim: #69758b;
+
+      --color-purple: #8f5cff;
+      --color-purple-strong: #6c3ee7;
+      --color-green: #59dc7a;
+      --color-amber: #f4b95f;
+      --color-red: #ff6b7a;
+      --color-cyan: #42d7e8;
+
+      --sidebar-width: 296px;
+      --topbar-height: 68px;
+      --brand-height: 75px;
+      --nav-item-height: 38px;
+
+      --radius-sm: 7px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --shadow-panel: 0 22px 70px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+
+      color: var(--color-text);
+      background: var(--color-bg);
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      background:
+        radial-gradient(circle at 74% 3%, rgba(72, 86, 132, 0.18), transparent 25%),
+        linear-gradient(135deg, #04070f 0%, #07101b 52%, #050913 100%);
+      color: var(--color-text);
+    }
+
+    body { overflow: hidden; }
+    button, input { font: inherit; }
+    button { cursor: default; }
+    svg { display: block; }
+    p, h1, h2, h3, pre { margin: 0; }
+
+    .app-shell {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .sidebar {
+      position: relative;
+      width: var(--sidebar-width);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--color-line);
+      background:
+        linear-gradient(180deg, rgba(15, 24, 40, 0.98), rgba(6, 12, 24, 0.96)),
+        rgba(8, 14, 26, 0.96);
+      box-shadow: 18px 0 60px rgba(0, 0, 0, 0.24);
+      z-index: 3;
+    }
+
+    .brand-row {
+      position: relative;
+      height: var(--brand-height);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 19px 20px 15px 30px;
+    }
+
+    .brand-row::after {
+      content: "";
+      position: absolute;
+      left: 30px;
+      right: 24px;
+      bottom: 0;
+      height: 1px;
+      background: rgba(123, 143, 176, 0.13);
+    }
+
+    .brand {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: var(--color-text);
+      text-decoration: none;
+    }
+
+    .brand-mark {
+      width: 35px;
+      height: 39px;
+      filter: drop-shadow(0 0 20px rgba(151, 111, 255, .38));
+      flex: 0 0 auto;
+    }
+
+    .brand-copy {
+      display: grid;
+      gap: 2px;
+      line-height: 1;
+    }
+
+    .brand-copy strong {
+      font-size: 20px;
+      letter-spacing: -0.03em;
+    }
+
+    .brand-copy span {
+      color: var(--color-muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .menu-button {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      color: var(--color-muted);
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+    }
+
+    .nav-stack {
+      flex: 1;
+      min-height: 0;
+      padding: 20px 18px 88px 18px;
+      overflow-y: auto;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .nav-stack::-webkit-scrollbar { display: none; }
+    .nav-section + .nav-section { margin-top: 26px; }
+
+    .nav-section p {
+      margin: 0 0 10px 10px;
+      color: var(--color-dim);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .nav-items { display: grid; }
+
+    .nav-items a {
+      position: relative;
+      height: var(--nav-item-height);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 12px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      color: var(--color-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
+    .nav-items a + a { margin-top: 8px; }
+
+    .nav-items a.active {
+      color: white;
+      background: linear-gradient(90deg, #6b45d6, #7d48d8 60%, #693dc0);
+      box-shadow: 0 8px 26px rgba(97, 64, 209, .30), inset 0 1px 0 rgba(255,255,255,.16);
+    }
+
+    .nav-items a svg { color: currentColor; opacity: .96; }
+
+    .nav-status {
+      margin-left: auto;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--color-green);
+      box-shadow: 0 0 12px rgba(89, 220, 122, .7);
+    }
+
+    .operator-card {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 20px;
+      height: 72px;
+      border-top: 1px solid rgba(133, 153, 188, 0.14);
+      padding-top: 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--color-muted);
+    }
+
+    .operator-icon {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      color: #c5d1e5;
+    }
+
+    .operator-copy {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .operator-copy strong {
+      color: #c8d2e4;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .operator-copy span {
+      color: #748197;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .content-shell {
+      min-width: 0;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: var(--topbar-height) minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .top-header {
+      position: relative;
+      height: var(--topbar-height);
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center;
+      gap: 18px;
+      padding: 0 26px 0 22px;
+      border-bottom: 1px solid rgba(141, 161, 195, 0.11);
+      background: linear-gradient(180deg, rgba(7, 13, 24, 0.96), rgba(7, 13, 24, 0.64));
+      box-shadow: none;
+      backdrop-filter: blur(18px);
+    }
+
+    .header-micro-status {
+      grid-column: 2;
+      justify-self: center;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      height: 34px;
+      border: 1px solid rgba(132, 153, 188, 0.14);
+      border-radius: var(--radius-md);
+      background: rgba(18, 29, 48, 0.62);
+      overflow: hidden;
+      color: #a7b3c5;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .status-segment {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 100%;
+      padding: 0 14px;
+      border-right: 1px solid rgba(132, 153, 188, 0.12);
+      white-space: nowrap;
+    }
+
+    .status-segment:last-child { border-right: 0; }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--color-green);
+      box-shadow: 0 0 12px rgba(89, 220, 122, .72);
+      flex: 0 0 auto;
+    }
+
+    .dot.warn { background: var(--color-amber); box-shadow: 0 0 12px rgba(244, 185, 95, .58); }
+    .dot.danger { background: var(--color-red); box-shadow: 0 0 12px rgba(255, 107, 122, .58); }
+    .dot.cyan { background: var(--color-cyan); box-shadow: 0 0 12px rgba(66, 215, 232, .58); }
+    .dot.muted { background: #6e7d94; box-shadow: none; }
+
+    .header-actions {
+      grid-column: 3;
+      justify-self: end;
+      position: absolute;
+      top: 17px;
+      right: 26px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-actions button,
+    .header-actions a {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(132, 153, 188, 0.18);
+      border-radius: var(--radius-md);
+      color: var(--color-muted);
+      background: rgba(18, 29, 48, 0.82);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      text-decoration: none;
+    }
+
+    .notification-button span {
+      position: absolute;
+      top: -7px;
+      right: -6px;
+      min-width: 16px;
+      height: 19px;
+      padding: 0 5px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      color: white;
+      background: linear-gradient(135deg, #9b6cff, #6b45d6);
+      font-size: 10px;
+      font-weight: 800;
+      box-shadow: 0 6px 14px rgba(96, 61, 216, 0.44);
+    }
+
+    .avatar {
+      width: 39px;
+      height: 39px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(132, 153, 188, 0.2);
+      border-radius: 999px;
+      color: white;
+      background: rgba(18, 29, 48, 0.88);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: 0.05em;
+    }
+
+    .page-surface {
+      min-width: 0;
+      min-height: 0;
+      padding: 16px 16px 13px 16px;
+      overflow: auto;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .page-surface::-webkit-scrollbar { display: none; }
+
+    .page-header { min-width: 0; }
+
+    .page-title {
+      margin: 0;
+      color: #f3f6fd;
+      font-size: 29px;
+      font-weight: 650;
+      line-height: 1.1;
+      letter-spacing: -0.025em;
+    }
+
+    .page-subtitle {
+      max-width: 720px;
+      margin: 8px 0 0;
+      color: #a7b3c5;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .runtime-grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.46fr) minmax(340px, .88fr);
+      gap: 10px;
+      padding-bottom: 26px;
+    }
+
+    .left-column,
+    .right-column {
+      min-width: 0;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .panel {
+      position: relative;
+      border: 1px solid var(--color-line-strong);
+      border-radius: var(--radius-md);
+      background:
+        linear-gradient(180deg, rgba(18, 29, 47, .95), rgba(12, 20, 34, .96)),
+        rgba(12, 20, 34, .96);
+      box-shadow: var(--shadow-panel);
+      overflow: hidden;
+    }
+
+    .panel.soft {
+      background:
+        linear-gradient(180deg, rgba(17, 28, 46, .76), rgba(10, 17, 30, .88)),
+        rgba(10, 17, 30, .92);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 15px 16px 0;
+    }
+
+    .section-title {
+      color: #c7d0df;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: .10em;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .mini-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 25px;
+      padding: 0 10px;
+      border: 1px solid rgba(132, 153, 188, 0.16);
+      border-radius: 999px;
+      background: rgba(12, 22, 38, .78);
+      color: #a7b3c6;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .runtime-hero {
+      min-height: 196px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.18fr) minmax(330px, .82fr);
+      gap: 16px;
+      padding: 18px;
+    }
+
+    .runtime-hero::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      background:
+        radial-gradient(circle at 18% 14%, rgba(143, 92, 255, .17), transparent 29%),
+        radial-gradient(circle at 76% 7%, rgba(66, 215, 232, .10), transparent 32%);
+      pointer-events: none;
+    }
+
+    .hero-main,
+    .hero-side {
+      position: relative;
+      z-index: 1;
+      min-width: 0;
+    }
+
+    .runtime-state-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--color-green);
+      font-size: 13px;
+      font-weight: 850;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+
+    .hero-title-row {
+      margin-top: 13px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .runtime-title {
+      min-width: 0;
+      color: #f4f7ff;
+      font-size: 25px;
+      font-weight: 760;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+    }
+
+    .switch-profile {
+      flex: 0 0 auto;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 12px;
+      border: 1px solid rgba(177, 137, 255, .35);
+      border-radius: var(--radius-sm);
+      color: #e8dcff;
+      background: rgba(143, 92, 255, .13);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+      font-size: 12px;
+      font-weight: 820;
+    }
+
+    .hero-process-row {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      color: #9fabc0;
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .active-profile-card {
+      margin-top: 15px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid rgba(132, 153, 188, .14);
+      border-radius: var(--radius-md);
+      background: rgba(8, 16, 29, .58);
+      box-shadow: inset 0 1px 20px rgba(0, 0, 0, .16);
+    }
+
+    .active-profile-main {
+      min-width: 0;
+      display: grid;
+      gap: 5px;
+    }
+
+    .active-profile-label {
+      color: #7f8da3;
+      font-size: 11px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    .active-profile-name {
+      min-width: 0;
+      color: #e4ebf8;
+      font-size: 16px;
+      font-weight: 830;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .active-profile-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      color: #8e9cb1;
+      font-size: 12px;
+      font-weight: 680;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 23px;
+      padding: 0 8px;
+      border: 1px solid rgba(132, 153, 188, .13);
+      border-radius: 999px;
+      background: rgba(12, 22, 38, .62);
+      color: #a8b6ca;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .tag.purple {
+      border-color: rgba(143, 92, 255, .28);
+      color: #cfbfff;
+      background: rgba(143, 92, 255, .11);
+    }
+
+    .endpoint-copy {
+      margin-top: 18px;
+      width: min(100%, 620px);
+      min-height: 43px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 12px 0 14px;
+      border: 1px solid rgba(66, 215, 232, .22);
+      border-radius: var(--radius-md);
+      color: #85e9f4;
+      background: rgba(8, 18, 31, .78);
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 13px;
+      box-shadow: inset 0 1px 18px rgba(0, 0, 0, .24);
+    }
+
+    .endpoint-copy span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .copy-state {
+      color: #b9c7d9;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: Inter, "Segoe UI", sans-serif;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .current-activity-strip {
+      margin-top: 12px;
+      width: min(100%, 620px);
+      min-height: 82px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+      border: 1px solid rgba(132, 153, 188, .14);
+      border-radius: var(--radius-md);
+      background:
+        linear-gradient(180deg, rgba(10, 20, 35, .74), rgba(6, 13, 24, .78)),
+        rgba(8, 16, 29, .68);
+      box-shadow: inset 0 1px 20px rgba(0, 0, 0, .20);
+    }
+
+    .activity-copy {
+      min-width: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .activity-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #7f8da3;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .activity-metrics {
+      display: grid;
+      grid-template-columns: auto repeat(3, minmax(0, auto));
+      align-items: stretch;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .activity-state,
+    .activity-metric {
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+      border: 1px solid rgba(132, 153, 188, .13);
+      border-radius: var(--radius-sm);
+      background: rgba(5, 12, 22, .55);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+    }
+
+    .activity-state {
+      gap: 8px;
+      padding: 0 11px;
+      color: #f2f7ff;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+
+    .activity-metric {
+      min-width: 0;
+      gap: 8px;
+      padding: 0 10px;
+      color: #8c9ab0;
+      font-size: 11px;
+      font-weight: 780;
+      white-space: nowrap;
+    }
+
+    .activity-metric strong {
+      color: #dfe8f6;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+
+    .hero-meta {
+      margin-top: 13px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .hero-stat {
+      min-height: 58px;
+      padding: 10px 11px;
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 16, 28, .58);
+    }
+
+    .hero-stat .label {
+      color: #7f8da3;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .hero-stat .value {
+      margin-top: 7px;
+      color: #e1e8f5;
+      font-size: 13px;
+      font-weight: 760;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .runtime-control {
+      min-height: 100%;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      padding: 14px;
+      border: 1px solid rgba(132, 153, 188, 0.14);
+      border-radius: var(--radius-md);
+      background: rgba(8, 16, 29, .66);
+      box-shadow: inset 0 1px 20px rgba(0, 0, 0, .18);
+    }
+
+    .control-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 3px;
+    }
+
+    .control-title-row strong {
+      color: #e8eefb;
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .btn {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 12px;
+      border: 1px solid rgba(132, 153, 188, 0.18);
+      border-radius: var(--radius-sm);
+      color: #d8e1ee;
+      background: rgba(14, 24, 40, .78);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+      font-size: 13px;
+      font-weight: 780;
+    }
+
+    .btn.primary {
+      color: #fff;
+      border-color: rgba(177, 137, 255, .52);
+      background: linear-gradient(180deg, rgba(127, 75, 232, .95), rgba(79, 49, 147, .95));
+      box-shadow: 0 10px 26px rgba(101, 63, 209, .22), inset 0 1px 0 rgba(255,255,255,.18);
+    }
+
+    .btn.danger {
+      color: #ffe8ec;
+      border-color: rgba(255, 107, 122, .28);
+      background: rgba(255, 107, 122, .09);
+    }
+
+    .btn.disabled {
+      opacity: .42;
+      filter: saturate(.65);
+    }
+
+    .btn.wide { grid-column: span 2; }
+
+    .runtime-micro {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      row-gap: 9px;
+      column-gap: 14px;
+      padding-top: 6px;
+      color: #9cabc0;
+      font-size: 12px;
+    }
+
+    .runtime-micro span:nth-child(even) {
+      color: #d6dfec;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      text-align: right;
+      max-width: 190px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .profile-details,
+    .command-card,
+    .events-card,
+    .readiness-card {
+      padding: 15px 16px 16px;
+    }
+
+    .profile-grid {
+      margin-top: 13px;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 10px;
+    }
+
+    .detail-group {
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 16, 29, .52);
+      overflow: hidden;
+    }
+
+    .detail-group h3 {
+      padding: 11px 12px 8px;
+      color: #c6d0df;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.11);
+    }
+
+    .kv-list { padding: 6px 12px 10px; }
+
+    .kv-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) auto;
+      gap: 16px;
+      padding: 7px 0;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.08);
+      font-size: 13px;
+    }
+
+    .kv-row:last-child { border-bottom: 0; }
+    .kv-row span:first-child { color: #8997ac; font-weight: 650; }
+    .kv-row span:last-child {
+      color: #dbe5f4;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .path-value {
+      max-width: 330px;
+      display: inline-block;
+      vertical-align: bottom;
+    }
+
+    .command-box {
+      margin-top: 13px;
+      border: 1px solid rgba(132, 153, 188, .13);
+      border-radius: var(--radius-sm);
+      background: rgba(4, 7, 12, .65);
+      overflow: hidden;
+      box-shadow: inset 0 1px 22px rgba(0, 0, 0, .32);
+    }
+
+    .command-toolbar {
+      min-height: 39px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 11px;
+      border-bottom: 1px solid rgba(132, 153, 188, .1);
+      background: rgba(12, 22, 38, .52);
+      color: #8998ab;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .command-toolbar span:first-child {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .command-toolbar button {
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid rgba(132, 153, 188, .16);
+      border-radius: 999px;
+      color: #b8c6d9;
+      background: rgba(8, 16, 29, .78);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .command-pre {
+      min-height: 158px;
+      padding: 13px 14px 15px;
+      color: #d7e2f1;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      white-space: pre;
+      overflow: auto;
+    }
+
+    .command-pre .cmd-path { color: #85e9f4; }
+    .command-pre .cmd-flag { color: #cfbfff; }
+    .command-pre .cmd-value { color: #d8eec4; }
+    .command-pre .cmd-comment { color: #8795aa; }
+
+    .event-stream {
+      margin-top: 12px;
+      height: 430px;
+      padding: 12px;
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background: rgba(4, 7, 12, .62);
+      overflow: hidden;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      box-shadow: inset 0 1px 22px rgba(0, 0, 0, .32);
+    }
+
+    .event-line {
+      display: grid;
+      grid-template-columns: 78px 54px minmax(0, 1fr);
+      gap: 10px;
+      min-height: 25px;
+      color: #c6d0de;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .event-time { color: #8998ab; }
+    .event-type { font-weight: 900; }
+    .event-type.info { color: #54d983; }
+    .event-type.warn { color: var(--color-amber); }
+    .event-type.run { color: #82e9f4; }
+    .event-type.error { color: var(--color-red); }
+    .event-message { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .readiness-list {
+      margin-top: 13px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .readiness-item {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 11px;
+      border: 1px solid rgba(132, 153, 188, 0.12);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 16, 29, .46);
+      color: #b6c2d4;
+      font-size: 13px;
+      font-weight: 690;
+    }
+
+    .readiness-item strong {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 850;
+      color: var(--color-green);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .readiness-item.warn strong { color: var(--color-amber); }
+    .readiness-item.error strong { color: var(--color-red); }
+
+    .recovery-toggle {
+      margin-top: 11px;
+      width: 100%;
+      height: 39px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 11px;
+      border: 1px solid rgba(132, 153, 188, .13);
+      border-radius: var(--radius-sm);
+      background: rgba(12, 22, 38, .56);
+      color: #c4cfdf;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .recovery-panel {
+      display: none;
+      margin-top: 9px;
+      padding: 10px;
+      border: 1px solid rgba(244, 185, 95, .18);
+      border-radius: var(--radius-sm);
+      background: rgba(244, 185, 95, .06);
+    }
+
+    .recovery-panel.open { display: grid; gap: 8px; }
+
+    .recovery-action {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 38px;
+      color: #c8b899;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .recovery-action button {
+      flex: 0 0 auto;
+      height: 30px;
+      padding: 0 10px;
+      border: 1px solid rgba(244, 185, 95, .24);
+      border-radius: var(--radius-sm);
+      color: #f2c982;
+      background: rgba(244, 185, 95, .08);
+      font-size: 11px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .profile-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      background: rgba(2, 5, 11, .56);
+      backdrop-filter: blur(5px);
+    }
+
+    .profile-drawer-backdrop.open { display: block; }
+
+    .profile-drawer {
+      position: fixed;
+      z-index: 21;
+      top: 0;
+      right: 0;
+      width: min(520px, 100vw);
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      transform: translateX(104%);
+      transition: transform .18s ease;
+      border-left: 1px solid rgba(132, 153, 188, .19);
+      background:
+        linear-gradient(180deg, rgba(16, 26, 43, .98), rgba(7, 13, 24, .98)),
+        #07101d;
+      box-shadow: -24px 0 70px rgba(0,0,0,.34);
+    }
+
+    .profile-drawer.open { transform: translateX(0); }
+
+    .drawer-head {
+      min-height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px;
+      border-bottom: 1px solid rgba(132, 153, 188, .12);
+    }
+
+    .drawer-title {
+      display: grid;
+      gap: 5px;
+    }
+
+    .drawer-title strong {
+      color: #f3f6fd;
+      font-size: 18px;
+      letter-spacing: -.02em;
+    }
+
+    .drawer-title span {
+      color: #8d9bae;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .drawer-close {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(132, 153, 188, .16);
+      border-radius: var(--radius-md);
+      color: #a9b6c9;
+      background: rgba(12, 22, 38, .72);
+    }
+
+    .drawer-search-wrap {
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(132, 153, 188, .1);
+    }
+
+    .drawer-search {
+      width: 100%;
+      height: 41px;
+      padding: 0 13px;
+      border: 1px solid rgba(132, 153, 188, .17);
+      border-radius: var(--radius-md);
+      outline: none;
+      color: #dce5f2;
+      background: rgba(6, 12, 22, .72);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .drawer-search::placeholder { color: #68768d; }
+
+    .profile-list {
+      min-height: 0;
+      display: grid;
+      align-content: start;
+      gap: 9px;
+      padding: 14px 18px;
+      overflow-y: auto;
+    }
+
+    .profile-option {
+      display: grid;
+      gap: 9px;
+      padding: 12px;
+      border: 1px solid rgba(132, 153, 188, .13);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 16, 29, .55);
+    }
+
+    .profile-option.active {
+      border-color: rgba(143, 92, 255, .38);
+      background: rgba(143, 92, 255, .105);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.045);
+    }
+
+    .profile-option-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .profile-option strong {
+      min-width: 0;
+      color: #e8eefb;
+      font-size: 14px;
+      font-weight: 850;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .profile-option-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .drawer-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 18px 18px;
+      border-top: 1px solid rgba(132, 153, 188, .12);
+      background: rgba(5, 10, 18, .42);
+    }
+
+    .drawer-actions .btn {
+      min-width: 128px;
+    }
+
+    .drawer-note {
+      color: #8190a6;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 1380px) {
+      .runtime-grid { grid-template-columns: minmax(0, 1fr); }
+      .right-column { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+      .readiness-card, .command-card { grid-column: auto; }
+    }
+
+    @media (max-width: 1120px) {
+      .app-shell { grid-template-columns: 86px minmax(0, 1fr); }
+      .sidebar { width: 86px; }
+      .brand-row { padding: 18px 20px; justify-content: center; }
+      .brand-copy, .menu-button, .nav-section p, .nav-label, .operator-copy, .operator-card > svg { display: none; }
+      .nav-stack { padding: 20px 18px 88px; }
+      .nav-items a { justify-content: center; padding: 0; }
+      .nav-status { position: absolute; right: 8px; }
+      .operator-card { justify-content: center; }
+      .header-micro-status { display: none; }
+      .runtime-hero { grid-template-columns: minmax(0, 1fr); }
+      .profile-grid { grid-template-columns: minmax(0, 1fr); }
+      .right-column { grid-template-columns: minmax(0, 1fr); }
+      .readiness-card { grid-column: auto; }
+    }
+
+    @media (max-width: 720px) {
+      body { overflow: auto; }
+      .app-shell { min-height: 100vh; height: auto; grid-template-columns: minmax(0, 1fr); }
+      .sidebar { display: none; }
+      .content-shell { height: auto; min-height: 100vh; }
+      .page-surface { overflow: visible; padding: 14px; }
+      .runtime-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
+      .runtime-hero { padding: 14px; }
+      .hero-title-row { display: grid; }
+      .current-activity-strip { grid-template-columns: minmax(0, 1fr); }
+      .activity-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .activity-state { grid-column: span 2; }
+      .activity-pulse { display: none; }
+      .active-profile-card { grid-template-columns: minmax(0, 1fr); }
+      .hero-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .control-grid { grid-template-columns: minmax(0, 1fr); }
+      .btn.wide { grid-column: auto; }
+      .event-line { grid-template-columns: 66px 48px 1fr; }
+      .profile-drawer { width: 100vw; }
+      .drawer-actions { display: grid; }
+      .drawer-actions .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+    <defs>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="4" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="4" y="14" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M5 17a8 8 0 1 1 14 0" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m12 13 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="13" r="1.7" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-cube" viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 12 4.5 7.8M12 12l7.5-4.2M12 12v8" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-artifact" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 7h6M9 11h6M9 15h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-log" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 8h6M9 12h6M9 16h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m9 15 2.5-3 2 2 2.5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19 12a7.5 7.5 0 0 0-.1-1l2-1.6-2-3.5-2.5 1a8 8 0 0 0-1.8-1L14.3 3h-4.6l-.4 2.9a8 8 0 0 0-1.8 1L5 5.9l-2 3.5L5 11a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.5 2.5-1a8 8 0 0 0 1.8 1l.4 2.9h4.6l.4-2.9a8 8 0 0 0 1.8-1l2.5 1 2-3.5-2-1.6c.1-.3.1-.7.1-1Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 9a2 2 0 1 1 3 1.7c-.8.5-1.1 1-1.1 1.8M12 16.7h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m7 9 3 3-3 3M12 15h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 1 0-12 0c0 7-2 7-2 8h16c0-1-2-1-2-8Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 20a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 21h8M12 17v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-chevron-up" viewBox="0 0 24 24"><path d="m7 14 5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14.5 4.7M4 12A8 8 0 0 1 18.5 7.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 17H2v-3M19 7h3v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="8" y="8" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7-11-7Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="5" y="5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" opacity=".65"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M19 14v5H5V5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 3 22 20H2L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v5M12 17.5h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v5c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m9 12 2 2 4-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="brand-row">
+        <a class="brand" href="#dashboard" aria-label="ObsidianLM dashboard">
+          <svg class="brand-mark" viewBox="0 0 42 48" aria-hidden="true">
+            <path d="M21 2 38 13v22L21 46 4 35V13L21 2Z" fill="#7d63dc"/>
+            <path d="M21 2v44L4 35V13L21 2Z" fill="#a998ff"/>
+            <path d="M21 2 38 13 21 20 4 13 21 2Z" fill="#ece8ff" opacity=".95"/>
+            <path d="M21 20 38 13v22L21 46V20Z" fill="#6045c6"/>
+            <path d="M21 20 4 13v22l17 11V20Z" fill="#8a77e8"/>
+            <path d="m21 2 8 23-8 21-8-21L21 2Z" fill="#f6f2ff" opacity=".58"/>
+          </svg>
+          <span class="brand-copy"><strong>ObsidianLM</strong><span>Operator</span></span>
+        </a>
+        <button class="menu-button" type="button" aria-label="Menu"><svg width="19" height="19"><use href="#i-menu"/></svg></button>
+      </div>
+
+      <nav class="nav-stack">
+        <section class="nav-section" aria-label="Core">
+          <p>Core</p>
+          <div class="nav-items">
+            <a href="#dashboard"><svg width="19" height="19"><use href="#i-grid"/></svg><span class="nav-label">Dashboard</span></a>
+            <a class="active" href="#runtime"><svg width="19" height="19"><use href="#i-gauge"/></svg><span class="nav-label">Runtime</span><span class="nav-status"></span></a>
+            <a href="#profiles"><svg width="19" height="19"><use href="#i-layers"/></svg><span class="nav-label">Profiles</span></a>
+            <a href="#models"><svg width="19" height="19"><use href="#i-cube"/></svg><span class="nav-label">Models</span></a>
+          </div>
+        </section>
+        <section class="nav-section" aria-label="Library">
+          <p>Library</p>
+          <div class="nav-items">
+            <a href="#builds"><svg width="19" height="19"><use href="#i-database"/></svg><span class="nav-label">Builds</span></a>
+            <a href="#artifacts"><svg width="19" height="19"><use href="#i-artifact"/></svg><span class="nav-label">Artifacts</span></a>
+          </div>
+        </section>
+        <section class="nav-section" aria-label="Observability">
+          <p>Observability</p>
+          <div class="nav-items">
+            <a href="#logs"><svg width="19" height="19"><use href="#i-log"/></svg><span class="nav-label">Logs</span></a>
+            <a href="#telemetry"><svg width="19" height="19"><use href="#i-chart"/></svg><span class="nav-label">Telemetry</span></a>
+          </div>
+        </section>
+        <section class="nav-section" aria-label="System">
+          <p>System</p>
+          <div class="nav-items">
+            <a href="#settings"><svg width="19" height="19"><use href="#i-gear"/></svg><span class="nav-label">Settings</span></a>
+            <a href="#system"><svg width="19" height="19"><use href="#i-help"/></svg><span class="nav-label">System</span></a>
+          </div>
+        </section>
+      </nav>
+
+      <footer class="operator-card">
+        <div class="operator-icon"><svg width="25" height="25"><use href="#i-monitor"/></svg></div>
+        <div class="operator-copy"><strong>obx-operator</strong><span>v0.8.2</span></div>
+        <svg width="15" height="15"><use href="#i-chevron-up"/></svg>
+      </footer>
+    </aside>
+
+    <div class="content-shell">
+      <header class="top-header">
+        <div class="header-micro-status" aria-label="Status summary">
+          <div class="status-segment"><span class="dot"></span>Service healthy</div>
+          <div class="status-segment"><span class="dot"></span>Runtime running</div>
+          <div class="status-segment">Port <strong style="color:#dce4f0">8085</strong></div>
+        </div>
+        <div class="header-actions" aria-label="Header actions">
+          <button type="button" aria-label="Open terminal"><svg width="18" height="18"><use href="#i-terminal"/></svg></button>
+          <button class="notification-button" type="button" aria-label="Notifications"><svg width="18" height="18"><use href="#i-bell"/></svg><span>2</span></button>
+          <a href="#settings" aria-label="Open settings"><svg width="18" height="18"><use href="#i-gear"/></svg></a>
+          <div class="avatar" aria-label="Operator profile">OP</div>
+        </div>
+      </header>
+
+      <main class="page-surface runtime-page" aria-label="Runtime">
+        <div class="page-header">
+          <h1 class="page-title">Runtime</h1>
+          <p class="page-subtitle">Control the active llama.cpp process, switch profiles safely, and inspect the exact launch state.</p>
+        </div>
+
+        <div class="runtime-grid">
+          <div class="left-column">
+            <section class="panel runtime-hero" aria-label="Runtime control hero">
+              <div class="hero-main">
+                <div class="runtime-state-line"><span class="dot"></span>Runtime running</div>
+                <div class="hero-title-row">
+                  <h2 class="runtime-title">Qwen 3.6 Coding 200K</h2>
+                  <button class="switch-profile" type="button" data-open-profiles>
+                    <svg width="15" height="15"><use href="#i-search"/></svg>
+                    Switch profile
+                  </button>
+                </div>
+
+                <button class="endpoint-copy" type="button" data-copy="http://127.0.0.1:8085" aria-label="Copy endpoint">
+                  <span>http://127.0.0.1:8085</span>
+                  <span class="copy-state"><svg width="15" height="15"><use href="#i-copy"/></svg><span>Copy</span></span>
+                </button>
+
+                <div class="current-activity-strip" aria-label="Current runtime activity">
+                  <div class="activity-copy">
+                    <div class="activity-label">Current activity</div>
+                    <div class="activity-metrics">
+                      <div class="activity-state">Idle</div>
+                      <div class="activity-metric"><span>Slots</span><strong>0 / 1</strong></div>
+                      <div class="activity-metric"><span>Queue</span><strong>0</strong></div>
+                      <div class="activity-metric"><span>Last request</span><strong>11:22</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hero-side">
+                <div class="runtime-control">
+                  <div class="control-title-row">
+                    <strong>Runtime controls</strong>
+                    <span class="mini-pill">Healthy</span>
+                  </div>
+                  <div class="control-grid">
+                    <button class="btn primary" type="button"><svg width="16" height="16"><use href="#i-refresh"/></svg>Restart</button>
+                    <button class="btn danger" type="button"><svg width="16" height="16"><use href="#i-stop"/></svg>Stop</button>
+                    <button class="btn disabled wide" type="button"><svg width="16" height="16"><use href="#i-play"/></svg>Start runtime</button>
+                  </div>
+                  <div class="runtime-micro">
+                    <span>Runtime</span><span>llama-server</span>
+                    <span>Last started</span><span>Today 09:41</span>
+                    <span>Admin token</span><span>Loaded</span>
+                    <span>Profile source</span><span>coding-200k.json</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel profile-details" aria-label="Set configs">
+              <div class="panel-head" style="padding:0">
+                <h2 class="section-title">Set Configs</h2>
+                <span class="mini-pill">From active profile</span>
+              </div>
+              <div class="profile-grid">
+                <div class="detail-group">
+                  <h3>Launch configuration</h3>
+                  <div class="kv-list">
+                    <div class="kv-row"><span>Context size</span><span>204,800</span></div>
+                    <div class="kv-row"><span>GPU offload</span><span>5 / 40 layers</span></div>
+                    <div class="kv-row"><span>Context reuse</span><span>Disabled</span></div>
+                    <div class="kv-row"><span>Parallel slots</span><span>1</span></div>
+                    <div class="kv-row"><span>Batch / ubatch</span><span>4096 / 1024</span></div>
+                    <div class="kv-row"><span>Threads</span><span>8 / 16</span></div>
+                  </div>
+                </div>
+                <div class="detail-group">
+                  <h3>Memory & model</h3>
+                  <div class="kv-list">
+                    <div class="kv-row"><span>KV cache</span><span>q8_0 / q8_0</span></div>
+                    <div class="kv-row"><span>Flash attention</span><span>Enabled</span></div>
+                    <div class="kv-row"><span>Tensor split</span><span>5,3</span></div>
+                    <div class="kv-row"><span>Model path</span><span class="path-value">D:\Models\Qwen3.6-35B...</span></div>
+                    <div class="kv-row"><span>Build path</span><span class="path-value">D:\llama.cpp-builds\cu13...</span></div>
+                    <div class="kv-row"><span>Profile file</span><span>coding-200k.json</span></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+
+
+            <section class="panel events-card" aria-label="Recent runtime logs">
+              <div class="panel-head" style="padding:0">
+                <h2 class="section-title">Recent Runtime Logs</h2>
+                <span class="mini-pill"><span class="dot"></span>Live tail</span>
+              </div>
+              <div class="event-stream">
+                <div class="event-line"><span class="event-time">11:22:18</span><span class="event-type info">INFO</span><span class="event-message">POST /completion 200 · 2.03s · slot 0 released</span></div>
+                <div class="event-line"><span class="event-time">11:22:11</span><span class="event-type warn">WARN</span><span class="event-message">High VRAM pressure on RTX 5080 · 14.7 / 15.9 GB</span></div>
+                <div class="event-line"><span class="event-time">11:21:45</span><span class="event-type info">INFO</span><span class="event-message">POST /completion 200 · 1.24s · 683 tokens generated</span></div>
+                <div class="event-line"><span class="event-time">11:21:34</span><span class="event-type run">RUN</span><span class="event-message">HTTP server listening on http://127.0.0.1:8085</span></div>
+                <div class="event-line"><span class="event-time">11:21:33</span><span class="event-type info">INFO</span><span class="event-message">GPU offload configured · 5 / 40 layers</span></div>
+                <div class="event-line"><span class="event-time">11:21:33</span><span class="event-type info">INFO</span><span class="event-message">KV cache type_k=q8_0 type_v=q8_0 · context reuse disabled</span></div>
+                <div class="event-line"><span class="event-time">11:21:32</span><span class="event-type run">RUN</span><span class="event-message">Loaded model Qwen3.6-35B-A3B-Q4_K_S.gguf</span></div>
+                <div class="event-line"><span class="event-time">11:21:32</span><span class="event-type run">RUN</span><span class="event-message">Runtime started with profile Qwen 3.6 Coding 200K</span></div>
+                <div class="event-line"><span class="event-time">11:20:58</span><span class="event-type info">INFO</span><span class="event-message">Setup validation completed · 7 checks passed · 1 warning</span></div>
+                <div class="event-line"><span class="event-time">11:20:42</span><span class="event-type info">INFO</span><span class="event-message">Operator selected profile coding-200k.json</span></div>
+                <div class="event-line"><span class="event-time">11:19:21</span><span class="event-type info">INFO</span><span class="event-message">Model path verified · D:\Models\Qwen3.6-35B-A3B-Q4_K_S.gguf</span></div>
+                <div class="event-line"><span class="event-time">11:18:44</span><span class="event-type run">RUN</span><span class="event-message">Runtime preflight completed · CUDA devices 0,1 available</span></div>
+                <div class="event-line"><span class="event-time">11:17:31</span><span class="event-type warn">WARN</span><span class="event-message">Context reuse disabled by active profile</span></div>
+              </div>
+            </section>
+          </div>
+
+          <div class="right-column">
+            <section class="panel readiness-card" aria-label="Readiness and warnings">
+              <div class="panel-head" style="padding:0">
+                <h2 class="section-title">Readiness & Warnings</h2>
+                <span class="mini-pill">7/8 OK</span>
+              </div>
+              <div class="readiness-list">
+                <div class="readiness-item">Backend API reachable <strong>OK</strong></div>
+                <div class="readiness-item">Runtime process detected <strong>OK</strong></div>
+                <div class="readiness-item">Endpoint responding <strong>OK</strong></div>
+                <div class="readiness-item">Active profile applied <strong>OK</strong></div>
+                <div class="readiness-item">Model file exists <strong>OK</strong></div>
+                <div class="readiness-item">Build path configured <strong>OK</strong></div>
+                <div class="readiness-item warn"><span class="dot warn"></span>VRAM headroom low <strong>Warn</strong></div>
+                <div class="readiness-item">No stale process detected <strong>OK</strong></div>
+              </div>
+
+              <button class="recovery-toggle" type="button" data-toggle-recovery>
+                <span>Recovery actions</span>
+                <svg width="16" height="16"><use href="#i-chevron-up"/></svg>
+              </button>
+              <div class="recovery-panel" data-recovery-panel>
+                <div class="recovery-action">
+                  <span>Stale process cleanup. Use only when the server appears stopped but the port is still occupied.</span>
+                  <button type="button">Clean</button>
+                </div>
+                <div class="recovery-action">
+                  <span>Force stop runtime process. Useful when graceful stop does not return.</span>
+                  <button type="button">Force</button>
+                </div>
+                <div class="recovery-action">
+                  <span>Run preflight validation before starting the selected profile.</span>
+                  <button type="button">Check</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel command-card" aria-label="Launch command">
+              <div class="panel-head" style="padding:0">
+                <h2 class="section-title">Launch Command</h2>
+              </div>
+              <div class="command-box">
+                <div class="command-toolbar">
+                  <span><svg width="16" height="16"><use href="#i-terminal"/></svg> Generated from active profile</span>
+                  <button type="button"><svg width="14" height="14"><use href="#i-copy"/></svg>Copy</button>
+                </div>
+                <pre class="command-pre"><span class="cmd-comment"># executable</span>
+<span class="cmd-path">"D:\llama.cpp-builds\llama.cpp-cu13-official\llama-server.exe"</span>
+<span class="cmd-flag">--model</span> <span class="cmd-value">"D:\Models\Qwen3.6-35B-A3B-Q4_K_S.gguf"</span>
+<span class="cmd-flag">--host</span> <span class="cmd-value">127.0.0.1</span>
+<span class="cmd-flag">--port</span> <span class="cmd-value">8085</span>
+<span class="cmd-flag">--ctx-size</span> <span class="cmd-value">204800</span>
+<span class="cmd-flag">--n-gpu-layers</span> <span class="cmd-value">5</span>
+<span class="cmd-flag">--cache-type-k</span> <span class="cmd-value">q8_0</span>
+<span class="cmd-flag">--cache-type-v</span> <span class="cmd-value">q8_0</span>
+<span class="cmd-flag">--flash-attn</span> <span class="cmd-value">on</span>
+<span class="cmd-flag">--batch-size</span> <span class="cmd-value">4096</span>
+<span class="cmd-flag">--ubatch-size</span> <span class="cmd-value">1024</span>
+<span class="cmd-flag">--parallel</span> <span class="cmd-value">1</span>
+<span class="cmd-flag">--threads</span> <span class="cmd-value">8</span>
+<span class="cmd-flag">--threads-batch</span> <span class="cmd-value">16</span>
+<span class="cmd-flag">--tensor-split</span> <span class="cmd-value">5,3</span>
+<span class="cmd-flag">--cont-batching</span> <span class="cmd-value">enabled</span></pre>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="profile-drawer-backdrop" data-profile-backdrop></div>
+  <aside class="profile-drawer" aria-label="Switch profile drawer" data-profile-drawer>
+    <div class="drawer-head">
+      <div class="drawer-title">
+        <strong>Switch Profile</strong>
+        <span>Search dozens of profiles without crowding the Runtime hero.</span>
+      </div>
+      <button class="drawer-close" type="button" aria-label="Close profile picker" data-close-profiles>
+        <svg width="18" height="18"><use href="#i-x"/></svg>
+      </button>
+    </div>
+
+    <div class="drawer-search-wrap">
+      <input class="drawer-search" type="search" placeholder="Search by name, model, context, tag, or build..." />
+    </div>
+
+    <div class="profile-list">
+      <article class="profile-option active">
+        <div class="profile-option-top">
+          <strong>Qwen 3.6 Coding 200K</strong>
+          <span class="mini-pill"><span class="dot"></span>Active</span>
+        </div>
+        <div class="profile-option-meta">
+          <span class="tag purple">Coding</span>
+          <span class="tag">204,800 ctx</span>
+          <span class="tag">5 / 40 layers</span>
+          <span class="tag">Q4_K_S</span>
+        </div>
+      </article>
+
+      <article class="profile-option">
+        <div class="profile-option-top">
+          <strong>Qwen 3.6 Fast Coding 100K</strong>
+          <span class="mini-pill">Ready</span>
+        </div>
+        <div class="profile-option-meta">
+          <span class="tag purple">Coding</span>
+          <span class="tag">100K ctx</span>
+          <span class="tag">All GPU</span>
+          <span class="tag">Fast</span>
+        </div>
+      </article>
+
+      <article class="profile-option">
+        <div class="profile-option-top">
+          <strong>Qwen Vision 124K</strong>
+          <span class="mini-pill">Ready</span>
+        </div>
+        <div class="profile-option-meta">
+          <span class="tag">Vision</span>
+          <span class="tag">124K ctx</span>
+          <span class="tag">MMPROJ</span>
+          <span class="tag">CUDA</span>
+        </div>
+      </article>
+
+      <article class="profile-option">
+        <div class="profile-option-top">
+          <strong>Low VRAM Planning</strong>
+          <span class="mini-pill">Ready</span>
+        </div>
+        <div class="profile-option-meta">
+          <span class="tag">Safe</span>
+          <span class="tag">65K ctx</span>
+          <span class="tag">q8 KV</span>
+          <span class="tag">Low pressure</span>
+        </div>
+      </article>
+
+      <article class="profile-option">
+        <div class="profile-option-top">
+          <strong>Bench Smoke Test</strong>
+          <span class="mini-pill">Ready</span>
+        </div>
+        <div class="profile-option-meta">
+          <span class="tag">Test</span>
+          <span class="tag">16K ctx</span>
+          <span class="tag">Short run</span>
+          <span class="tag">Diagnostics</span>
+        </div>
+      </article>
+    </div>
+
+    <div class="drawer-actions">
+      <span class="drawer-note">Selecting a profile updates the pending selection. Apply can restart the runtime with the selected profile.</span>
+      <button class="btn primary" type="button">Apply profile</button>
+    </div>
+  </aside>
+
+  <script>
+    const drawer = document.querySelector('[data-profile-drawer]');
+    const backdrop = document.querySelector('[data-profile-backdrop]');
+    const openButtons = document.querySelectorAll('[data-open-profiles]');
+    const closeButtons = document.querySelectorAll('[data-close-profiles]');
+
+    const openDrawer = () => {
+      drawer.classList.add('open');
+      backdrop.classList.add('open');
+    };
+
+    const closeDrawer = () => {
+      drawer.classList.remove('open');
+      backdrop.classList.remove('open');
+    };
+
+    openButtons.forEach((button) => button.addEventListener('click', openDrawer));
+    closeButtons.forEach((button) => button.addEventListener('click', closeDrawer));
+    backdrop.addEventListener('click', closeDrawer);
+
+    document.querySelectorAll('[data-copy]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const text = button.getAttribute('data-copy') || '';
+        const label = button.querySelector('.copy-state span');
+        const original = label ? label.textContent : '';
+        try {
+          await navigator.clipboard.writeText(text);
+          if (label) label.textContent = 'Copied';
+        } catch (_) {
+          if (label) label.textContent = 'Copy failed';
+        }
+        window.setTimeout(() => {
+          if (label) label.textContent = original || 'Copy';
+        }, 1200);
+      });
+    });
+
+    const recoveryToggle = document.querySelector('[data-toggle-recovery]');
+    const recoveryPanel = document.querySelector('[data-recovery-panel]');
+    recoveryToggle.addEventListener('click', () => {
+      recoveryPanel.classList.toggle('open');
+    });
+  </script>
+</body>
+</html>
