@@ -25,6 +25,20 @@
     "#system": "System"
   } as const;
 
+  const pathRoutes: Record<string, keyof typeof pageLabels> = {
+    "/": "#dashboard",
+    "/dashboard": "#dashboard",
+    "/runtime": "#runtime",
+    "/profiles": "#profiles",
+    "/models": "#models",
+    "/builds": "#builds",
+    "/artifacts": "#artifacts",
+    "/logs": "#logs",
+    "/telemetry": "#telemetry",
+    "/settings": "#settings",
+    "/system": "#system"
+  };
+
   let activeHash = "#dashboard";
   let status: StatusResponse | null = null;
   let statusRequestFailed = false;
@@ -143,7 +157,7 @@
   }
 
   function syncHash() {
-    activeHash = window.location.hash || "#dashboard";
+    activeHash = window.location.hash || pathRoutes[window.location.pathname.replace(/\/+$/, "") || "/"] || "#dashboard";
   }
 
   onMount(() => {
