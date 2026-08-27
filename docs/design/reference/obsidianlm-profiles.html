@@ -1,0 +1,2217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ObsidianLM — Profiles Reference</title>
+  <style>
+    :root {
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-sans: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: "Cascadia Mono", Consolas, "SFMono-Regular", ui-monospace, monospace;
+
+      --color-bg: #050914;
+      --color-bg-elevated: #07101d;
+      --color-panel: rgba(17, 27, 43, 0.86);
+      --color-panel-strong: rgba(14, 23, 38, 0.96);
+      --color-line: rgba(116, 137, 171, 0.18);
+      --color-line-strong: rgba(133, 153, 184, 0.24);
+
+      --color-text: #e8eefb;
+      --color-muted: #a5b1c7;
+      --color-dim: #69758b;
+
+      --color-purple: #8f5cff;
+      --color-purple-strong: #6c3ee7;
+      --color-green: #59dc7a;
+      --color-amber: #f4b95f;
+      --color-red: #ff6b7a;
+      --color-cyan: #42d7e8;
+
+      --sidebar-width: 296px;
+      --topbar-height: 68px;
+      --brand-height: 75px;
+      --radius-sm: 7px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --shadow-panel: 0 22px 70px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 320px;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      color: var(--color-text);
+      background:
+        radial-gradient(circle at 74% 3%, rgba(72, 86, 132, 0.18), transparent 25%),
+        linear-gradient(135deg, #04070f 0%, #07101b 52%, #050913 100%);
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    button,
+    input,
+    select,
+    textarea { font: inherit; }
+
+    button { cursor: default; }
+
+    a { color: inherit; text-decoration: none; }
+
+    p,
+    h1,
+    h2,
+    h3 { margin: 0; }
+
+    .app-shell {
+      height: 100vh;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+      overflow: hidden;
+      background: transparent;
+    }
+
+    .sidebar {
+      position: relative;
+      width: var(--sidebar-width);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--color-line);
+      background:
+        linear-gradient(180deg, rgba(15, 24, 40, 0.98), rgba(6, 12, 24, 0.96)),
+        rgba(8, 14, 26, 0.96);
+      box-shadow: 18px 0 60px rgba(0, 0, 0, 0.24);
+      z-index: 3;
+    }
+
+    .brand-row {
+      position: relative;
+      height: var(--brand-height);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 19px 20px 15px 30px;
+    }
+
+    .brand-row::after {
+      content: "";
+      position: absolute;
+      left: 30px;
+      right: 24px;
+      bottom: 0;
+      height: 1px;
+      background: rgba(123, 143, 176, 0.13);
+    }
+
+    .brand {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: var(--color-text);
+    }
+
+    .logo-mark {
+      position: relative;
+      width: 35px;
+      height: 39px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      filter: drop-shadow(0 10px 26px rgba(143, 92, 255, 0.24));
+    }
+
+    .logo-mark::before {
+      content: "";
+      width: 29px;
+      height: 31px;
+      border-radius: 10px 12px 11px 12px;
+      background:
+        linear-gradient(145deg, rgba(205, 190, 255, 0.95), rgba(104, 70, 211, 0.88) 48%, rgba(42, 31, 92, 0.98));
+      clip-path: polygon(50% 0, 90% 22%, 80% 82%, 48% 100%, 14% 82%, 6% 22%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.46), inset 0 -10px 22px rgba(7, 10, 28, 0.36);
+    }
+
+    .brand-copy { display: grid; gap: 2px; line-height: 1; }
+    .brand-copy strong { font-size: 20px; letter-spacing: -0.03em; }
+    .brand-copy span { color: var(--color-muted); font-size: 13px; font-weight: 700; }
+
+    .menu-button,
+    .icon-button {
+      display: grid;
+      place-items: center;
+      color: var(--color-muted);
+      border: 1px solid transparent;
+      background: transparent;
+    }
+
+    .menu-button { width: 28px; height: 28px; border-radius: 6px; }
+
+    .nav-stack {
+      flex: 1;
+      min-height: 0;
+      padding: 20px 18px 88px 18px;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+
+    .nav-stack::-webkit-scrollbar { display: none; }
+    .nav-section + .nav-section { margin-top: 26px; }
+
+    .nav-section p {
+      margin: 0 0 10px 10px;
+      color: var(--color-dim);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .nav-items { display: grid; gap: 0; }
+
+    .nav-items a {
+      position: relative;
+      min-height: 38px;
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 0 12px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      color: #c2ccda;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .nav-items a.active {
+      color: #fff;
+      border-color: rgba(178, 143, 255, 0.34);
+      background: linear-gradient(90deg, rgba(115, 70, 225, 0.82), rgba(94, 55, 174, 0.74));
+      box-shadow: 0 14px 26px rgba(80, 46, 180, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+    }
+
+    .nav-icon {
+      width: 19px;
+      height: 19px;
+      display: grid;
+      place-items: center;
+      color: currentColor;
+      opacity: 0.95;
+      font-size: 16px;
+    }
+
+    .nav-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--color-green);
+      box-shadow: 0 0 12px rgba(89, 220, 122, 0.6);
+    }
+
+    .operator-card {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 18px;
+      min-height: 61px;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(123, 143, 176, 0.12);
+      color: #c4cede;
+    }
+
+    .operator-icon {
+      width: 29px;
+      height: 29px;
+      display: grid;
+      place-items: center;
+      color: #dce6f4;
+      font-size: 20px;
+    }
+
+    .operator-copy { min-width: 0; display: grid; gap: 2px; }
+    .operator-copy strong { font-size: 13px; font-weight: 850; }
+    .operator-copy span { color: #8c9aaf; font-size: 12px; font-weight: 700; }
+
+    .app-main-column {
+      min-width: 0;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: var(--topbar-height) minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .top-header {
+      position: relative;
+      height: var(--topbar-height);
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center;
+      gap: 18px;
+      padding: 0 26px 0 22px;
+      border-bottom: 1px solid rgba(141, 161, 195, 0.11);
+      background: linear-gradient(180deg, rgba(7, 13, 24, 0.96), rgba(7, 13, 24, 0.64));
+      backdrop-filter: blur(18px);
+    }
+
+    .header-micro-status {
+      grid-column: 2;
+      justify-self: center;
+      display: flex;
+      align-items: center;
+      height: 34px;
+      border: 1px solid rgba(132, 153, 188, 0.14);
+      border-radius: var(--radius-md);
+      background: rgba(18, 29, 48, 0.62);
+      overflow: hidden;
+      color: #a7b3c5;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .status-segment {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 100%;
+      padding: 0 14px;
+      border-right: 1px solid rgba(132, 153, 188, 0.12);
+      white-space: nowrap;
+    }
+
+    .status-segment:last-child { border-right: 0; }
+    .status-segment strong { color: #dce4f0; font-weight: 800; }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--color-green);
+      box-shadow: 0 0 12px rgba(89, 220, 122, 0.7);
+    }
+
+    .status-dot.warn { background: var(--color-amber); box-shadow: 0 0 12px rgba(244, 185, 95, 0.52); }
+    .status-dot.off { background: #64748b; box-shadow: none; }
+
+    .header-actions {
+      grid-column: 3;
+      justify-self: end;
+      position: absolute;
+      top: 17px;
+      right: 26px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-actions button,
+    .header-actions a {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(132, 153, 188, 0.18);
+      border-radius: var(--radius-md);
+      color: var(--color-muted);
+      background: rgba(18, 29, 48, 0.82);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      text-decoration: none;
+    }
+
+    .notification-count {
+      position: absolute;
+      top: -7px;
+      right: -6px;
+      min-width: 16px;
+      height: 19px;
+      padding: 0 5px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      color: white;
+      background: linear-gradient(135deg, #9b6cff, #6b45d6);
+      font-size: 10px;
+      font-weight: 800;
+      box-shadow: 0 6px 14px rgba(96, 61, 216, 0.44);
+    }
+
+    .avatar {
+      width: 39px;
+      height: 39px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(132, 153, 188, 0.2);
+      border-radius: 999px;
+      color: white;
+      background: rgba(18, 29, 48, 0.88);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: 0.05em;
+    }
+
+    .app-content { min-width: 0; min-height: 0; overflow: hidden; }
+
+    .page-surface {
+      min-width: 0;
+      min-height: 0;
+      height: calc(100vh - var(--topbar-height));
+      padding: 16px 16px 13px 16px;
+      overflow: auto;
+      scrollbar-width: none;
+    }
+
+    .page-surface::-webkit-scrollbar { display: none; }
+    .page-header { min-width: 0; }
+
+    .page-title {
+      color: #f3f6fd;
+      font-size: 29px;
+      font-weight: 650;
+      line-height: 1.1;
+      letter-spacing: -0.025em;
+    }
+
+    .page-subtitle {
+      max-width: 760px;
+      margin: 8px 0 0;
+      color: #a7b3c5;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .profiles-layout {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 312px minmax(680px, 1fr) 336px;
+      gap: 10px;
+      align-items: start;
+      padding-bottom: 26px;
+    }
+
+    .panel {
+      position: relative;
+      border: 1px solid var(--color-line-strong);
+      border-radius: var(--radius-md);
+      background:
+        linear-gradient(180deg, rgba(18, 29, 47, 0.95), rgba(12, 20, 34, 0.96)),
+        rgba(12, 20, 34, 0.96);
+      box-shadow: var(--shadow-panel);
+      overflow: hidden;
+    }
+
+    .panel.soft {
+      background:
+        linear-gradient(180deg, rgba(17, 28, 46, 0.76), rgba(10, 17, 30, 0.88)),
+        rgba(10, 17, 30, 0.92);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 15px 16px 0;
+    }
+
+    .section-title {
+      color: #c7d0df;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .mini-pill,
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 25px;
+      padding: 0 10px;
+      border: 1px solid rgba(132, 153, 188, 0.16);
+      border-radius: 999px;
+      background: rgba(12, 22, 38, 0.78);
+      color: #a7b3c6;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .badge.green { color: #8df0a4; border-color: rgba(89, 220, 122, 0.22); background: rgba(89, 220, 122, 0.09); }
+    .badge.purple { color: #d4c7ff; border-color: rgba(143, 92, 255, 0.32); background: rgba(143, 92, 255, 0.12); }
+    .badge.amber { color: #ffd18a; border-color: rgba(244, 185, 95, 0.28); background: rgba(244, 185, 95, 0.09); }
+    .badge.red { color: #ff9aa7; border-color: rgba(255, 107, 122, 0.28); background: rgba(255, 107, 122, 0.08); }
+    .badge.cyan { color: #8bedf6; border-color: rgba(66, 215, 232, 0.24); background: rgba(66, 215, 232, 0.08); }
+    .badge.dim { color: #8190a6; }
+
+    .mono-value { font-family: var(--font-mono); }
+
+    .btn {
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 12px;
+      border: 1px solid rgba(132, 153, 188, 0.18);
+      border-radius: var(--radius-sm);
+      color: #d8e1ee;
+      background: rgba(14, 24, 40, 0.78);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+      font-size: 13px;
+      font-weight: 780;
+    }
+
+    .btn.primary {
+      color: #fff;
+      border-color: rgba(177, 137, 255, 0.52);
+      background: linear-gradient(180deg, rgba(127, 75, 232, 0.95), rgba(79, 49, 147, 0.95));
+      box-shadow: 0 10px 26px rgba(101, 63, 209, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+
+    .btn.danger {
+      color: #ffe8ec;
+      border-color: rgba(255, 107, 122, 0.28);
+      background: rgba(255, 107, 122, 0.09);
+    }
+
+    .btn.ghost { background: rgba(8, 16, 29, 0.52); }
+    .btn.small { height: 32px; padding: 0 10px; font-size: 12px; }
+    .btn:disabled { opacity: 0.42; filter: saturate(0.65); }
+
+    .profile-library {
+      min-height: calc(100vh - var(--topbar-height) - 104px);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+
+    .library-top {
+      padding: 14px 14px 0;
+      display: grid;
+      gap: 13px;
+    }
+
+    .library-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 18px;
+    }
+
+    .library-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 112px;
+      gap: 10px;
+    }
+
+    .search-input,
+    .form-control,
+    .textarea-control {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid rgba(132, 153, 188, 0.16);
+      border-radius: var(--radius-sm);
+      outline: none;
+      color: #dce5f2;
+      background: rgba(5, 12, 22, 0.68);
+      box-shadow: inset 0 1px 12px rgba(0, 0, 0, 0.24);
+    }
+
+    .search-input {
+      height: 38px;
+      padding: 0 12px;
+      color: #b9c7d8;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .search-input::placeholder,
+    .form-control::placeholder,
+    .textarea-control::placeholder { color: #657389; }
+
+    .profile-cards {
+      min-height: 0;
+      display: grid;
+      align-content: start;
+      padding: 14px 10px 14px;
+      overflow: hidden;
+    }
+
+    .profile-card {
+      position: relative;
+      display: grid;
+      gap: 7px;
+      min-height: 92px;
+      padding: 14px 14px 13px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .profile-card + .profile-card {
+      margin-top: 4px;
+    }
+
+    .profile-card:not(.selected)::after {
+      content: "";
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: -3px;
+      height: 1px;
+      background: rgba(132, 153, 188, 0.12);
+    }
+
+    .profile-card.selected {
+      border-color: rgba(157, 111, 255, 0.42);
+      background:
+        radial-gradient(circle at 18% 18%, rgba(192, 149, 255, 0.26), transparent 42%),
+        linear-gradient(135deg, rgba(106, 63, 210, 0.78), rgba(58, 37, 132, 0.62));
+      box-shadow:
+        0 14px 32px rgba(74, 45, 161, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.11);
+    }
+
+    .profile-card-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 9px;
+      align-items: center;
+    }
+
+    .profile-title-line {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .profile-dot {
+      width: 17px;
+      height: 17px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #b893ff, #734de9);
+      box-shadow: 0 0 18px rgba(158, 105, 255, 0.42);
+      flex: 0 0 auto;
+    }
+
+    .profile-title-line strong {
+      min-width: 0;
+      color: #ecf1fb;
+      font-size: 14px;
+      font-weight: 850;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .profile-card:not(.selected) .profile-title-line strong { color: #e0e7f3; }
+
+    .profile-menu {
+      width: 26px;
+      height: 26px;
+      display: inline-grid;
+      place-items: center;
+      border: 0;
+      border-radius: 7px;
+      color: #aebbd0;
+      background: transparent;
+      font-size: 17px;
+      line-height: 1;
+      letter-spacing: 0.08em;
+    }
+
+    .profile-card.selected .profile-menu { color: rgba(255, 255, 255, 0.84); }
+    .profile-menu:hover { background: rgba(132, 153, 188, 0.1); }
+
+    .profile-line {
+      margin-left: 27px;
+      color: #aebacf;
+      font-size: 12px;
+      line-height: 1.45;
+      font-weight: 730;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .profile-card.selected .profile-line { color: rgba(235, 230, 255, 0.86); }
+
+    .library-footer {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 12px 14px 14px;
+      border-top: 1px solid rgba(132, 153, 188, 0.11);
+      background: rgba(5, 10, 18, 0.25);
+    }
+
+    .editor-panel {
+      min-height: calc(100vh - var(--topbar-height) - 104px);
+      max-height: none;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: visible;
+    }
+
+    .editor-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 8;
+      min-height: 58px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.13);
+      background:
+        linear-gradient(180deg, rgba(16, 27, 45, 0.98), rgba(11, 19, 33, 0.96)),
+        rgba(10, 18, 31, 0.96);
+    }
+
+    .editor-title {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+
+    .editor-title strong {
+      color: #f1f5fd;
+      font-size: 15px;
+      font-weight: 850;
+      letter-spacing: -0.01em;
+    }
+
+    .editor-title-row {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      flex-wrap: wrap;
+    }
+
+
+    .editor-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      color: #8d9ab0;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .editor-meta strong {
+      color: #b9c4d6;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .meta-dot {
+      width: 3px;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(144, 158, 181, 0.72);
+      flex: 0 0 auto;
+    }
+
+    .section-nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .section-chip {
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 9px;
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: 999px;
+      color: #8998ae;
+      background: rgba(5, 12, 22, 0.45);
+      font-size: 11px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .section-chip.active {
+      color: #d8ccff;
+      border-color: rgba(143, 92, 255, 0.28);
+      background: rgba(143, 92, 255, 0.1);
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .editor-scroll {
+      min-height: 0;
+      padding: 10px;
+      overflow: visible;
+      display: grid;
+      gap: 10px;
+    }
+
+    .config-section {
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background:
+        linear-gradient(180deg, rgba(12, 23, 39, 0.75), rgba(7, 14, 26, 0.72)),
+        rgba(7, 14, 26, 0.7);
+      overflow: visible;
+    }
+
+    .config-section-head {
+      min-height: 42px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 0 14px;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.1);
+    }
+
+    .config-heading {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .config-heading h2 {
+      color: #d8e1ee;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.095em;
+      font-weight: 900;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .config-heading span {
+      min-width: 0;
+      color: #77859b;
+      font-size: 12px;
+      line-height: 1.35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .restart-note {
+      color: #f4b95f;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+
+    .config-body {
+      padding: 14px;
+      display: grid;
+      gap: 13px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .form-grid.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+    .model-build-stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .model-files-card {
+      display: grid;
+      gap: 10px;
+      padding: 11px;
+      border: 1px solid rgba(132, 153, 188, 0.12);
+      border-radius: var(--radius-sm);
+      background: rgba(5, 12, 22, 0.3);
+    }
+
+    .model-files-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .model-files-head > strong {
+      color: #94a2b7;
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .model-file-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      align-items: start;
+    }
+
+    .model-file-grid.flat {
+      align-items: end;
+    }
+
+    .model-file-grid.with-vision {
+      grid-template-columns: minmax(0, 1fr) 150px;
+      align-items: end;
+    }
+
+    .model-file-grid.with-vision .mmproj-field {
+      grid-column: 1 / -1;
+    }
+
+    .vision-field .segmented {
+      width: 100%;
+    }
+
+    .field-title-row {
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .field-title-row label {
+      min-width: 0;
+    }
+
+    .inline-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+      padding: 4px 9px 4px 7px;
+      border: 1px solid rgba(89, 220, 122, 0.2);
+      border-radius: 999px;
+      color: #d8e4f3;
+      background: rgba(89, 220, 122, 0.075);
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .inline-toggle .toggle-switch {
+      width: 27px;
+      height: 16px;
+    }
+
+    .inline-toggle .toggle-switch::before {
+      width: 10px;
+      height: 10px;
+    }
+
+    .inline-toggle.on .toggle-switch { border-color: rgba(89, 220, 122, 0.28); background: rgba(89, 220, 122, 0.13); }
+    .inline-toggle.on .toggle-switch::before { transform: translateX(11px); background: #8ef3a7; box-shadow: 0 0 10px rgba(89, 220, 122, 0.38); }
+
+    .inline-toggle.compact {
+      min-height: 22px;
+      gap: 6px;
+      padding: 2px 7px 2px 6px;
+      font-size: 11px;
+      letter-spacing: 0.01em;
+    }
+
+    .inline-toggle.compact .toggle-switch {
+      width: 24px;
+      height: 14px;
+    }
+
+    .inline-toggle.compact .toggle-switch::before {
+      width: 8px;
+      height: 8px;
+    }
+
+    .inline-toggle.compact.on .toggle-switch::before { transform: translateX(10px); }
+
+    .field {
+      min-width: 0;
+      display: grid;
+      gap: 7px;
+    }
+
+    .field.span-2 { grid-column: span 2; }
+    .field.span-3 { grid-column: span 3; }
+    .field.span-4 { grid-column: span 4; }
+    .field.span-5 { grid-column: span 5; }
+
+    .field label,
+    .field-label {
+      color: #94a2b7;
+      font-size: 12px;
+      font-weight: 780;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .field label em {
+      color: #66758c;
+      font-size: 10px;
+      font-style: normal;
+      font-weight: 850;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .has-help { position: relative; }
+
+    .has-help::after {
+      content: attr(data-help);
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 8px);
+      z-index: 80;
+      width: min(300px, calc(100vw - 40px));
+      padding: 8px 9px;
+      border: 1px solid rgba(132, 153, 188, 0.24);
+      border-radius: var(--radius-sm);
+      color: #c8d3e5;
+      background: rgba(8, 15, 27, 0.99);
+      box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
+      font-size: 11px;
+      line-height: 1.4;
+      font-weight: 700;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(3px);
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+
+    .has-help:hover:not(:focus-within)::after {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .context-grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .context-grid .span-3 { grid-column: span 3; }
+    .context-grid .span-4 { grid-column: span 4; }
+
+    .context-grid .segmented { width: 100%; }
+
+    .hint {
+      color: #6f7d93;
+      font-size: 11px;
+      line-height: 1.35;
+      font-weight: 700;
+    }
+
+    .hint strong { color: #aebbd0; }
+    .hint.warn { color: #e6bd77; }
+
+    .form-control {
+      height: 36px;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 730;
+    }
+
+    .form-control:disabled {
+      color: #6f7d93;
+      border-color: rgba(132, 153, 188, 0.1);
+      background: rgba(5, 12, 22, 0.38);
+      box-shadow: none;
+      cursor: not-allowed;
+      opacity: 0.62;
+    }
+
+    .field.is-disabled label {
+      color: #657389;
+    }
+
+    .field.is-disabled {
+      opacity: 0.72;
+    }
+
+    select.form-control { appearance: none; background-image: linear-gradient(45deg, transparent 50%, #7d8ca2 50%), linear-gradient(135deg, #7d8ca2 50%, transparent 50%); background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+
+    .textarea-control {
+      min-height: 72px;
+      resize: vertical;
+      padding: 10px;
+      color: #dbe4f1;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.55;
+      font-weight: 650;
+    }
+
+    .path-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 38px;
+      align-items: center;
+    }
+
+    .path-control .form-control {
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+      font-family: var(--font-mono);
+    }
+
+    .browse-button {
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(132, 153, 188, 0.16);
+      border-left: 0;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      color: #aab7cb;
+      background: rgba(12, 22, 38, 0.7);
+      font-size: 15px;
+    }
+
+    .segmented {
+      display: inline-grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 1fr;
+      height: 36px;
+      border: 1px solid rgba(132, 153, 188, 0.16);
+      border-radius: var(--radius-sm);
+      background: rgba(5, 12, 22, 0.56);
+      overflow: hidden;
+    }
+
+    .segment {
+      display: grid;
+      place-items: center;
+      padding: 0 10px;
+      border-right: 1px solid rgba(132, 153, 188, 0.1);
+      color: #8796ac;
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .segment:last-child { border-right: 0; }
+    .segment.active { color: #f2ecff; background: rgba(143, 92, 255, 0.16); }
+
+    .toggle-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .toggle-item {
+      min-width: 0;
+      display: grid;
+      gap: 7px;
+      align-content: end;
+    }
+
+    .toggle-item > strong {
+      min-width: 0;
+      color: #94a2b7;
+      font-size: 12px;
+      font-weight: 780;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .toggle-item .segmented { width: 100%; }
+
+    .toggle-switch {
+      width: 30px;
+      height: 17px;
+      padding: 2px;
+      border: 1px solid rgba(132, 153, 188, 0.2);
+      border-radius: 999px;
+      background: rgba(8, 15, 26, 0.95);
+    }
+
+    .toggle-switch::before {
+      content: "";
+      display: block;
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      background: #657389;
+      transition: transform 0.16s ease;
+    }
+
+    .toggle-grid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    .gpu-main-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .gpu-toggle-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .moe-control-grid {
+      grid-template-columns: minmax(0, 2fr) minmax(150px, 1fr);
+      align-items: end;
+    }
+
+    .moe-control-grid .segmented { width: 100%; }
+
+    .kv-cache-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(220px, 0.9fr);
+      gap: 12px;
+      align-items: end;
+    }
+
+    .kv-cache-grid .segmented { width: 100%; }
+
+    .kv-inline-estimate {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-self: start;
+      gap: 8px;
+      padding: 0 10px;
+      border: 1px solid rgba(132, 153, 188, 0.12);
+      border-radius: var(--radius-sm);
+      background: rgba(5, 12, 22, 0.32);
+      color: #77869c;
+      font-size: 11px;
+      font-weight: 760;
+    }
+
+    .kv-inline-estimate span {
+      color: #94a2b7;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .kv-inline-estimate strong {
+      color: #e4edf8;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .kv-inline-estimate em {
+      color: #7d8ba1;
+      font-style: normal;
+    }
+
+    .kv-advanced-row {
+      display: grid;
+      grid-template-columns: minmax(0, 220px);
+      gap: 12px;
+      align-items: end;
+      padding-top: 11px;
+      border-top: 1px solid rgba(132, 153, 188, 0.08);
+    }
+
+    .advanced-kv-label {
+      display: grid;
+      gap: 4px;
+      align-self: center;
+      color: #77869c;
+      font-size: 11px;
+      font-weight: 760;
+      line-height: 1.4;
+    }
+
+    .advanced-kv-label strong {
+      color: #94a2b7;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .label-with-badge {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .tiny-badge {
+      min-height: 18px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 6px;
+      border: 1px solid rgba(244, 185, 95, 0.22);
+      border-radius: 999px;
+      color: #e6bd77;
+      background: rgba(244, 185, 95, 0.08);
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .has-help.tooltip-right::after {
+      left: auto;
+      right: 0;
+    }
+
+    .capability-note {
+      display: grid;
+      gap: 5px;
+      padding: 10px 12px;
+      border: 1px solid rgba(132, 153, 188, 0.12);
+      border-radius: var(--radius-sm);
+      background: rgba(5, 12, 22, 0.34);
+    }
+
+    .capability-note strong {
+      color: #dbe5f5;
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .capability-note span {
+      color: #7d8ba1;
+      font-size: 11px;
+      line-height: 1.45;
+      font-weight: 720;
+    }
+
+    .device-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .device-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background: rgba(5, 12, 22, 0.44);
+    }
+
+    .device-card.selected { border-color: rgba(66, 215, 232, 0.22); background: rgba(66, 215, 232, 0.06); }
+
+    .check-dot {
+      width: 17px;
+      height: 17px;
+      border-radius: 5px;
+      display: grid;
+      place-items: center;
+      color: #07111f;
+      background: #84eaf5;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .device-copy { min-width: 0; display: grid; gap: 3px; }
+    .device-copy strong { color: #e2ebf8; font-size: 12px; font-weight: 850; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .device-copy span { color: #8290a5; font-size: 11px; font-weight: 700; }
+    .device-stat { color: #bfeef5; font-family: var(--font-mono); font-size: 11px; font-weight: 850; }
+
+    .computed-panel {
+      display: grid;
+      gap: 8px;
+      padding: 11px 12px;
+      border: 1px solid rgba(66, 215, 232, 0.13);
+      border-radius: var(--radius-sm);
+      background: linear-gradient(180deg, rgba(66, 215, 232, 0.055), rgba(7, 14, 26, 0.42));
+    }
+
+    .computed-panel strong {
+      color: #c7f7fb;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .computed-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) auto;
+      gap: 12px;
+      color: #8797ae;
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .computed-row span:last-child {
+      color: #dce8f6;
+      font-family: var(--font-mono);
+      font-weight: 850;
+      text-align: right;
+    }
+
+    .flag-toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .flag-summary { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+
+    .flag-table {
+      border: 1px solid rgba(132, 153, 188, 0.12);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: rgba(3, 8, 16, 0.38);
+    }
+
+    .flag-row {
+      display: grid;
+      grid-template-columns: 64px 150px minmax(160px, 1fr) 86px 92px minmax(160px, 1fr);
+      min-height: 38px;
+      align-items: center;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.08);
+      color: #aab7ca;
+      font-size: 12px;
+    }
+
+    .flag-row:last-child { border-bottom: 0; }
+    .flag-row.header { min-height: 34px; color: #78869c; font-size: 10px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; background: rgba(12, 22, 38, 0.52); }
+    .flag-row > span { min-width: 0; padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .flag-row .mono { font-family: var(--font-mono); color: #d7e3f2; }
+    .flag-row .muted { color: #718096; }
+
+    .flag-empty {
+      min-height: 76px;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      border: 1px solid rgba(132, 153, 188, 0.12);
+      border-radius: var(--radius-sm);
+      color: #7f8da3;
+      background: rgba(3, 8, 16, 0.32);
+      font-size: 12px;
+      font-weight: 760;
+      text-align: center;
+    }
+
+    .right-column {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .inspector-card { padding: 15px 16px 16px; }
+
+    .validation-list {
+      margin-top: 13px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .validation-item {
+      min-height: 37px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid rgba(132, 153, 188, 0.11);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 16, 29, 0.44);
+      color: #aebacd;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .status-text {
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .status-text.ok { color: #72e890; }
+    .status-text.warn { color: #f4b95f; }
+    .status-text.error { color: #ff7381; }
+    .status-text.info { color: #82e9f4; }
+
+    .command-box {
+      margin-top: 13px;
+      border: 1px solid rgba(132, 153, 188, 0.13);
+      border-radius: var(--radius-sm);
+      background: rgba(4, 7, 12, 0.65);
+      overflow: hidden;
+      box-shadow: inset 0 1px 22px rgba(0, 0, 0, 0.32);
+    }
+
+    .command-toolbar {
+      min-height: 39px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 11px;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.1);
+      background: rgba(12, 22, 38, 0.52);
+      color: #8998ab;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .command-toolbar button {
+      height: 28px;
+      border: 1px solid rgba(132, 153, 188, 0.16);
+      border-radius: 999px;
+      color: #b8c6d9;
+      background: rgba(8, 16, 29, 0.78);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .command-pre {
+      min-height: 262px;
+      max-height: 430px;
+      padding: 13px 14px 15px;
+      color: #d7e2f1;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.65;
+      white-space: pre;
+      overflow: hidden;
+    }
+
+    .cmd-path { color: #85e9f4; }
+    .cmd-flag { color: #cfbfff; }
+    .cmd-value { color: #d8eec4; }
+    .cmd-comment { color: #8795aa; }
+
+    .summary-list {
+      margin-top: 13px;
+      display: grid;
+      gap: 9px;
+      color: #9facbf;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .summary-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(132, 153, 188, 0.08);
+    }
+
+    .summary-row:last-child { border-bottom: 0; padding-bottom: 0; }
+    .summary-row strong { color: #e0e9f5; font-family: var(--font-mono); font-size: 12px; text-align: right; }
+
+    .impact-grid {
+      margin-top: 13px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .impact-tile {
+      min-height: 64px;
+      display: grid;
+      gap: 5px;
+      align-content: center;
+      padding: 10px;
+      border: 1px solid rgba(132, 153, 188, 0.11);
+      border-radius: var(--radius-sm);
+      background: rgba(5, 12, 22, 0.44);
+    }
+
+    .impact-tile span {
+      color: #77869c;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .impact-tile strong {
+      color: #e4edf8;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .footer-note {
+      margin-top: 12px;
+      color: #6f7e94;
+      font-size: 11px;
+      line-height: 1.45;
+      font-weight: 700;
+    }
+
+    @media (max-width: 1500px) {
+      .profiles-layout { grid-template-columns: 290px minmax(0, 1fr); }
+      .right-column { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .form-grid.five { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .context-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+      .context-grid .span-3,
+      .context-grid .span-4 { grid-column: span 3; }
+      .field.span-5 { grid-column: span 3; }
+    }
+
+    @media (max-width: 1180px) {
+      .app-shell { grid-template-columns: 86px minmax(0, 1fr); }
+      .sidebar { width: 86px; }
+      .brand-copy, .nav-label, .operator-copy, .menu-button { display: none; }
+      .brand-row { justify-content: center; padding: 18px 0 15px; }
+      .brand-row::after { left: 17px; right: 17px; }
+      .nav-stack { padding-left: 14px; padding-right: 14px; }
+      .nav-section p { text-align: center; margin-left: 0; font-size: 9px; }
+      .nav-items a { grid-template-columns: 1fr; justify-items: center; padding: 0; }
+      .operator-card { left: 14px; right: 14px; grid-template-columns: 1fr; justify-items: center; }
+      .profiles-layout { grid-template-columns: minmax(0, 1fr); }
+      .profile-library { min-height: auto; }
+      .right-column { grid-template-columns: minmax(0, 1fr); }
+      .form-grid, .form-grid.two, .form-grid.three, .form-grid.five, .model-file-grid, .model-file-grid.with-vision, .gpu-main-grid, .gpu-toggle-grid, .moe-control-grid, .kv-cache-grid, .kv-advanced-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .context-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .context-grid .span-3,
+      .context-grid .span-4 { grid-column: span 1; }
+      .field.span-3, .field.span-4, .field.span-5 { grid-column: span 2; }
+      .toggle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 760px) {
+      html, body { height: auto; overflow: auto; }
+      .app-shell { height: auto; min-height: 100vh; grid-template-columns: minmax(0, 1fr); }
+      .sidebar { display: none; }
+      .app-main-column { height: auto; min-height: 100vh; }
+      .top-header { grid-template-columns: minmax(0, 1fr) auto; padding: 0 14px; }
+      .header-micro-status { display: none; }
+      .header-actions { position: static; grid-column: 2; }
+      .page-surface { height: auto; overflow: visible; padding: 14px; }
+      .profiles-layout { padding-bottom: 14px; }
+      .editor-toolbar { grid-template-columns: minmax(0, 1fr); }
+      .toolbar-actions { justify-content: stretch; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .form-grid, .form-grid.two, .form-grid.three, .form-grid.five, .model-file-grid, .model-file-grid.with-vision, .device-grid, .toggle-grid, .toggle-grid.compact, .gpu-main-grid, .gpu-toggle-grid, .moe-control-grid, .kv-cache-grid, .kv-advanced-row, .impact-grid { grid-template-columns: minmax(0, 1fr); }
+      .context-grid { grid-template-columns: minmax(0, 1fr); }
+      .context-grid .span-3,
+      .context-grid .span-4 { grid-column: span 1; }
+      .field.span-2, .field.span-3, .field.span-4, .field.span-5 { grid-column: auto; }
+      .flag-row { grid-template-columns: 54px 130px minmax(120px, 1fr); }
+      .flag-row span:nth-child(n+4) { display: none; }
+      .command-pre { overflow: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="brand-row">
+        <a class="brand" href="#">
+          <span class="logo-mark" aria-hidden="true"></span>
+          <span class="brand-copy"><strong>ObsidianLM</strong><span>Operator</span></span>
+        </a>
+        <button class="menu-button" type="button">☰</button>
+      </div>
+
+      <nav class="nav-stack">
+        <section class="nav-section">
+          <p>Core</p>
+          <div class="nav-items">
+            <a href="#"><span class="nav-icon">⌘</span><span class="nav-label">Dashboard</span></a>
+            <a href="#"><span class="nav-icon">◴</span><span class="nav-label">Runtime</span><span class="nav-status-dot"></span></a>
+            <a class="active" href="#"><span class="nav-icon">▧</span><span class="nav-label">Profiles</span></a>
+            <a href="#"><span class="nav-icon">◈</span><span class="nav-label">Models</span></a>
+          </div>
+        </section>
+        <section class="nav-section">
+          <p>Library</p>
+          <div class="nav-items">
+            <a href="#"><span class="nav-icon">▣</span><span class="nav-label">Builds</span></a>
+            <a href="#"><span class="nav-icon">▤</span><span class="nav-label">Artifacts</span></a>
+          </div>
+        </section>
+        <section class="nav-section">
+          <p>Observability</p>
+          <div class="nav-items">
+            <a href="#"><span class="nav-icon">☷</span><span class="nav-label">Logs</span></a>
+            <a href="#"><span class="nav-icon">▥</span><span class="nav-label">Telemetry</span></a>
+          </div>
+        </section>
+        <section class="nav-section">
+          <p>System</p>
+          <div class="nav-items">
+            <a href="#"><span class="nav-icon">⚙</span><span class="nav-label">Settings</span></a>
+            <a href="#"><span class="nav-icon">◷</span><span class="nav-label">System</span></a>
+          </div>
+        </section>
+      </nav>
+
+      <footer class="operator-card">
+        <div class="operator-icon">▱</div>
+        <div class="operator-copy"><strong>obx-operator</strong><span>Operator</span></div>
+        <span style="color:#8d9ab0">⌃</span>
+      </footer>
+    </aside>
+
+    <main class="app-main-column">
+      <header class="top-header">
+        <div class="header-micro-status" aria-label="Status summary">
+          <div class="status-segment"><span class="status-dot"></span>Service healthy</div>
+          <div class="status-segment"><span class="status-dot"></span>Runtime running</div>
+          <div class="status-segment">Port <strong>8085</strong></div>
+          <div class="status-segment">Uptime <strong>02h 41m 32s</strong></div>
+        </div>
+        <div class="header-actions">
+          <button type="button" aria-label="Terminal">⌁</button>
+          <button type="button" aria-label="Notifications">♢<span class="notification-count">2</span></button>
+          <a href="#" aria-label="Settings">⚙</a>
+          <div class="avatar">OP</div>
+        </div>
+      </header>
+
+      <section class="page-surface">
+        <header class="page-header">
+          <h1 class="page-title">Profiles</h1>
+          <p class="page-subtitle">Create, edit, validate, and launch llama.cpp runtime profiles.</p>
+        </header>
+
+        <div class="profiles-layout">
+          <aside class="panel soft profile-library">
+            <div class="library-top">
+              <div class="library-title-row">
+                <p class="section-title">Profiles</p>
+              </div>
+              <div class="library-actions">
+                <input class="search-input" value="" placeholder="Search profiles..." />
+                <button class="btn small primary" type="button">+ New profile</button>
+              </div>
+            </div>
+
+            <div class="profile-cards">
+              <article class="profile-card selected">
+                <div class="profile-card-top">
+                  <div class="profile-title-line"><span class="profile-dot"></span><strong>Qwen 3.6 Coding 65K</strong></div>
+                  <span class="badge green">Active</span>
+                  <button class="profile-menu" type="button" aria-label="Profile actions">⋮</button>
+                </div>
+                <div class="profile-line">Qwen • 65K context</div>
+                <div class="profile-line">Port 8085</div>
+              </article>
+
+              <article class="profile-card">
+                <div class="profile-card-top">
+                  <div class="profile-title-line"><span class="profile-dot" style="background:linear-gradient(135deg,#91e8ff,#426ee8)"></span><strong>Qwen 3.6 Balanced</strong></div>
+                  <span></span>
+                  <button class="profile-menu" type="button" aria-label="Profile actions">⋮</button>
+                </div>
+                <div class="profile-line">Qwen • 32K context</div>
+                <div class="profile-line">Port 8086</div>
+              </article>
+
+              <article class="profile-card">
+                <div class="profile-card-top">
+                  <div class="profile-title-line"><span class="profile-dot" style="background:linear-gradient(135deg,#76f0a4,#278f63)"></span><strong>Mistral Dev 32K</strong></div>
+                  <span></span>
+                  <button class="profile-menu" type="button" aria-label="Profile actions">⋮</button>
+                </div>
+                <div class="profile-line">Mistral • 32K context</div>
+                <div class="profile-line">Port 8087</div>
+              </article>
+
+              <article class="profile-card">
+                <div class="profile-card-top">
+                  <div class="profile-title-line"><span class="profile-dot" style="background:linear-gradient(135deg,#ffd287,#bb7424)"></span><strong>Vision Test 128K</strong></div>
+                  <span class="badge red">Invalid</span>
+                  <button class="profile-menu" type="button" aria-label="Profile actions">⋮</button>
+                </div>
+                <div class="profile-line">Qwen VL • 128K context</div>
+                <div class="profile-line">Port 8088</div>
+              </article>
+            </div>
+
+            <div class="library-footer">
+              <button class="btn ghost" type="button">Import profile</button>
+              <button class="btn ghost" type="button">Export all</button>
+            </div>
+          </aside>
+
+          <section class="panel editor-panel">
+            <div class="editor-toolbar">
+              <div class="editor-title">
+                <div class="editor-title-row">
+                  <strong>Editing: Qwen 3.6 Coding 65K</strong>
+                </div>
+                <div class="editor-meta">
+                  <strong>Active</strong>
+                  <span class="meta-dot"></span>
+                  <span>Unsaved changes</span>
+                  <span class="meta-dot"></span>
+                  <span>Restart required after save</span>
+                </div>
+              </div>
+              <div class="toolbar-actions">
+                <button class="btn small ghost" type="button">Duplicate</button>
+                <button class="btn small danger" type="button">Delete</button>
+                <button class="btn small primary" type="button">Save profile</button>
+              </div>
+            </div>
+
+            <div class="editor-scroll">
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Profile details</h2><span>Name and short description used in the profile library.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="form-grid four">
+                    <div class="field span-2"><label>Profile name</label><input class="form-control" value="Qwen 3.6 Coding 65K" /></div>
+                    <div class="field span-2"><label>Description</label><input class="form-control" value="High-context coding profile optimized for long files and repositories" /></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Model, vision & build</h2></div>
+                </div>
+                <div class="config-body model-build-stack">
+                  <div class="field"><label>Build path</label><div class="path-control"><input class="form-control" value="D:/llama.cpp-builds/llama.cpp-cu13-official/llama-server.exe" /><button class="browse-button">▣</button></div></div>
+                  <div class="model-file-grid with-vision">
+                    <div class="field">
+                      <label>Model path</label>
+                      <div class="path-control"><input class="form-control" value="D:/Models/Qwen3-3.6B-Coding.Q4_K_M.gguf" /><button class="browse-button">▣</button></div>
+                    </div>
+                    <div class="field vision-field">
+                      <label>Vision</label>
+                      <div class="segmented"><span class="segment">Off</span><span class="segment active">On</span></div>
+                    </div>
+                    <div class="field mmproj-field">
+                      <label>MMProj path</label>
+                      <div class="path-control"><input class="form-control" value="D:/Models/Qwen3-VL-mmproj.Q4_K_M.gguf" /><button class="browse-button">▣</button></div>
+                    </div>
+                    <div class="field has-help" data-help="Controls whether the multimodal projector is offloaded when vision is enabled. Off maps to --no-mmproj-offload.">
+                      <label>MMProj offload</label>
+                      <div class="segmented"><span class="segment">Off</span><span class="segment active">On</span></div>
+                    </div>
+                    <div class="field has-help" data-help="Minimum number of image tokens used for vision preprocessing when the selected build exposes --image-min-tokens. Auto leaves the build default.">
+                      <label>Image min tokens</label>
+                      <input class="form-control mono-value" value="auto" />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Endpoint</h2><span>Network binding, optional API key, CORS, UI, and metrics.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="form-grid five">
+                    <div class="field"><label>Host</label><input class="form-control mono-value" value="0.0.0.0" /></div>
+                    <div class="field"><label>Port</label><input class="form-control mono-value" value="8085" /></div>
+                    <div class="field"><label>API key</label><input class="form-control" placeholder="Optional" value="" /></div>
+                    <div class="field has-help" data-help="Optional OpenAI-compatible model name returned by the server. Leave blank to use the model metadata/default."><label>Model alias</label><input class="form-control" placeholder="Optional" value="" /></div>
+                    <div class="field"><label>Web UI</label><div class="segmented"><span class="segment">Off</span><span class="segment active">On</span></div></div>
+                    <div class="field"><label>Metrics</label><div class="segmented"><span class="segment">Off</span><span class="segment active">On</span></div></div>
+                    <div class="field span-5"><label>CORS origins</label><input class="form-control mono-value" value="http://localhost:5173,http://100.98.185.32:5173" /></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Context & Generation</h2><span>Context window, max output, Flash Attention, and RoPE defaults.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="context-grid context-grid-balanced">
+                    <div class="field has-help span-3" data-help="Maximum prompt window for this profile. Suggestions are generated from the selected model metadata up to the detected supported maximum.">
+                      <label>Context size <em>max 262K</em></label>
+                      <input class="form-control mono-value" list="context-size-values" value="65536" />
+                    </div>
+                    <div class="field has-help span-3" data-help="Default max tokens to generate when the client does not send its own limit. Use -1 for unlimited generation.">
+                      <label>Predict / max tokens</label>
+                      <input class="form-control mono-value" value="-1" />
+                    </div>
+                    <div class="field has-help span-3" data-help="Number of prompt tokens to keep when context is shifted. Leave 0 unless you need to preserve a fixed prompt prefix.">
+                      <label>Keep tokens</label>
+                      <input class="form-control mono-value" value="0" />
+                    </div>
+                    <div class="field has-help span-3" data-help="Enable llama.cpp Flash Attention for compatible builds and GPUs. Leave on for CUDA profiles unless validation reports a problem.">
+                      <label>Flash Attention</label>
+                      <div class="segmented"><span class="segment">Off</span><span class="segment active">On</span></div>
+                    </div>
+
+                    <div class="field has-help span-3" data-help="RoPE scaling mode. Auto should use model/build defaults; change only for extended-context tuning.">
+                      <label>RoPE scaling</label>
+                      <input class="form-control" list="rope-values" value="auto" />
+                    </div>
+                    <div class="field has-help span-3" data-help="RoPE scale multiplier. Default is usually 1.0 unless a long-context recipe requires another value.">
+                      <label>RoPE scale</label>
+                      <input class="form-control mono-value" value="1.0" />
+                    </div>
+                    <div class="field has-help span-3" data-help="Base frequency for RoPE. Keep the model/build default unless you are applying a known context-extension setting.">
+                      <label>RoPE freq base</label>
+                      <input class="form-control mono-value" value="10000" />
+                    </div>
+                    <div class="field has-help span-3" data-help="RoPE frequency scale. Default is usually 1.0; custom values are advanced context-tuning settings.">
+                      <label>RoPE freq scale</label>
+                      <input class="form-control mono-value" value="1.0" />
+                    </div>
+
+                    <div class="field has-help span-3" data-help="YaRN extrapolation factor. -1 lets llama.cpp/model defaults decide when supported.">
+                      <label>YaRN ext factor</label>
+                      <input class="form-control mono-value" value="-1" />
+                    </div>
+                    <div class="field has-help span-3" data-help="YaRN attention factor. Leave at the default unless a specific model card or benchmark profile requires a different value.">
+                      <label>YaRN attn factor</label>
+                      <input class="form-control mono-value" value="1.0" />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Batching & Parallelism</h2><span>Prompt processing, micro-batching, slots, and prompt cache reuse.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="form-grid five">
+                    <div class="field has-help" data-help="Logical prompt-processing batch size. Higher values can improve prompt processing speed but may reserve more memory."><label>Batch size</label><input class="form-control mono-value" value="4096" /></div>
+                    <div class="field has-help" data-help="Physical micro-batch size used internally by llama.cpp. Tune this when prompt processing speed or VRAM reservation needs adjustment."><label>UBatch size</label><input class="form-control mono-value" value="1024" /></div>
+                    <div class="field has-help" data-help="Number of simultaneous server slots. Keep at 1 for maximum context per request unless you need concurrent generations."><label>Parallel slots</label><input class="form-control mono-value" value="1" /></div>
+                    <div class="field has-help" data-help="Minimum KV cache chunk size llama.cpp should try to reuse. Set 0 to disable cache reuse."><label>Cache reuse</label><input class="form-control mono-value" value="256" /></div>
+                    <div class="field has-help" data-help="Generation scheduling priority passed to --prio when the selected build supports it. Leave 0 for the build default."><label>Generation priority</label><input class="form-control mono-value" list="priority-values" value="0" /></div>
+                    <div class="field has-help" data-help="Prompt/batch scheduling priority passed to --prio-batch. Leave 0 for the build default."><label>Batch priority</label><input class="form-control mono-value" list="priority-values" value="0" /></div>
+                  </div>
+                  <div class="toggle-grid">
+                    <div class="toggle-item has-help" data-help="Allows llama.cpp to batch compatible work across slots. Usually keep enabled for server profiles."><strong>Continuous batching</strong><div class="segmented"><span class="segment">Off</span><span class="segment active">On</span></div></div>
+                    <div class="toggle-item has-help" data-help="Skips the warmup pass at launch. This can start faster but may make first-request performance less predictable."><strong>Disable warmup</strong><div class="segmented"><span class="segment active">Off</span><span class="segment">On</span></div></div>
+                    <div class="toggle-item has-help" data-help="Compatibility fallback for builds or environments where normal event handling is unreliable."><strong>Polling mode</strong><div class="segmented"><span class="segment active">Off</span><span class="segment">On</span></div></div>
+                    <div class="toggle-item has-help" data-help="Enables reuse of matching prompt prefixes when possible, reducing repeated prompt processing."><strong>Prompt cache</strong><div class="segmented"><span class="segment">Off</span><span class="segment active">On</span></div></div>
+                  </div>
+
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Speculative / MTP</h2><span>Draft-token acceleration for builds and models that support speculative decoding.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="form-grid three">
+                    <div class="field has-help" data-help="Master switch for llama.cpp speculative decoding. Default is Off; enable only when the selected model/build supports the chosen draft mode."><label>Speculative decoding</label><div class="segmented"><span class="segment active">Off</span><span class="segment">On</span></div></div>
+                    <div class="field has-help is-disabled" data-help="Speculative decoding type. For Native-MTP-preserved GGUFs, draft-mtp maps to --spec-type draft-mtp."><label>Spec type</label><input class="form-control" list="spec-type-values" value="draft-mtp" disabled /></div>
+                    <div class="field has-help is-disabled tooltip-right" data-help="Maximum draft tokens for the speculative pass. Used as --spec-draft-n-max when speculative decoding is enabled."><label>Draft max tokens</label><input class="form-control mono-value" value="2" disabled /></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>GPU & Offload</h2><span>Selected devices, layer placement, split behavior, and CPU fallback.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="device-grid">
+                    <div class="device-card has-help selected" data-help="Selected compute device. Device labels and free VRAM should come from the chosen build/device scan."><span class="check-dot">✓</span><span class="device-copy"><strong>CUDA0 · RTX 5080</strong><span>16 GB VRAM · primary display</span></span><span class="device-stat">15.1G</span></div>
+                    <div class="device-card has-help selected" data-help="Selected compute device. Tensor split should include one value for each selected device."><span class="check-dot">✓</span><span class="device-copy"><strong>CUDA1 · RTX 3060</strong><span>12 GB VRAM · secondary</span></span><span class="device-stat">11.2G</span></div>
+                  </div>
+                  <div class="form-grid gpu-main-grid">
+                    <div class="field has-help" data-help="How many model layers to offload to GPU. Use all/auto when the selected build and memory plan can support it."><label>GPU layers</label><input class="form-control" value="all" /></div>
+                    <div class="field has-help" data-help="Controls how work/model layers are split across selected devices. Layer split is the normal multi-GPU mode."><label>Split mode</label><input class="form-control" list="split-values" value="layer" /></div>
+                    <div class="field has-help" data-help="Comma-separated split weights for selected GPUs. The number of values should match the selected device count."><label>Tensor split</label><input class="form-control mono-value" value="5,3" /></div>
+                    <div class="field has-help" data-help="Primary GPU selected from detected devices for main/residual work depending on split mode and build support."><label>Main GPU</label><input class="form-control" list="main-gpu-values" value="CUDA0 · RTX 5080" /></div>
+                  </div>
+                  <div class="toggle-grid gpu-toggle-grid">
+                    <div class="toggle-item has-help" data-help="Stores KV cache on GPU when supported. Turning this off can save VRAM but usually reduces speed."><strong>KV offload</strong><div class="segmented"><span class="segment">Off</span><span class="segment active">On</span></div></div>
+                    <div class="toggle-item has-help" data-help="Offloads supported operations to GPU. Usually keep enabled for CUDA builds."><strong>Op offload</strong><div class="segmented"><span class="segment">Off</span><span class="segment active">On</span></div></div>
+                    <div class="toggle-item has-help" data-help="Lets ObsidianLM adjust offload choices when validation predicts a VRAM conflict."><strong>Fit to VRAM</strong><div class="segmented"><span class="segment active">Off</span><span class="segment">On</span></div></div>
+                  </div>
+                  <div class="form-grid moe-control-grid">
+                    <div class="field has-help" data-help="For MoE models, choose whether expert weights stay in the normal offload plan, all MoE experts stay in CPU RAM, or only N MoE layers stay in CPU RAM."><label>MoE CPU placement</label><div class="segmented"><span class="segment active">Off</span><span class="segment">All experts</span><span class="segment">N layers</span></div></div>
+                    <div class="field has-help is-disabled tooltip-right" data-help="Only enabled when MoE CPU placement is set to N layers. The value becomes the N in --n-cpu-moe N."><label>MoE CPU layers</label><input class="form-control mono-value" value="0" disabled /></div>
+                  </div>
+                  <p class="hint warn">Tensor split has 2 values for 2 selected devices. Re-check device ordering if the selected build changes.</p>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>KV Cache</h2><span>K and V cache precision for the selected build.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="kv-cache-grid">
+                    <div class="field has-help" data-help="Quantization/type for K cache. Suggestions should come from the selected llama.cpp build, while still allowing custom values."><label>K cache type</label><input class="form-control" list="cache-types" value="q8_0" /></div>
+                    <div class="field has-help" data-help="Quantization/type for V cache. Some models/builds support different K and V cache types."><label>V cache type</label><input class="form-control" list="cache-types" value="q8_0" /></div>
+                    <div class="field has-help" data-help="Controls sliding-window-attention cache behavior when supported. Auto should follow model/build defaults."><label>SWA full cache</label><div class="segmented"><span class="segment active">Auto</span><span class="segment">On</span><span class="segment">Off</span></div></div>
+                  </div>
+                  <div class="kv-inline-estimate"><span>Estimated KV</span><strong>~8.2 GB</strong></div>
+                  <div class="kv-advanced-row">
+                    <div class="field has-help" data-help="KV cache defragmentation threshold. Deprecated in newer llama.cpp builds; keep it out of the normal tuning path."><label class="label-with-badge">Defrag threshold <span class="tiny-badge">Deprecated</span></label><input class="form-control mono-value" value="0.1" /></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Memory & System</h2><span>Memory mapping, mlock, NUMA behavior, CPU threads, and low-level memory switches.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="form-grid four">
+                    <div class="field has-help" data-help="Memory-map model files instead of fully reading them. Off maps to --no-mmap and can avoid some Windows/file-system issues, but may use more RAM."><label>Memory map</label><div class="segmented"><span class="segment">On</span><span class="segment active">Off</span></div></div>
+                    <div class="field has-help" data-help="Locks model memory to reduce paging. Useful for stability, but may fail if the OS does not allow enough locked memory."><label>mlock</label><div class="segmented"><span class="segment active">On</span><span class="segment">Off</span></div></div>
+                    <div class="field has-help" data-help="NUMA placement policy for multi-socket systems. Most desktop profiles should leave this disabled/auto."><label>NUMA</label><input class="form-control" value="disabled" /></div>
+                    <div class="field has-help" data-help="Controls model tensor repacking when supported by the build. Auto is safest unless benchmarking."><label>Repack</label><div class="segmented"><span class="segment active">Auto</span><span class="segment">On</span><span class="segment">Off</span></div></div>
+                    <div class="field has-help" data-help="CPU threads used for generation-side CPU work. Keep moderate when most layers are GPU-offloaded."><label>Threads</label><input class="form-control mono-value" value="8" /></div>
+                    <div class="field has-help" data-help="CPU threads used during prompt/batch processing. Can be higher than generation threads."><label>Batch threads</label><input class="form-control mono-value" value="16" /></div>
+                    <div class="field has-help" data-help="Optional CPU affinity mask. Advanced setting for pinning llama.cpp work to specific cores."><label>CPU mask</label><input class="form-control mono-value" placeholder="Optional affinity mask" /></div>
+                    <div class="field has-help" data-help="Controls host-side buffers when supported. Off maps to --no-host and can reduce host memory use, but may not fit every build/profile."><label>Host buffers</label><div class="segmented"><span class="segment">On</span><span class="segment active">Off</span></div></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Prompt & Reasoning</h2><span>Template handling, Jinja rendering, and model reasoning controls.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="form-grid four">
+                    <div class="field has-help" data-help="Enable llama.cpp Jinja chat-template rendering. Keep Auto unless a model or client needs a forced setting."><label>Jinja template</label><div class="segmented"><span class="segment active">Auto</span><span class="segment">On</span><span class="segment">Off</span></div></div>
+                    <div class="field has-help" data-help="Controls llama.cpp reasoning mode. Auto lets the selected model/build decide; Off disables reasoning; On enables reasoning."><label>Reasoning</label><input class="form-control" list="reasoning-values" value="auto" /></div>
+                    <div class="field has-help is-disabled" data-help="Only enabled when reasoning is set to On with a fixed budget. Leave auto/blank unless using a fixed budget such as 512, 2048, or 8192."><label>Reasoning budget</label><input class="form-control mono-value" placeholder="auto" value="" disabled /></div>
+                    <div class="field has-help" data-help="Optional chat template override. Leave auto unless the model metadata template is wrong or a client requires a specific template."><label>Chat template</label><input class="form-control" list="chat-templates" value="auto" /></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Sampling Defaults</h2><span>Launch-time defaults for clients that do not override sampling params.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="form-grid five">
+                    <div class="field has-help" data-help="Default randomness for clients that do not override sampling. Lower is more deterministic."><label>Temperature</label><input class="form-control mono-value" value="0.2" /></div>
+                    <div class="field has-help" data-help="Nucleus sampling threshold. Keeps the smallest token set whose probability mass reaches this value."><label>Top P</label><input class="form-control mono-value" value="0.95" /></div>
+                    <div class="field has-help" data-help="Minimum probability cutoff relative to the most likely token. Useful for controlling low-probability tails."><label>Min P</label><input class="form-control mono-value" value="0.05" /></div>
+                    <div class="field has-help" data-help="Limits sampling to the top K candidate tokens. Lower values make output more constrained."><label>Top K</label><input class="form-control mono-value" value="20" /></div>
+                    <div class="field has-help" data-help="Random seed for default sampling. -1 uses a random seed."><label>Seed</label><input class="form-control mono-value" value="-1" /></div>
+                    <div class="field has-help" data-help="Penalty for repeating tokens. Values above 1.0 discourage repetition."><label>Repeat penalty</label><input class="form-control mono-value" value="1.0" /></div>
+                    <div class="field has-help" data-help="Penalty applied when tokens have appeared at least once. Usually controlled by clients."><label>Presence penalty</label><input class="form-control mono-value" value="0.0" /></div>
+                    <div class="field has-help" data-help="Penalty scaled by token frequency. Higher values reduce repeated wording."><label>Frequency penalty</label><input class="form-control mono-value" value="0.0" /></div>
+                    <div class="field has-help" data-help="DRY repetition-control strength when the selected build exposes DRY sampling options."><label>DRY multiplier</label><input class="form-control mono-value" value="0.0" /></div>
+                    <div class="field has-help" data-help="Advanced sampler chain/order. Keep default unless testing a known sampler recipe."><label>Sampler sequence</label><input class="form-control mono-value" value="default" /></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Server / API</h2><span>Timeouts, logging, endpoint behavior, embeddings, reranking, and visibility.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="form-grid four">
+                    <div class="field has-help" data-help="Server request timeout in seconds. Longer values help with very long generations or slow clients."><label>Timeout</label><input class="form-control mono-value" value="3600" /></div>
+                    <div class="field has-help" data-help="Runtime log detail level. Use debug only while diagnosing issues because logs can get noisy."><label>Log verbosity</label><input class="form-control" list="log-levels" value="info" /></div>
+                    <div class="field has-help span-2" data-help="Optional log output path for this profile. Keep profile-specific logs when comparing builds/settings."><label>Log file</label><div class="path-control"><input class="form-control" value="logs/qwen36-coding-65k.log" /><button class="browse-button">▣</button></div></div>
+                    <div class="field has-help" data-help="Controls who can inspect slot state/endpoints when supported by llama-server."><label>Slot visibility</label><input class="form-control" value="protected" /></div>
+                    <div class="field has-help" data-help="Controls access to server/model properties endpoints when supported by the selected build."><label>Props visibility</label><input class="form-control" value="protected" /></div>
+                    <div class="field has-help" data-help="Launches the server in embeddings-capable mode when the model/build supports it."><label>Embeddings</label><div class="segmented"><span class="segment active">Off</span><span class="segment">On</span></div></div>
+                    <div class="field has-help" data-help="Enables reranking behavior for compatible reranker models/builds."><label>Reranking</label><div class="segmented"><span class="segment active">Off</span><span class="segment">On</span></div></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="config-section">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>Advanced Flags</h2><span>Manual or newly detected llama-server flags not covered by the curated fields above.</span></div>
+                </div>
+                <div class="config-body">
+                  <div class="flag-toolbar">
+                    <input class="search-input" placeholder="Search advanced flags..." />
+                    <div class="flag-summary"><span class="badge dim">0 manual</span><span class="badge dim">0 unmapped</span><span class="badge dim">0 warnings</span></div>
+                  </div>
+                  <div class="flag-empty">No additional flags are set for this profile.</div>
+                  <div class="field"><label>Extra raw args</label><textarea class="textarea-control" placeholder="Optional manual llama-server flags"></textarea><span class="hint">Leave empty unless a specific build or model needs an extra flag not available above.</span></div>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <aside class="right-column">
+            <section class="panel inspector-card">
+              <div class="panel-head" style="padding:0"><p class="section-title">Validation</p><span class="badge amber">1 warning</span></div>
+              <div class="validation-list">
+                <div class="validation-item"><span>Runtime binary</span><strong class="status-text ok">OK</strong></div>
+                <div class="validation-item"><span>Model file</span><strong class="status-text ok">OK</strong></div>
+                <div class="validation-item"><span>Port 8085</span><strong class="status-text ok">Available</strong></div>
+                <div class="validation-item"><span>GPU split</span><strong class="status-text warn">Review</strong></div>
+                <div class="validation-item"><span>Detected flags</span><strong class="status-text ok">Loaded</strong></div>
+              </div>
+              <button class="btn ghost" style="width:100%; margin-top:12px" type="button">Run validation</button>
+              <p class="footer-note">Last checked: Today, 09:41 AM. Validation should use the unsaved draft, not only the saved profile.</p>
+            </section>
+
+            <section class="panel inspector-card">
+              <div class="panel-head" style="padding:0"><p class="section-title">Command Preview</p><button class="btn small ghost" type="button">Copy</button></div>
+              <div class="command-box">
+                <div class="command-toolbar"><span>Generated from draft profile</span><button>Full drawer</button></div>
+                <pre class="command-pre"><span class="cmd-path">llama-server</span> \
+  <span class="cmd-flag">--model</span> <span class="cmd-value">"D:/Models/Qwen3-3.6B-Coding.Q4_K_M.gguf"</span> \
+  <span class="cmd-flag">--host</span> <span class="cmd-value">0.0.0.0</span> \
+  <span class="cmd-flag">--port</span> <span class="cmd-value">8085</span> \
+  <span class="cmd-flag">--ctx-size</span> <span class="cmd-value">65536</span> \
+  <span class="cmd-flag">--n-predict</span> <span class="cmd-value">-1</span> \
+  <span class="cmd-flag">--device</span> <span class="cmd-value">CUDA0,CUDA1</span> \
+  <span class="cmd-flag">--split-mode</span> <span class="cmd-value">layer</span> \
+  <span class="cmd-flag">--tensor-split</span> <span class="cmd-value">5,3</span> \
+  <span class="cmd-flag">--n-gpu-layers</span> <span class="cmd-value">all</span> \
+  <span class="cmd-flag">--cache-type-k</span> <span class="cmd-value">q8_0</span> \
+  <span class="cmd-flag">--cache-type-v</span> <span class="cmd-value">q8_0</span> \
+  <span class="cmd-flag">--flash-attn</span> <span class="cmd-value">on</span> \
+  <span class="cmd-flag">--batch-size</span> <span class="cmd-value">4096</span> \
+  <span class="cmd-flag">--ubatch-size</span> <span class="cmd-value">1024</span> \
+  <span class="cmd-flag">--parallel</span> <span class="cmd-value">1</span> \
+  <span class="cmd-flag">--threads</span> <span class="cmd-value">8</span> \
+  <span class="cmd-flag">--threads-batch</span> <span class="cmd-value">16</span> \
+  <span class="cmd-flag">--cache-reuse</span> <span class="cmd-value">256</span> \
+  <span class="cmd-flag">--cont-batching</span> \
+  <span class="cmd-flag">--timeout</span> <span class="cmd-value">3600</span> \
+  <span class="cmd-flag">--temp</span> <span class="cmd-value">0.2</span> \
+  <span class="cmd-flag">--top-p</span> <span class="cmd-value">0.95</span> \
+  <span class="cmd-flag">--min-p</span> <span class="cmd-value">0.05</span> \
+  <span class="cmd-flag">--top-k</span> <span class="cmd-value">20</span> \
+  <span class="cmd-flag">--metrics</span></pre>
+              </div>
+            </section>
+
+            <section class="panel inspector-card">
+              <div class="panel-head" style="padding:0"><p class="section-title">Change Summary</p><span class="badge amber">Unsaved</span></div>
+              <div class="summary-list">
+                <div class="summary-row"><span>Context size</span><strong>32K → 65K</strong></div>
+                <div class="summary-row"><span>K cache type</span><strong>f16 → q8_0</strong></div>
+                <div class="summary-row"><span>V cache type</span><strong>f16 → q8_0</strong></div>
+                <div class="summary-row"><span>GPU layers</span><strong>36 → all</strong></div>
+                <div class="summary-row"><span>Tensor split</span><strong>auto → 5,3</strong></div>
+              </div>
+              <p class="footer-note"><span class="status-text warn">Requires restart</span> because launch-affecting fields changed.</p>
+            </section>
+
+            <section class="panel inspector-card">
+              <div class="panel-head" style="padding:0"><p class="section-title">Launch Impact</p><span class="badge purple">Draft</span></div>
+              <div class="impact-grid">
+                <div class="impact-tile"><span>Restart</span><strong>Yes</strong></div>
+                <div class="impact-tile"><span>Runtime</span><strong>Running</strong></div>
+                <div class="impact-tile"><span>KV estimate</span><strong>~8.2G</strong></div>
+                <div class="impact-tile"><span>Port risk</span><strong>Low</strong></div>
+                <div class="impact-tile"><span>Devices</span><strong>2 CUDA</strong></div>
+                <div class="impact-tile"><span>Manual flags</span><strong>0</strong></div>
+              </div>
+              <p class="footer-note">Use this space for computed consequences, not duplicate status. It should answer what launching this profile will change.</p>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <datalist id="context-size-values">
+    <option value="0" label="model default"></option>
+    <option value="32768"></option>
+    <option value="65536"></option>
+    <option value="98304"></option>
+    <option value="131072"></option>
+    <option value="196608"></option>
+    <option value="262144"></option>
+  </datalist>
+  <datalist id="cache-types">
+    <option value="f32"></option>
+    <option value="f16"></option>
+    <option value="bf16"></option>
+    <option value="q8_0"></option>
+    <option value="q4_0"></option>
+    <option value="q4_1"></option>
+    <option value="iq4_nl"></option>
+    <option value="q5_0"></option>
+    <option value="q5_1"></option>
+  </datalist>
+
+  <datalist id="main-gpu-values">
+    <option value="Auto"></option>
+    <option value="CUDA0 · RTX 5080"></option>
+    <option value="CUDA1 · RTX 3060"></option>
+  </datalist>
+  <datalist id="split-values">
+    <option value="none"></option>
+    <option value="layer"></option>
+    <option value="row"></option>
+    <option value="tensor"></option>
+  </datalist>
+  <datalist id="rope-values">
+    <option value="auto"></option>
+    <option value="none"></option>
+    <option value="linear"></option>
+    <option value="yarn"></option>
+  </datalist>
+  <datalist id="priority-values">
+    <option value="0" label="default"></option>
+    <option value="1"></option>
+    <option value="2"></option>
+    <option value="3"></option>
+  </datalist>
+  <datalist id="log-levels">
+    <option value="error"></option>
+    <option value="warn"></option>
+    <option value="info"></option>
+    <option value="debug"></option>
+    <option value="trace"></option>
+  </datalist>
+  <datalist id="spec-type-values">
+    <option value="draft-mtp"></option>
+    <option value="ngram-simple"></option>
+  </datalist>
+  <datalist id="reasoning-values">
+    <option value="auto"></option>
+    <option value="off"></option>
+    <option value="on"></option>
+  </datalist>
+  <datalist id="chat-templates">
+    <option value="auto"></option>
+    <option value="chatml"></option>
+    <option value="qwen3"></option>
+    <option value="llama3"></option>
+    <option value="mistral"></option>
+  </datalist>
+</body>
+</html>

@@ -2,6 +2,24 @@
 
 ObsidianLM is a lightweight local AI runtime manager. It is a control plane for configuring, monitoring, and eventually managing local AI runtimes while tools such as OpenCode and Illustria connect directly to the runtime API.
 
+## Architecture Status
+
+The implemented Phases 1-13 use one model-bound profile per managed `llama-server` process. That historical architecture remains the current runtime behavior:
+
+```text
+profile = llama-server build + GGUF model + model arguments + endpoint
+```
+
+The next runtime architecture is planned, not implemented: ObsidianLM will manage one active llama.cpp build/router lifecycle and generate per-model router presets. Within that active build, llama.cpp's built-in router will manage model loading, unloading, autoload, residency limits, and eviction. ObsidianLM remains the control plane; it will not become a general inference proxy.
+
+```text
+Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
+
+OpenCode / Illustria / local clients → llama.cpp :8085/v1
+```
+
+Same-build model selection will use llama.cpp's request `model` identifier and may cause the router to load another configured model without an ObsidianLM lifecycle action. A model configuration requiring another llama.cpp build will require ObsidianLM to stop the owned router, verify port release, and start the replacement build on the same `:8085` endpoint. See the [Project Plan](docs/ObsidianLM_Project_Plan.md) for migration and safety requirements.
+
 ## Package Manager
 
 This project uses npm only with npm workspaces. Commit `package-lock.json` and do not use pnpm, Yarn, Bun, Docker, Electron, or Next.js for this project foundation.
@@ -24,7 +42,7 @@ npm run start
 
 - ObsidianLM UI/API: `8090`
 - llama.cpp API: `8085`
-- External tools such as OpenCode and Illustria should connect directly to llama.cpp, for example `http://localhost:8085/v1`.
+- External tools such as OpenCode and Illustria should connect directly to llama.cpp, for example `http://<home-pc>:8085/v1` from another Tailscale device or `http://localhost:8085/v1` locally.
 
 ## Admin Token Authentication
 
@@ -341,16 +359,56 @@ npm run test:e2e
 
 Follow `docs/validation/local-real-smoke.md` for the manual checklist before relying on a real local llama.cpp runtime.
 
-### Phase 11 Real-use Validation
+## Phase 14 Status
 
-Current repository validation status:
+Phase 14 is in progress, not complete. The operator-console shell direction and focused Dashboard and Runtime pages are present. Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System still use planned/placeholder page work where applicable; the full `DESIGN.md` Phase 14 acceptance checklist has not been completed.
+
+Phase 14 changes UI structure only. Current runtime APIs and profiles still launch one model-bound server.
+
+## Planned Phase 15 Router Evolution
+
+Phase 15 will adopt llama.cpp's built-in router/preset capability while preserving ObsidianLM's conservative single-managed-runtime policy:
+
+```text
+ObsidianLM
+    ↓ selects one llama.cpp build and manages router lifecycle
+one active llama.cpp router on :8085
+    ↓ routes/loads configured models for that build
+generated model presets
+```
+
+The target default is conceptually `--models-max 1 --models-autoload` to preserve single-large-model residency. Generated INI files will be derived artifacts under the resolved ObsidianLM data directory; authoritative structured configuration will remain in ObsidianLM. Existing `profiles.json` data, imports/exports, custom arguments, and runtime-state references require a backed-up, fail-safe migration and are not changed yet.
+
+One router uses one `llama-server` executable/build family for its model children. Same-build model selection can be handled by llama.cpp. Cross-build selection must be initiated through ObsidianLM and restarts the managed router on the stable `:8085` endpoint. No transparent request-driven cross-build proxying, multiple permanent routers, automatic build updates, or unknown-process killing is planned for the initial integration.
+
+Phase 15 router diagnostics will separate `GET /health` for bounded router/server health from `GET /models` for the router catalog and model load state. Catalog states may include unloaded, loading, loaded, sleeping, and an unavailable/failure condition where applicable; exact response fields remain build-sensitive. `GET /models/sse` may support later live state updates but is not required initially. OpenAI-compatible `/v1/*` endpoints remain for inference clients and bounded inference validation, not as the router control-plane catalog.
+
+The managed router's catalog must not silently treat models discovered through a shared llama.cpp cache or environment as ObsidianLM-managed presets. Phase 15 must choose and validate a catalog-isolation or explicit unmanaged-model policy. It must also define safe behavior for builds that fail actual router capability checks: router-capable builds are the normal path, while any legacy one-model compatibility mode requires an explicit value-versus-maintenance decision rather than automatic preservation.
+
+## Future Controller / Node Architecture (Unimplemented)
+
+Current operation remains primarily local and same-host: ObsidianLM controls local files and processes, while clients connect directly to llama.cpp. Future Phase 16 is planned to support three conceptual modes:
+
+- **Standalone Mode:** one machine runs the ObsidianLM service, router, models, and resources locally.
+- **Controller Mode:** the laptop browser talks to the laptop ObsidianLM backend, which mediates an authenticated Node API without automatically scanning or managing the laptop as a Local Node.
+- **Node Mode:** a machine owns its filesystem, models, builds, runtime processes, ports, GPUs, logs, jobs, generated presets, and runtime state.
+
+The intended example is a laptop Controller selecting a Home PC Node over Tailscale's encrypted connectivity with ObsidianLM authentication still required. Plain HTTP is acceptable on localhost or inside such an encrypted/authenticated overlay; remote operation outside an encrypted overlay requires HTTPS/TLS for credential-bearing traffic. Phase 16 does not require ObsidianLM-managed certificate provisioning. The Home PC Node remains authoritative for its resources and configuration. External inference clients continue to connect directly to its llama.cpp endpoint at `:8085/v1`, not through the Controller.
+
+Node identity is stable and distinct from hostname, IP address, display name, or endpoint. A Node endpoint is operational connection configuration that an authorized Controller may display; it is not a credential. Saved connections must remain bound to their expected Node identity, and an identity mismatch blocks privileged actions until explicit re-pairing. Credentials remain secret and separate from normal Node/model/router configuration. A Controller disconnect must not stop Node runtimes, and reconnect restores current state with stale state clearly labeled. SSH is for administration/recovery only, never normal Node transport. This architecture is planned only; it does not imply remote control, multi-node scheduling, pairing, Local Node enablement, or TLS termination is implemented today.
+
+## Historical Phase 11 Real-use Validation Snapshot
+
+At the time Phase 11 completed, the real-use validation snapshot was:
 
 - Automated service tests cover health success, test-chat validation, safe network errors, auth protection, corrupt JSON backup/recovery, and atomic runtime-state saves.
-- Current discovery data returned `modelCount=0`, `buildCount=0`, `benchCount=0`, and `profileCount=0`.
-- Real `llama-bench`, server launch, browser smoke, runtime health, and diagnostic test-chat verification are blocked until local discovery folders and a runnable server profile are configured.
+- The Phase 11 discovery snapshot returned `modelCount=0`, `buildCount=0`, `benchCount=0`, and `profileCount=0`.
+- Real `llama-bench`, server launch, runtime health, and diagnostic test-chat verification were blocked until local discovery folders and a runnable server profile were configured.
 - Real local validation should be run with your configured discovery folders so ObsidianLM can find a real `llama-bench` executable, a `.gguf` model, and a runnable `llama-server` profile.
 
-Manual real-use checklist:
+Phase 13 later added isolated Playwright browser smoke tests. Those tests use disposable data and logs and do not require real GGUF files, llama.cpp tools, a GPU, Tailscale, or `llama-server`; only real runtime, benchmark, health, and test-chat validation still depends on local discovery/runtime resources.
+
+Historical manual real-use checklist:
 
 1. Configure `modelFolders` and `llamaCppFolders` without committing machine-specific paths.
 2. Run a small `llama-bench` job from the Jobs panel.
@@ -415,10 +473,10 @@ Log types are separate:
 
 ObsidianLM does not automatically migrate local project data into `%PROGRAMDATA%`. If you want the service to reuse development profiles or settings, stop ObsidianLM and manually copy the relevant JSON files from `data/` into `%PROGRAMDATA%\ObsidianLM\data` before starting the service.
 
-Tailscale access remains:
+Tailscale access remains conceptually:
 
-- ObsidianLM UI/API: `http://100.84.76.75:8090`
-- llama.cpp clients: `http://100.84.76.75:8085/v1`
+- ObsidianLM UI/API: `http://<home-pc>:8090`
+- llama.cpp clients: `http://<home-pc>:8085/v1`
 
 External tools such as OpenCode and Illustria should still talk directly to llama.cpp, not through ObsidianLM.
 
@@ -473,15 +531,9 @@ Supported tool input files in Phase 12:
 - `.jsonl`
 - `.md`
 
-### Local manual laptop smoke-test example
+### Local manual smoke-test example
 
-For a temporary local CPU smoke test on this laptop only, you can add this llama.cpp build folder in the dashboard **Discovery folders** panel or your local uncommitted `data/settings.json`:
-
-```text
-C:\Users\Naavil\Downloads\llama-b9859-bin-win-cpu-x64
-```
-
-This path is a local example only. Do not hardcode it into committed defaults, example settings, profiles, scripts, or tests. A real deployment can point `llamaCppFolders` at GPU-enabled llama.cpp builds later.
+For a temporary local CPU smoke test, point the dashboard **Discovery folders** panel or local uncommitted `data/settings.json` at a downloaded CPU build folder such as `C:\path\to\llama.cpp-cpu-build`. Do not hardcode machine-specific paths into committed defaults, example settings, profiles, scripts, or tests. A real deployment can point `llamaCppFolders` at validated GPU-enabled llama.cpp builds.
 
 You still need at least one configured model folder containing a `.gguf` model before `llama-bench` can run.
 
@@ -526,7 +578,9 @@ The request must select a discovered perplexity tool with `buildId` or `perplexi
 
 Perplexity (`PPL`) is a language-model evaluation measure where lower is generally better for the same dataset/tokenizer/evaluation setup. It is not a universal quality score: compare PPL only across similar models, tokenizers, context/options, and input data. Phase 12 does not implement KL-divergence mode, automatic dataset downloads, charts, or multi-job concurrency.
 
-## Configure a llama.cpp Profile
+## Configure a llama.cpp Profile (Current Runtime Model)
+
+This section documents implemented pre-router behavior. These profiles remain supported until the planned Phase 15 compatibility migration is designed, implemented, and validated.
 
 `data/profiles.json` is intentionally safe to edit manually and defaults to an empty list. Use `data/profiles.example.json` as a template, then replace the example paths with your local files.
 
@@ -628,6 +682,8 @@ From the UI:
 3. Run validation.
 4. Start the profile.
 5. Connect external tools directly to llama.cpp at `http://localhost:8085/v1` unless your profile uses a different port.
+
+These steps describe the current model-bound profile runtime. Planned router mode will instead start one selected build's router and expose its configured models at the same default endpoint.
 
 View runtime logs in the dashboard **Logs** panel. It streams live output while a managed runtime is running and can refresh recent persisted runtime logs from disk. The **Jobs** panel shows job logs separately.
 

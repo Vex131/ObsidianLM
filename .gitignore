@@ -49,3 +49,7 @@ Thumbs.db
 .agents/subagents-and-skills.md
 .serena/
 .playwright-mcp/
+
+# Repo packing (auto-added by generate-repo-zip.bat)
+generate-repo-zip.bat
+ObsidianLM.zip

@@ -1,1099 +1,865 @@
 # ObsidianLM Project Plan
 
-## 1. Project Summary
+## 1. Purpose and Status
 
-**ObsidianLM** is a lightweight local AI runtime manager.
+ObsidianLM is a lightweight local AI runtime manager. It is the control plane for configuring, validating, starting, stopping, monitoring, and switching local AI runtimes. External inference clients continue to use the runtime's API directly.
 
-Its first target runtime is:
+This document separates three things that earlier revisions mixed together:
 
-```text
-llama.cpp / llama-server.exe
-```
+- **Completed foundation/history:** Phases 0-13 are implemented. Their original single-model runtime architecture was valid for those phases.
+- **Current work:** Phase 14 is a UI restructuring phase. Dashboard and Runtime pages exist, but the complete Phase 14 page set and acceptance checklist are not yet complete.
+- **Planned architecture:** Phase 15 introduces llama.cpp's built-in multi-model router while retaining ObsidianLM as the build and managed-router lifecycle manager. Phase 16 later adds Remote Nodes / Controller Mode. Neither phase is implemented yet.
 
-The goal is not to replace llama.cpp or become the main inference server. Instead, ObsidianLM acts as a **control plane** for starting, stopping, configuring, monitoring, and switching llama.cpp builds, models, and profiles.
-
-The actual consumers of the model will usually be external tools such as:
+The current implementation still stores a model-bound launch profile:
 
 ```text
-OpenCode
-Illustria
-local scripts
-future agents
+one ObsidianLM profile
+        ↓
+one llama-server executable
+        +
+one GGUF model
+        +
+that model's llama.cpp arguments
+        ↓
+one managed llama-server process
 ```
 
-These tools should communicate directly with the running llama.cpp server through its OpenAI-compatible API.
+The current shared contract reflects this history with `buildPath`, `modelPath`, `llamaArgs`, `host`, and `port` in one profile. Phase 15 evolves that model; it does not retroactively change what earlier phases delivered.
 
-ObsidianLM should also be designed modularly so future support can be added for:
+## 2. Control Plane and Data Plane
+
+The control-plane/data-plane boundary remains a project principle.
 
 ```text
-llama-bench
-llama-perplexity
-ComfyUI
-Stable Diffusion WebUI / Forge
-Ollama
-other local AI runtimes
+Control plane
+
+Browser
+   │
+   ▼
+ObsidianLM UI/API :8090
+   │
+   ├── stores authoritative configuration
+   ├── selects and validates a llama.cpp build
+   ├── generates router presets
+   └── manages the router lifecycle
+
+
+Data plane
+
+OpenCode / Illustria / local clients
+   │
+   ▼
+llama.cpp :8085/v1
 ```
 
----
+ObsidianLM must not become a general inference proxy merely to support router mode. Its diagnostic health and test-chat calls remain bounded control-plane diagnostics, not a replacement inference API. Phase 15 uses `GET /health` for bounded router/server health and `GET /models` for the router catalog and model load state. Relevant OpenAI-compatible `/v1/*` routes remain for direct inference clients and bounded inference validation, not as the primary router catalog/control surface.
 
-## 2. Core Design Principle
+## 3. Phase 15 Deployment and Remote Access
 
-ObsidianLM should separate the **control plane** from the **data plane**.
+This is the approved same-host service deployment for Phase 15 and remains valid for Standalone/Node operation. Phase 16 adds the separate laptop Controller deployment described later; it does not invalidate direct browser access to a Node when intentionally configured.
 
 ```text
-Control Plane:
-ObsidianLM UI + Service
-        ↓
-starts / stops / configures / monitors
-        ↓
-llama.cpp process
+Main/home Windows PC
+  ├── ObsidianLM Windows service
+  ├── llama.cpp build folders
+  ├── model folders on one or more drives
+  ├── NVIDIA GPUs
+  └── one managed llama.cpp router
 
-
-Data Plane:
-OpenCode / Illustria / agents
-        ↓
-send prompts directly
-        ↓
-llama.cpp OpenAI-compatible API
+Laptop
+  ├── browser accesses ObsidianLM over Tailscale
+  └── development/inference clients may access llama.cpp over Tailscale
 ```
 
-ObsidianLM should not sit between OpenCode/Illustria and llama.cpp unless routing/proxy features are intentionally added later.
-
----
-
-## 3. Target Deployment
-
-The frontend/service will run on the main PC and be accessed from the laptop through Tailscale.
+Normal current/Phase 15 deployed operation is:
 
 ```text
-Laptop browser over Tailscale
-        ↓
-http://100.84.76.75:8090
-        ↓
-ObsidianLM service on main PC
-        ↓
-llama-server.exe on main PC
+Laptop browser
+   │
+   │ Tailscale
+   ▼
+ObsidianLM UI/API on home PC :8090
+   │
+   ▼
+Managed llama.cpp router on home PC :8085
 ```
 
-OpenCode and Illustria will continue using the llama.cpp endpoint directly:
+The runtime executables, generated presets, and model files remain on the home PC. Once ObsidianLM is installed as a Windows service, the managed router/build lifecycle must be controlled through ObsidianLM. The active llama.cpp router may load, unload, autoload, and evict same-build models according to its configured residency policy. A laptop batch file that opens SSH, copies or creates a launcher, starts one model, and keeps the SSH session alive is not the target deployed workflow.
 
-```text
-http://100.84.76.75:8085/v1
-```
+SSH remains useful for administration, recovery, diagnostics, service installation/maintenance, and emergency manual access. Manual launch and SSH workflows may also remain useful during development. They are not required for the normal managed router/build lifecycle and must be presented as unmanaged/manual alternatives when they coexist with service mode.
 
-Recommended ports:
+Default endpoints remain stable:
 
 ```text
 ObsidianLM UI/API: 8090
 llama.cpp API:     8085
 ```
 
----
+Clients should normally use `http://<home-pc>:8085/v1`. Tailscale connectivity does not replace ObsidianLM's admin-token authentication.
 
-## 4. Chosen Technology Stack
+## 4. llama.cpp Router Decision
 
-### Frontend
-
-Use:
+Current upstream llama.cpp supports a router mode in `llama-server`. The relevant controls include:
 
 ```text
-Vite + Svelte SPA
+--models-dir
+--models-preset
+--models-max
+--models-autoload / --no-models-autoload
 ```
 
-Reasoning:
+The router can enumerate presets, route POST requests using the request body's `model` field, autoload an unloaded requested model, and expose model availability/status through its model endpoints. A preset section name is a model identifier; non-conflicting configured aliases can also resolve to that model. Preset sections accept supported llama.cpp arguments without leading dashes; model-specific values override global preset values, while router command-line values have higher precedence.
 
-- Lighter than Next.js.
-- No SSR required.
-- Suitable for a fast local dashboard.
-- Can still look modern, polished, and interactive.
-- Easy to serve as static files from the backend service.
-
-Avoid for v1:
+Router endpoint responsibilities for Phase 15 are:
 
 ```text
-Next.js
-Electron
-heavy charting libraries
-large animation libraries
+GET /health
+    bounded router/server health
+
+GET /models
+    router model catalog and load state
+
+GET /models/sse
+    optional future live model-state events; not required initially
+
+relevant /v1 endpoints
+    inference/client compatibility and bounded diagnostic inference
 ```
 
-### Backend / Service
+The catalog contract must accommodate states conceptually including `unloaded`, `loading`, `loaded`, `sleeping`, and failure/unavailable state where applicable. Current upstream can represent a failed child as unloaded with a nonzero exit code, so ObsidianLM must not freeze incidental field names or assume failure is always a separate status string.
 
-Use:
+For ObsidianLM, **generated model presets are preferred over directory-only inference**. Models on this machine can require different context, GPU placement, cache, multimodal, template, reasoning, or speculative settings. Directory scanning remains useful for discovery, but it must not become the authoritative configuration mechanism.
+
+The upstream behavior summarized here was verified on 2026-08-28 against llama.cpp's current [`tools/server/README.md`](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md), [`common/preset.cpp`](https://github.com/ggml-org/llama.cpp/blob/master/common/preset.cpp), [`tools/server/server.cpp`](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/server.cpp), [`tools/server/server-models.h`](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/server-models.h), and [`tools/server/server-models.cpp`](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/server-models.cpp). Because llama.cpp evolves quickly, Phase 15 implementation must validate the selected local build's actual help, launch behavior, and API support rather than assuming every old or custom build supports the same keys.
+
+### Router model-source isolation
+
+Current upstream router construction combines models from the llama.cpp cache, an optional `--models-dir`, and `--models-preset`. Therefore, generated ObsidianLM presets alone do not prove that every router-visible model is an ObsidianLM-managed configuration.
+
+Phase 15 must define and validate the managed router's catalog boundary. A model becoming visible through llama.cpp's environment or cache must not silently gain the same managed/autoloadable status as an ObsidianLM-configured model preset. The implementation decision may use an ObsidianLM-controlled cache location, environment isolation, catalog filtering/validation, an upstream-supported source restriction, or clear external/unmanaged classification. No disabling flag is assumed here; the chosen strategy must be verified against supported builds.
+
+## 5. Phase 15 Target Runtime Architecture
 
 ```text
-Node.js + TypeScript + Fastify
+Laptop
+  │ browser / control access over Tailscale
+  ▼
+ObsidianLM service on home PC
+  │ controls build and managed router lifecycle
+  ▼
+ONE active llama.cpp router
+  │ built-in model routing/loading
+  ├── configured model preset A
+  ├── configured model preset B
+  ├── configured model preset C
+  └── ...
 ```
 
-Reasoning:
-
-- Lightweight API server.
-- Good process management support.
-- Good TypeScript support.
-- Easy to stream logs/status with SSE or WebSocket.
-- Easy to serve the compiled Svelte SPA.
-- Simple JSON-based config handling.
-
-### Storage
-
-Use JSON files for v1:
+The conservative single-managed-runtime rule remains:
 
 ```text
-settings.json
-profiles.json
-runtime-state.json
-jobs.json
+ObsidianLM
+    ↓
+selects/manages llama.cpp BUILD + router lifecycle
+
+llama.cpp router
+    ↓
+selects/loads MODELS assigned to that active build
 ```
 
-A database is unnecessary for v1.
+Only one managed router/build owns the normal `:8085` endpoint at a time. Initial router integration must not run several permanent routers or add a new inference gateway. This avoids competing GPU residency, multiple API ports, proxying, and unnecessary process complexity.
 
-### Service Mode
+### Build-family limitation
 
-Development:
+The router resolves its own executable path and uses that executable when spawning model instances. One stock router therefore uses one llama.cpp executable/build family for all child model instances. A preset does not choose another `llama-server.exe`.
+
+This is not a supported single-router topology:
 
 ```text
-npm run dev
+one router
+├── Model A → latest official llama.cpp
+├── Model B → custom MAX_COPIES=1 llama.cpp
+└── Model C → older compatibility llama.cpp
 ```
 
-Early real use:
+Conceptual build families may include:
 
 ```text
-npm run build
-npm run start
+Latest Official
+Custom MAX_COPIES=1
+Legacy/Compatibility Build
+Experimental Build
 ```
 
-Later:
+ObsidianLM remains necessary because it chooses which build family is active and safely replaces the router when that choice changes.
+
+### Builds without required router capability
+
+Phase 15 must explicitly decide what happens when a discovered build fails required router capability validation:
+
+- **Option A - router-only managed inference:** the build remains visible as a discovered build/toolchain but cannot become the active managed router.
+- **Option B - legacy compatibility mode:** a separate one-model-per-server path remains only for builds with concrete user value that genuinely cannot support router mode.
+
+Router-capable builds are the normal/default architecture. Option B must not be selected automatically to preserve old behavior; the decision must consider actual required legacy/custom builds, router feature support, maintenance cost, migration complexity, and user value. Version numbers alone are insufficient evidence. Validation should use actual executable help, launch behavior, and API support where practical.
+
+## 6. Model Switching Semantics
+
+### Same-build model switch
+
+When the requested configured model belongs to the active build, llama.cpp performs routing and loading. Clients select it using the normal model identifier in their inference request.
+
+The target machine default is conceptually:
 
 ```text
-WinSW or similar Windows service wrapper
+models-max = 1
+models-autoload = enabled
 ```
 
-The installed service should:
+This preserves single-large-model residency on constrained VRAM. A request for another available preset under the active build can cause llama.cpp to unload/evict as required and load the requested model. Later real-machine testing may justify a different policy, but it must be an explicit decision.
 
-- Start on Windows startup.
-- Auto-restart if ObsidianLM crashes.
-- Ensure only one ObsidianLM service instance is active.
+### Cross-build model switch
 
----
-
-## 5. High-Level Architecture
+When a requested configuration requires another build, the current router cannot satisfy it internally. ObsidianLM must perform a controlled lifecycle transition:
 
 ```text
-Main PC / FAMILYPC
-│
-├─ ObsidianLM Service
-│  ├─ Fastify API
-│  ├─ Static Svelte UI server
-│  ├─ Auth layer
-│  ├─ Process manager
-│  ├─ Runtime adapter system
-│  ├─ Tool/job adapter system
-│  ├─ Profile manager
-│  ├─ Folder/model scanner
-│  ├─ GPU monitor
-│  ├─ Port monitor
-│  └─ Log manager
-│
-├─ llama.cpp builds
-│  ├─ official CUDA build
-│  ├─ turboquant build
-│  └─ experimental builds
-│
-├─ model folders
-│  └─ D:\Models\...
-│
-└─ managed runtime process
-   └─ llama-server.exe
+stop current managed router
+        ↓
+verify shutdown and port release
+        ↓
+select and validate required llama.cpp build
+        ↓
+generate/use that build's preset
+        ↓
+start replacement router on :8085
+        ↓
+validate router health and model availability
 ```
 
----
+The client endpoint remains `http://<home-pc>:8085/v1` after the replacement starts. The cross-build change is initiated through ObsidianLM.
 
-## 6. Single-Instance Rules
+An arbitrary inference request cannot transparently change build families while ObsidianLM remains outside the data path. Doing so would require a future inference-aware gateway/proxy or another intentional mechanism and is outside Phase 15.
 
-ObsidianLM must enforce:
+## 7. Planned Domain Boundaries
+
+Phase 15 must separate concepts without prematurely freezing exact TypeScript interfaces.
+
+### Model artifact
+
+A discovered local file, currently a GGUF file. It records file identity and metadata such as path, size, modification time, and safe format hints. Discovery does not imply a launch configuration.
+
+### Configured model / model preset
+
+An ObsidianLM-owned configuration with a stable unique identity and unique router-facing name or alias. It may include:
 
 ```text
-Only one ObsidianLM service instance
-Only one active managed llama.cpp runtime
-Future support for multiple runtime types
+model identity and GGUF reference
+optional mmproj reference
+display name and router alias
+chat template / Jinja settings
+context and parallelism
+device, split mode, tensor split, main GPU, and GPU layers
+KV cache, prompt cache, batch, and ubatch settings
+reasoning settings
+MTP/speculative settings
+other model-specific supported llama.cpp flags
+preferred or required llama.cpp build reference
+preserved custom/unknown arguments where safe
 ```
 
-For v1:
+This list is not exhaustive. ObsidianLM's structured configuration is authoritative; the generated llama.cpp INI is derived.
+
+One GGUF can have several valid configured models. For example, official-build and custom-build configurations, different tensor splits, or vision-enabled and text-only configurations are distinct ObsidianLM identities even when they reference the same artifact. Discovery identity must never be used as the configured-model identity.
+
+### llama.cpp build
+
+A discovered and configured toolchain with a stable ObsidianLM build ID. It may record:
 
 ```text
-One active llama.cpp runtime only
+friendly name
+llama-server path
+llama-bench path when available
+llama-perplexity path when available
+llama-cli path when available
+version/build metadata when detectable
+explicit official/custom/experimental/compatibility classification
+router capability/flag validation
+last validation state
 ```
 
-But the internal data model should use generic terms such as:
+Latest official is the preferred default only after validation. Custom builds are first-class. Older builds are compatibility exceptions rather than a permanent default. Replacing or upgrading a discovered build must not silently retarget every configured model; affected dependencies must be visible and validated first.
+
+### Managed runtime
+
+The managed runtime becomes the active router process, not a permanently model-bound server. It conceptually tracks:
 
 ```text
-runtime
-provider
-profile
-tool job
+active build
+router PID
+host and port
+generated router preset artifact
+runtime state
+available configured models
+router catalog/load state when safely detectable
+proven router child processes when safely detectable
 ```
 
-rather than hardcoding every part as llama-specific.
+### One-shot job
 
----
+`llama-bench`, `llama-perplexity`, and future `llama-cli` tasks remain one-shot jobs. A job may independently choose a model artifact, a build/tool executable, and job-specific options. Jobs do not become router model instances and do not pass through the inference router unless a future feature explicitly requires it.
 
-## 7. Startup Behavior
+## 8. Multimodal and mmproj Configuration
 
-Chosen behavior:
+Configured models must support an optional explicit `mmproj` association. A multimodal-capable GGUF can have both vision-enabled and text-only configurations, and more than one candidate projector may exist.
+
+Future implementation must:
+
+- preserve model-specific multimodal enable/disable choices;
+- validate the selected model, projector, and build together;
+- allow the user to choose among multiple projector files;
+- avoid pairing a projector solely because it shares a directory unless the match is sufficiently reliable or user-confirmed;
+- report missing or incompatible projector references as validation failures/warnings without deleting configuration.
+
+No pairing heuristic is selected in this documentation phase.
+
+## 9. Generated Router Presets
+
+ObsidianLM will own a generated configuration area under the resolved data directory:
 
 ```text
-A. Start only the ObsidianLM dashboard/service.
+<resolved ObsidianLM data directory>/generated/llama-router/<build-id>.ini
 ```
 
-On Windows startup:
+This follows existing path resolution: project-local `data/` in development unless overridden, and the service data directory under `%PROGRAMDATA%\ObsidianLM\data` in installed service mode unless overridden.
+
+Generated preset requirements:
+
+- Generate atomically using the same loss-resistant storage principles as current JSON state.
+- Produce deterministic output from authoritative stored configuration.
+- Be safe to delete and regenerate, but never silently substitute stale output for current configuration.
+- Contain no admin tokens or other user secrets.
+- Validate the selected build's supported router flags and preset keys before start.
+- Escape and encode Windows paths correctly.
+- Include multiple configured models assigned to the same build.
+- Remain previewable and copyable from the UI.
+- Never require users to maintain duplicate handwritten INI and ObsidianLM configuration.
+
+Command preview becomes two related views:
 
 ```text
-1. ObsidianLM service starts.
-2. It does not automatically launch llama.cpp.
-3. It scans for existing llama.cpp processes.
-4. It checks the managed llama.cpp port.
-5. It checks previous runtime state.
-6. It shows warnings/status in the UI.
-7. User manually starts the desired profile.
+Router launch command
+llama-server --models-preset <generated.ini> --models-max 1 --models-autoload --host 0.0.0.0 --port 8085
+
+Model preset configuration
+the generated INI sections and model-specific settings
 ```
 
-Optional future settings:
+These views must not be conflated. The exact accepted keys remain build-version-sensitive.
+
+## 10. RuntimeManager Evolution
+
+The existing `RuntimeManager` should evolve rather than be replaced wholesale.
 
 ```text
-Start default profile on boot
-Start last used profile on boot
+Historical/current
+RuntimeManager → one model-bound llama-server
+
+Target
+RuntimeManager → one router for selected build
+               → router loads/unloads model child instances
 ```
 
----
+Future work includes:
 
-## 8. Stale Process Handling
+- router launch command building and preset generation;
+- selected-build capability validation;
+- bounded router health through `/health`;
+- router catalog and same-build load-state reporting through `/models`;
+- optional later `/models/sse` integration only if polling proves insufficient;
+- separate bounded inference validation through relevant `/v1` endpoints;
+- cross-build stop, port release, replacement start, and post-start validation;
+- graceful router shutdown and startup recovery;
+- active build and generated-artifact state;
+- router/model-child log visibility;
+- child-process awareness without unsafe ownership inference.
 
-Chosen policy:
+The safety rule remains absolute:
+
+> ObsidianLM only controls processes it can safely prove it owns.
+
+## 11. Process, GPU, and Log Awareness
+
+Router mode introduces a process tree:
 
 ```text
-Auto-kill only stale processes previously started by ObsidianLM.
-Show UI warning for everything else.
+ObsidianLM
+   ↓
+managed router llama-server process
+   ↓
+router-created llama-server model child process
 ```
 
-Startup process detection should classify running processes as:
+Process detection must evolve to distinguish:
 
-| Category | Meaning | Default Action |
+```text
+managed router
+managed router child
+previous managed router candidate
+previous managed router child candidate
+manual/unmanaged llama-server
+unknown process
+port conflict
+```
+
+Parent/child linkage, saved state, command evidence, and platform capabilities must be evaluated conservatively. Managing a router never implies ownership of every `llama-server.exe`. If ownership cannot be proved, warn rather than kill. Previous-process adoption and automatic cleanup remain future safety work, not assumptions.
+
+GPU monitoring must not assume the router parent owns the model VRAM. The loaded child may perform inference and hold most VRAM. Future monitoring should associate only proven router children with the managed runtime. Unknown GPU processes remain read-only warnings; GPU process killing is not introduced.
+
+Logging must keep these sources understandable:
+
+```text
+ObsidianLM service logs
+router lifecycle logs
+router/model-child output
+one-shot job logs
+```
+
+Current upstream router source combines each child's stdout/stderr and forwards it through the router log with a child port prefix. Phase 15 must validate this behavior on selected Windows builds and preserve useful source/model context in ObsidianLM's runtime logs without tailing or adopting unmanaged processes.
+
+## 12. Discovery Evolution
+
+Existing discovery remains valuable but its outputs must no longer collapse directly into an opaque launcher.
+
+```text
+Model discovery → model artifacts
+Build discovery → llama.cpp builds/toolchains
+Configuration  → links artifacts and builds into configured models
+```
+
+Model discovery continues across multiple configured roots/drives and remains metadata-only. Build discovery should eventually capture stable build IDs, tool paths, metadata, classification, and router capability validation. Configuration creates the many-to-many relationship needed for one artifact to have several configurations and for one build to serve several presets.
+
+Portable examples must use placeholders rather than committed machine-specific model/build paths.
+
+## 13. Existing Profile Migration and Compatibility
+
+`profiles.json` is implemented and has real behavior: create, edit, duplicate, delete, import/export, discovery-created profiles, validation, command preview, and runtime-state references. Phase 15 must not simply declare it obsolete.
+
+Migration design and implementation must address:
+
+- whether the existing profile evolves into a `ModelProfile`/configured-model type or maps into a new type;
+- deterministic mapping of each old single-model profile to one configured model and one build record;
+- conversion of `buildPath` into a stable build reference without merging distinct custom builds accidentally;
+- distinct configured identities and router aliases for duplicate model paths or configurations;
+- preservation of known `llamaArgs` and safe unknown/custom `extraArgs`;
+- legacy export import with explicit version detection and non-destructive conversion;
+- runtime-state conversion from active profile/process to active build/router state;
+- backups of old data files before any mutation;
+- missing build/model references represented as disabled or invalid configuration, not deleted data;
+- validation before committing converted data;
+- atomic writes, failure rollback, and a documented recovery path;
+- idempotent or otherwise safely detectable migration so interrupted startup cannot duplicate records;
+- preservation of the old files/backups long enough to make migration reversible.
+
+Migration must be designed and tested before changing schemas. This documentation task performs no migration.
+
+## 14. UI and UX Direction
+
+The visual system remains defined by `DESIGN.md`; router work changes terminology and state presentation, not the visual language.
+
+Future pages must make these concepts legible:
+
+```text
+Service
+Managed router
+Active llama.cpp build
+Router endpoint
+Available configured models
+Currently loaded model, if known
+Model configuration/preset
+Build requirement
+Restart/build-switch requirement
+```
+
+The UI must distinguish:
+
+```text
+Switch model
+```
+
+for a configured model available under the active build, from:
+
+```text
+Switch build & restart router
+```
+
+for a configuration requiring another executable. It must neither imply that every model change restarts llama.cpp nor that every model can switch without a restart.
+
+The Models page should distinguish discovered artifacts from configured models. The Builds page should show dependent configured models before a build is changed or removed. The Runtime page should focus on router/build state and model availability. The existing Profiles page remains a historical/current configuration editor until migration design determines its target name and compatibility behavior.
+
+## 15. Completed Phase History
+
+The concise status below preserves history without duplicating the detailed README status log.
+
+| Phase | Status | Historical delivery |
 |---|---|---|
-| Current managed process | Matches saved state and appears healthy | Adopt |
-| Previous managed stale process | Started by ObsidianLM before but stale/unhealthy | Auto-stop if safe |
-| Unmanaged llama.cpp process | Started manually or by old launcher | Warn in UI |
-| Port conflict | Something is using the managed llama.cpp port | Warn and block launch |
-| Unknown GPU process | Uses VRAM but is not managed | Show only |
+| 0 | Completed | npm workspaces, Fastify service, Svelte/Vite shell, shared contracts, JSON storage, status API. Authentication was completed later in Phase 9, not retroactively in Phase 0. |
+| 1 | Completed | One validated model-bound llama.cpp profile, command preview, one managed child, stop/restart, logs, and dashboard controls. |
+| 2 | Completed | Read-only model/build discovery from configured folders and discovery-created Phase 1 profiles. |
+| 3 | Completed | Conservative startup detection and port-conflict warnings. It did not adopt or automatically kill unknown/previous candidate processes. |
+| 4 | Completed | Read-only NVIDIA GPU monitoring and conservative process classification. |
+| 5 | Completed | Profile create/edit/duplicate/delete/import/export, validation, and client/command snippets. |
+| 6 | Completed | Generic serialized one-shot job foundation, separate from long-running runtimes. |
+| 7 | Completed | Windows service scripts, path resolution, service-mode data/log locations, and service metadata. |
+| 8 | Completed | Persisted runtime logs and SSE live runtime log streaming for managed processes. |
+| 9 | Completed | First-run admin token setup, hashing, bearer protection, and settings sanitization. |
+| 10 | Completed | Setup-required API blocking and initial `llama-bench` jobs. |
+| 11 | Completed | Runtime health/test-chat diagnostics, storage hardening, and initial dashboard refactoring. |
+| 12 | Completed | `llama-perplexity` jobs and configured tool-input discovery. |
+| 13 | Completed | Readiness API/UI, isolated Playwright smoke infrastructure, and real-machine validation guidance. |
 
-Important rule:
+The historical runtime model in Phases 1-13 remains truthful. Router adoption is an architectural evolution after that work, not a rewrite of it.
 
-```text
-Never silently kill unknown processes.
-```
+## 16. Phase 14 - Operator Console Restructure
 
-Unknown processes may include:
+**Status:** In progress / planned, not complete.
 
-```text
-manual llama.cpp tests
-llama-bench
-llama-perplexity
-Python scripts
-ComfyUI
-Stable Diffusion
-other GPU tools
-```
+The approved operator-console visual direction, shell, Dashboard page, and Runtime page are partially present. Remaining pages and the full acceptance checklist in `DESIGN.md` are still planned. Phase 14 should avoid locking future router data contracts into UI components; terminology can transition as Phase 15 contracts stabilize.
 
----
+Phase 14 remains a UI restructuring phase. It does not implement the router, migrate profiles, or change runtime semantics.
 
-## 9. Folder Configuration
+## 17. Phase 15 - llama.cpp Router Integration
 
-ObsidianLM should allow configuring multiple folders.
+**Status:** Planned. No router integration is currently implemented.
 
-### Model Folders
+### Goal
 
-Example:
+Evolve the one-profile/one-server runtime into one ObsidianLM-managed llama.cpp router for one selected build, with generated per-model presets and safe cross-build replacement on the stable `:8085` endpoint.
 
-```json
-{
-  "modelFolders": [
-    "D:\\Models",
-    "E:\\AI\\Models"
-  ]
-}
-```
+### Forward-compatible ownership constraint
 
-For v1, scan:
+Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build selection, router lifecycle, generated presets, and cross-build replacement belong to ObsidianLM; same-build loading, unloading, autoload, residency, and eviction belong to llama.cpp. Paths, PIDs, ports, model identities, and build identities should be representable as Node-scoped resources later, without prematurely freezing remote APIs or TypeScript names. Phase 15 remains local in implementation, but its ownership boundaries must not make a future Controller/Node split unsafe or require interpreting every resource as belonging to the Controller host.
 
-```text
-.gguf
-```
+### Dependencies
 
-Future:
+- Existing Phases 0-13 foundation.
+- Phase 14 UI work may proceed independently, but final Models/Builds/Runtime configuration UX depends on Phase 15 contracts.
+- A current official build and representative custom/compatibility Windows builds for capability testing.
+- Real local GGUF configurations, including multimodal and duplicate-artifact cases, kept outside committed defaults/tests.
 
-```text
-.safetensors
-.ckpt
-.onnx
-other model formats
-```
+### Work sequence
 
-### llama.cpp Build Folders
+1. **Architecture and contracts:** Define versioned model-artifact, configured-model, build, router-runtime, generated-artifact, and migration contracts. Define stable IDs, router alias constraints, router endpoint responsibilities, model-source isolation, and unsupported-build behavior without changing data first.
+2. **Compatibility and migration:** Design fixtures and backup/rollback behavior for existing `profiles.json`, imports/exports, runtime state, duplicate model/build combinations, custom arguments, and missing references.
+3. **Preset generation:** Implement deterministic atomic INI generation per build, Windows path handling, capability-aware validation, and separate launch/preset previews.
+4. **RuntimeManager router support:** Launch one router, validate `/health` separately from `/models` catalog/load state and diagnostic inference, stop safely, recover startup state, and retain stable port ownership rules.
+5. **Build switching:** Add explicit cross-build stop/release/start/validate transitions while same-build selection remains router-native.
+6. **Models/builds/runtime UI:** Expose artifact versus configuration, active build, available/loaded model status, and clear `Switch model` versus `Switch build & restart router` actions.
+7. **Process/GPU/log awareness:** Classify proven router children, attribute GPU use conservatively, preserve useful router/child logs, and warn on uncertain ownership.
+8. **Real-machine validation:** Validate official, custom, and compatibility builds; same-build autoload/eviction; cross-build restart; multimodal/text-only configurations; service restart; failure recovery; and direct client access.
 
-Example:
+### Safety requirements
 
-```json
-{
-  "llamaCppFolders": [
-    "C:\\Users\\ahmed\\Downloads\\llama.cpp-cu13-official",
-    "C:\\Users\\ahmed\\Downloads\\llama.cpp-turboquant"
-  ]
-}
-```
+- Keep one active managed router and one normal `:8085` owner.
+- Never kill, adopt, or attribute an unknown process based only on its executable name.
+- Verify router shutdown and port release before replacement.
+- Validate generated configuration and selected build capability before launch.
+- Prevent cache-, directory-, or environment-visible models outside the configured catalog from silently becoming normal managed models.
+- Back up existing data before migration and fail without partial destructive conversion.
+- Keep secrets out of presets, command previews, logs, and API responses.
+- Preserve direct-client data-plane access and ObsidianLM admin authentication.
+- Keep one-shot jobs independent from router lifecycle.
 
-The scanner should detect:
+### Explicit non-goals
 
-```text
-llama-server.exe
-llama-cli.exe
-llama-bench.exe
-llama-perplexity.exe
-```
+- No general inference proxy in ObsidianLM.
+- No transparent cross-build routing based solely on inference requests.
+- No multiple permanently active llama.cpp routers initially.
+- No new gateway/proxy or multiple normal client endpoint configurations.
+- No automatic downloading or updating of llama.cpp builds.
+- No automatic deletion of legacy builds.
+- No automatic killing of unknown llama.cpp or GPU processes.
+- No model-format expansion beyond the formats explicitly supported by the phase.
+- No replacement of the existing job system.
+- No Docker or Electron requirement.
+- No rewrite of the Windows service architecture.
 
-The UI should display builds in a friendly way, such as:
+### Acceptance criteria
 
-```text
-Official CUDA 13 build
-TurboQuant build
-Experimental build
-```
+- Existing compatible profiles migrate or import without silent loss, with backups and actionable invalid-reference states.
+- One GGUF can back multiple stable configured-model identities and unique router aliases.
+- Configured models can explicitly enable/disable/select `mmproj` and validate model/projector/build compatibility.
+- ObsidianLM deterministically generates a validated preset containing all enabled configured models for one build.
+- The UI can preview/copy both router launch command and generated preset.
+- One managed router starts on `:8085`, reports available models, and is the only normal managed runtime.
+- Bounded router health uses `/health`; router catalog/load state uses `/models` rather than treating `/v1/models` as the control-plane catalog; diagnostic inference remains a separate check.
+- ObsidianLM owns the managed build/router start, stop, restart, replacement, generated configuration, and endpoint lifecycle; llama.cpp owns same-build model loading, unloading, autoload, residency limits, and eviction.
+- Router-visible models outside ObsidianLM's configured catalog are isolated, rejected, or clearly distinguished as external/unmanaged and cannot silently become normal managed/autoloadable models.
+- The selected build is verified by actual capability evidence to provide required router behavior; unsupported builds have an explicitly designed safe ineligible or legacy-compatibility behavior.
+- With the validated default policy, same-build requests select/autoload models while keeping at most one model resident.
+- Cross-build selection stops the owned router, verifies port release, starts the selected build, and validates availability on the same endpoint.
+- Process, GPU, and log views distinguish the router, proven children, unmanaged processes, and uncertainty without unsafe cleanup.
+- `llama-bench` and `llama-perplexity` continue to run as independent one-shot jobs.
+- OpenCode, Illustria, and local clients continue direct access through `http://<home-pc>:8085/v1`.
 
----
+### Real-use validation
 
-## 10. Runtime Providers vs Runtime Tools
+Automated tests may use fake executables and disposable data for contracts, migration, generation, and lifecycle failure handling. Completion also requires intentional validation on the home Windows PC with:
 
-This is important for future support of llama-bench and llama-perplexity.
+- at least two configured models under one current official build;
+- a second custom or compatibility build;
+- a duplicated GGUF configuration with a distinct build or GPU setup;
+- one multimodal-enabled and one text-only configuration where available;
+- `models-max=1` and autoload behavior under realistic VRAM pressure;
+- service-mode start/stop/restart and recovery after a failed router start;
+- direct inference clients over the stable endpoint/Tailscale path;
+- confirmation that unknown/manual llama.cpp processes are warned about and left untouched;
+- confirmation that cache- or environment-visible models outside the configured catalog do not silently become managed presets;
+- confirmation of the designed behavior for at least one build that fails a required router capability check.
 
-Do not treat every executable as a long-running runtime.
+Do not claim Phase 15 complete from schema/unit tests alone.
 
-### Runtime Providers
+## 18. Phase 16 - Remote Nodes / Controller Mode
 
-Long-running services that expose APIs:
+**Status:** Future planning only. Unimplemented and not part of the current Phase 14/15 delivery.
 
-```text
-llama-server.exe
-ComfyUI later
-Stable Diffusion WebUI later
-Ollama later
-```
+Phase 16 extends the local control plane to multiple explicitly identified machines without changing the data-plane rule. It must preserve a useful single-machine Standalone mode while allowing a laptop Controller to operate a Home PC Node through an authenticated Node API. The initial target is one laptop Controller and one Home PC Node; this is Node-aware architecture, not a scheduler.
 
-### Runtime Tools
+Phase 16 depends on Phase 15's build, configured-model, router-runtime, generated-preset, process-ownership, log, and job boundaries. It exposes those capabilities through a Node boundary rather than redesigning them. Phase 15 must therefore remain router-focused and Node-aware enough that Phase 16 can reuse it without moving machine-local operations into the Controller.
 
-One-shot or batch jobs:
+### 16.1 Modes and deployment shape
 
-```text
-llama-bench.exe
-llama-perplexity.exe
-llama-cli.exe test prompts
-GGUF metadata scanner
-```
+- **Standalone:** one ObsidianLM instance owns local configuration, filesystem, builds, processes, ports, GPUs, logs, jobs, generated presets, and runtime state.
+- **Controller-only:** the laptop browser talks only to the laptop ObsidianLM backend. That backend mediates authenticated requests to selected Nodes and owns known connections, active selection, credential references, and UI preferences. It does not automatically manage the laptop as a Local Node.
+- **Controller with Local Node:** an optional/future configuration may explicitly enable the same installation to manage its own machine alongside remote Nodes. This dual-role UX is not required for the first Phase 16 implementation if it materially increases scope.
+- **Node:** an ObsidianLM instance owns one machine's resources and exposes a bounded, versioned Node API. The Node performs local discovery and local build/router operations.
 
-This keeps the architecture clean.
+Normal Controller-only startup must not scan laptop model/build folders, inspect laptop GPUs or llama.cpp processes, claim laptop port `:8085`, start a local router, or run other local discovery/runtime side effects. Local Node capability must be explicitly enabled.
 
----
-
-## 11. Adapter Structure
-
-Suggested internal structure:
-
-```text
-runtimes/
-  shared/
-    runtime-types.ts
-    runtime-adapter.ts
-    command-spec.ts
-
-  llama-cpp/
-    provider.ts
-    server-command-builder.ts
-    process-detector.ts
-    model-scanner.ts
-    build-scanner.ts
-    health-check.ts
-    log-parser.ts
-
-tools/
-  shared/
-    job-types.ts
-    job-runner.ts
-    job-result.ts
-
-  llama-bench/
-    job-runner.ts
-    command-builder.ts
-    result-parser.ts
-
-  llama-perplexity/
-    job-runner.ts
-    command-builder.ts
-    result-parser.ts
-```
-
-A future diffusion adapter should be able to live beside the llama.cpp adapter without rewriting the core service.
-
----
-
-## 12. Suggested Repository Structure
+Standalone remains the efficient same-machine behavior, conceptually equivalent to Controller plus Local Node within one installation. The exact internal architecture may differ, but remote abstractions must not force unnecessary network calls for local operation.
 
 ```text
-obsidianlm/
-│
-├─ apps/
-│  ├─ web/
-│  │  ├─ src/
-│  │  ├─ index.html
-│  │  ├─ vite.config.ts
-│  │  └─ package.json
-│  │
-│  └─ service/
-│     ├─ src/
-│     │  ├─ api/
-│     │  ├─ auth/
-│     │  ├─ config/
-│     │  ├─ logs/
-│     │  ├─ monitoring/
-│     │  ├─ process/
-│     │  ├─ runtimes/
-│     │  │  ├─ shared/
-│     │  │  └─ llama-cpp/
-│     │  ├─ tools/
-│     │  │  ├─ shared/
-│     │  │  ├─ llama-bench/
-│     │  │  └─ llama-perplexity/
-│     │  └─ main.ts
-│     │
-│     └─ package.json
-│
-├─ packages/
-│  └─ shared/
-│     ├─ src/
-│     │  ├─ schemas/
-│     │  ├─ types/
-│     │  └─ constants/
-│     └─ package.json
-│
-├─ data/
-│  ├─ settings.json
-│  ├─ profiles.json
-│  ├─ runtime-state.json
-│  └─ jobs.json
-│
-├─ logs/
-│  ├─ obsidianlm.log
-│  └─ runtimes/
-│
-└─ README.md
+Standalone Mode                 Controller Mode               Node Mode
+ObsidianLM UI/backend           Laptop UI/backend             Home PC Node service
+        ↓                               ↓                             ↓
+same machine resources          authenticated Node API        local discovery/runtime
+        ↓                               ↓                             ↓
+models/builds/GPU/llama.cpp     remote Home PC Node           models/builds/GPU/llama.cpp
 ```
 
----
-
-## 13. Settings Schema Draft
-
-`settings.json`
-
-```json
-{
-  "uiPort": 8090,
-  "adminTokenHash": "stored-hash",
-  "modelFolders": [
-    "D:\\Models"
-  ],
-  "llamaCppFolders": [
-    "C:\\Users\\ahmed\\Downloads\\llama.cpp-cu13-official",
-    "C:\\Users\\ahmed\\Downloads\\llama.cpp-turboquant"
-  ],
-  "managedLlamaPort": 8085,
-  "startupMode": "service_only",
-  "staleProcessPolicy": "auto_stop_previous_managed_only"
-}
-```
-
----
-
-## 14. Profile Schema Draft
-
-`profiles.json`
-
-```json
-[
-  {
-    "id": "qwen35b-262k-official",
-    "name": "Qwen 35B 262K Official",
-    "runtimeType": "llama.cpp",
-    "providerKind": "server",
-    "buildPath": "C:\\Users\\ahmed\\Downloads\\llama.cpp-cu13-official\\llama-server.exe",
-    "modelPath": "D:\\Models\\llmfan46\\Qwen3.6-35B-A3B-uncensored-heretic-GGUF\\Qwen3.6-35B-A3B-uncensored-heretic-Q4_K_S.gguf",
-    "host": "0.0.0.0",
-    "port": 8085,
-    "llamaArgs": {
-      "ctxSize": 262144,
-      "gpuLayers": "all",
-      "devices": ["CUDA0", "CUDA1"],
-      "splitMode": "layer",
-      "tensorSplit": "5,3",
-      "cacheTypeK": "q8_0",
-      "cacheTypeV": "q8_0",
-      "flashAttention": true,
-      "batchSize": 4096,
-      "ubatchSize": 1024,
-      "parallel": 1,
-      "threads": 8,
-      "threadsBatch": 16,
-      "metrics": true,
-      "webui": true
-    },
-    "extraArgs": [
-      "--timeout",
-      "3600"
-    ]
-  }
-]
-```
-
----
-
-## 15. Runtime State Schema Draft
-
-`runtime-state.json`
-
-```json
-{
-  "activeRuntimeId": "llama.cpp",
-  "activeProfileId": "qwen35b-262k-official",
-  "pid": 37204,
-  "port": 8085,
-  "startedByObsidianLM": true,
-  "startedAt": "2026-06-28T00:00:00.000Z",
-  "commandHash": "abc123",
-  "status": "running"
-}
-```
-
----
-
-## 16. Jobs Schema Draft
-
-`jobs.json`
-
-```json
-[
-  {
-    "id": "job_001",
-    "type": "llama-bench",
-    "status": "completed",
-    "createdAt": "2026-06-28T00:00:00.000Z",
-    "startedAt": "2026-06-28T00:01:00.000Z",
-    "finishedAt": "2026-06-28T00:10:00.000Z",
-    "command": "llama-bench.exe ...",
-    "exitCode": 0,
-    "logPath": "logs/jobs/job_001.log",
-    "resultPath": "data/jobs/job_001-result.json"
-  }
-]
-```
-
----
-
-## 17. API Design Draft
-
-### Status
+Target deployment:
 
 ```text
-GET /api/status
+                         LAPTOP
+                ObsidianLM Controller
+                    localhost:8090
+                           │
+             authenticated Node API / Tailscale
+                           ▼
+                        HOME PC
+                ObsidianLM Node Service
+              models / builds / GPUs / processes
+                   router / logs / jobs
+                           │
+                           ▼
+                  llama.cpp router :8085
+
+OpenCode / Illustria / other client ─────────► Home PC :8085/v1
 ```
 
-Returns:
-
-```json
-{
-  "service": "running",
-  "activeRuntime": {
-    "type": "llama.cpp",
-    "status": "running",
-    "pid": 37204,
-    "profileName": "Qwen 35B 262K Official",
-    "apiUrl": "http://100.84.76.75:8085/v1"
-  },
-  "warnings": [
-    {
-      "type": "unmanaged_llama_process",
-      "pid": 1234,
-      "message": "Unmanaged llama-server.exe detected"
-    }
-  ]
-}
-```
-
-### Profiles
-
-```text
-GET    /api/profiles
-POST   /api/profiles
-PATCH  /api/profiles/:id
-DELETE /api/profiles/:id
-POST   /api/profiles/:id/start
-POST   /api/profiles/:id/validate
-```
-
-### Current Runtime
-
-```text
-POST /api/runtime/stop
-POST /api/runtime/restart
-GET  /api/runtime/logs/stream
-GET  /api/runtime/command
-GET  /api/runtime/health
-```
-
-### Discovery
-
-```text
-GET  /api/discovery/models
-POST /api/discovery/models/rescan
-
-GET  /api/discovery/llama-builds
-POST /api/discovery/llama-builds/rescan
-```
-
-### Processes
-
-```text
-GET  /api/processes/llama
-POST /api/processes/:pid/adopt
-POST /api/processes/:pid/stop
-POST /api/processes/:pid/ignore
-```
-
-### Monitoring
-
-```text
-GET /api/monitoring/gpu
-GET /api/monitoring/system
-GET /api/monitoring/ports
-```
-
-### Future Jobs
-
-```text
-GET  /api/jobs
-POST /api/jobs/llama-bench
-POST /api/jobs/llama-perplexity
-GET  /api/jobs/:id
-POST /api/jobs/:id/cancel
-GET  /api/jobs/:id/logs/stream
-```
-
----
-
-## 18. UI Design
-
-Frontend:
-
-```text
-Vite + Svelte SPA
-Tailwind CSS or equivalent lightweight styling
-dark-first UI
-modern interactive controls
-no heavy UI framework required
-```
-
-Main screens:
-
-```text
-Dashboard
-Profiles
-Models
-Builds
-Processes
-GPU Monitor
-Logs
-Test Chat
-Settings
-Jobs later
-```
+External inference clients connect directly to the Home PC llama.cpp endpoint at `:8085/v1`; they do not pass through the Controller. The browser does not call arbitrary Node commands or directly inspect remote files.
 
-### Dashboard Contents
+### 16.2 Ownership and conceptual client boundary
 
-```text
-Current Runtime
-- Status: Running / Stopped / Error / Warning
-- Runtime: llama.cpp
-- Profile: Qwen 35B 262K Official
-- Model: Qwen3.6...
-- Build: official CUDA 13
-- PID
-- API URL
-- Health
+The Node owns its filesystem and model artifacts, llama.cpp builds, runtime/router and child processes, ports, GPUs, logs, one-shot jobs, generated router presets, runtime state, and authoritative machine configuration. The Controller owns connection records, active Node selection, UI preferences, and credential references. There must be no split-brain authority for a Node's machine resources.
 
-Actions:
-- Start profile
-- Stop
-- Restart
-- Open llama.cpp WebUI
-- Copy API URL
-- Copy OpenCode config
-- Copy generated command
-```
+The Controller may request configured-model or other Node configuration changes only through typed Node APIs. The Node validates each request against its local resources and persists the authoritative result. The Controller must not maintain a competing authoritative remote configuration file.
 
-### Warnings Panel
+Introduce a conceptual `NodeClient` boundary with Local and Remote implementations, without freezing those names or exact TypeScript interfaces. Local operations may call the local service boundary; Remote operations call typed Node API operations. Both must preserve Node and resource identity in results. A Controller must never apply local filesystem, process, PID, port, GPU, or `nvidia-smi` assumptions to paths or identifiers reported by a remote Node.
 
-Should show:
+Resource identities for models, builds, runtimes, ports, processes, GPUs, logs, and jobs become Node-scoped. A Node identity is stable independently of hostname, IP address, endpoint, or display name. A saved connection conceptually associates the expected stable Node ID with a display name, editable endpoint, credential reference, and expected protocol/capabilities; exact field names remain subject to the future contract.
 
-```text
-Unmanaged llama-server.exe detected
-Port 8085 is already in use
-Previous managed process was stale and stopped
-GPU memory is being used by unknown processes
-Configured model path is missing
-Configured build path is missing
-```
+### 16.3 Handshake, capability limits, and transport
 
-### GPU Monitor
+The Controller and Node need an authenticated capability/version and identity handshake, conceptually similar to `GET /api/node/info`, without freezing that route or response shape now. After pairing, reconnect must establish that the endpoint is bound to the saved expected Node ID before disclosing a reusable saved Node credential or issuing privileged requests; the exact trust/bootstrap mechanism remains open. If an endpoint now identifies as another Node, privileged operations are blocked, credentials are not trusted against the unexpected Node, the UI reports the mismatch clearly, and explicit re-pairing/re-authorization is required. Legitimate hostname, IP, port, or other endpoint edits do not redefine Node identity.
 
-Should show:
+Plain HTTP is acceptable only on localhost or inside an encrypted/authenticated overlay transport such as Tailscale. Tailscale supplies encrypted transport and connectivity, not ObsidianLM authentication; application authentication is still required. Controller-to-Node communication over an ordinary LAN or WAN without such an encrypted overlay requires HTTPS/TLS when carrying bearer tokens or other credentials. Phase 16 does not require product-managed PKI or certificate provisioning. Do not add Tailscale APIs, provisioning, or route-management responsibilities to ObsidianLM.
 
-```text
-GPU name
-VRAM used/free
-running GPU processes
-llama.cpp process usage when available
-unknown processes using VRAM
-```
+Version and capability results determine which controls are enabled. Safe read-only compatibility may remain available where explicitly supported, but unsupported controls are disabled with a clear capability/version warning. The Controller must not guess, attempt a dangerous fallback, or translate an unsupported typed action into arbitrary remote execution. Node API operations must be typed router/build/model/discovery/telemetry/job operations, never a general arbitrary-command endpoint.
 
-For v1, use:
+A Node endpoint is operational configuration, not a credential. An authorized Controller may receive and display endpoints such as `home-node.tailnet-name.ts.net:8090`, `10.x.x.x:8090`, or `https://node.example.internal`. Endpoints should not leak into unauthenticated/public responses, unrelated logs, public diagnostics, or portable exports that should omit deployment-specific details.
 
-```text
-nvidia-smi
-```
+Authentication secrets include raw tokens, token hashes, passwords, pairing secrets, private authentication material, and credential-store values. They must never appear in normal API responses, generated presets, command previews, logs, job output, telemetry, portable model/router exports, or committed examples. Remote credentials remain separate from normal Node metadata, model profiles, and router presets. Existing admin-token infrastructure may bootstrap a connection if its security properties remain sound; the design must leave room for later OS-backed secret storage such as Windows Credential Manager. The exact credential storage mechanism remains open.
 
-Later, NVML can be added.
+### 16.4 Discovery and runtime operations
 
-### Logs
+Remote discovery is executed by the selected Node using the same local discovery rules and configured roots it uses in Standalone mode. The Controller receives metadata and validation results; it does not mount drives, use SMB, scan remote paths, or infer access from a shared path string. Generated presets are validated, generated, and persisted locally on the Node after the Node validates model/build references; the Controller does not copy files or use SCP.
 
-Should support:
+Discovery metadata may cover configured model folders, GGUF files, llama.cpp builds, `llama-server`, `llama-bench`, `llama-perplexity`, and tool input files. An authenticated Controller may display and copy paths such as `D:\Models\...`, `E:\Models\...`, or `D:\llama.cpp-builds\...` as operational data. These remain Node-local values and must never enter Controller-local filesystem, process, or executable logic.
 
-```text
-live log stream
-search
-copy
-download
-clear
-view generated command
-```
+The Controller requests typed operations such as select build, validate build, generate preset, start/stop/restart router, switch same-build model, and perform cross-build replacement. ObsidianLM still owns build selection, router lifecycle, generated presets, and cross-build replacement; llama.cpp still owns same-build loading, unloading, autoload, residency, and eviction. Jobs select Node, build, model, and dataset, but normal Controller operation does not transfer large model or dataset files.
 
----
+The remote runtime view may retrieve service health, active build, router running/stopped state, router PID and endpoint, configured and available models, router catalog/load state, GPU usage, classified processes, recent logs, jobs, and warnings. These capabilities may use focused endpoints or streams; Phase 16 does not require one giant status response. All actual inspection and lifecycle work occurs on the Node.
 
-## 19. Authentication
+### 16.5 Disconnect and state behavior
 
-Since ObsidianLM can start/stop executables, it should have basic access control even over Tailscale.
+Disconnecting a Controller must never stop, unload, or otherwise alter a Node runtime. Reconnection refreshes current Node state and reconciles it with clearly labeled last-known state. Live monitoring and logs use reconnecting/offline states, bounded history, timestamps, and source plus Node labels. A stale last-known runtime is not shown as stopped. SSE or equivalent streams must reconnect safely and use bounded history rather than requiring unbounded replay.
 
-Use:
+Node-local ownership evidence remains authoritative for process actions. A Controller must not adopt, stop, or attribute an unknown remote process merely because a PID, executable name, port, or GPU row was reported. Unknown-process safety and Node-local proof rules continue to apply after disconnection and reconnect.
 
-```text
-single admin token
-```
+### 16.6 Configuration ownership and removal
 
-No user accounts in v1.
+Node persistence contains authoritative machine configuration, local discovery roots, model/build records, runtime state, generated presets, logs, and jobs. Normal Controller persistence contains known Node connections, expected Node identities, editable endpoints, active Node selection, credential references, and UI preferences. Credential secrets belong in a separate protected storage boundary selected during implementation; they do not belong in normal Node metadata or portable configuration.
 
-The UI should require the token before allowing control actions.
+Remote configuration mutations must detect stale or conflicting writes rather than silently overwriting newer authoritative Node state. If a Controller loaded revision A and a local Node UI or another authorized editor has already produced revision B, a later save based on revision A must fail safely and report the conflict clearly. The exact optimistic-concurrency mechanism remains open.
 
----
+Removing a Node from the Controller only removes that Controller connection, associated Controller-held credential, and related local selection metadata. It must not delete Node data, stop processes, uninstall services, remove models/builds, or remotely revoke/reset Node state implicitly. Node-side deletion or reset is a separate explicit local operation.
 
-## 20. Development Phases
+SSH remains an administrator/recovery/diagnostic path only, never normal Controller-to-Node transport. No SCP-based preset or model workflow is introduced.
 
-### Phase 0 — Skeleton
+### 16.7 Work sequence
 
-Goal:
+1. **Ownership and identity contract:** document Node-scoped resource identity, stable Node identity, Controller/Node persistence, and the Local/Remote client boundary.
+2. **Handshake and authentication:** prototype capability/version negotiation, authenticated connection bootstrap, token handling, pairing/rotation direction, and unsupported-action behavior.
+3. **Node service boundary:** expose the smallest typed status, discovery, build, model, runtime, log, telemetry, and job operations; reject arbitrary command execution.
+4. **Local adapter:** route existing Standalone behavior through the conceptual Node boundary without changing current local semantics or endpoints.
+5. **Remote adapter and Controller mediation:** add remote connection lifecycle, active Node selection, timeouts, retries, error translation, and no-local-assumptions enforcement.
+6. **Node-aware UI state:** add persistent Node context, capability-limited controls, source/Node labels, remote-path handling, and live versus last-known state treatment.
+7. **Monitoring and jobs:** add reconnecting SSE/bounded history, Node-scoped telemetry/logs/jobs, and selected Node/build/model/dataset labels without large-file transfer.
+8. **Real deployment validation:** validate laptop-to-Home-PC operation, disconnect independence, reconnect state, auth failures, unsupported capabilities, cross-build replacement, direct `:8085/v1` inference, and safe removal.
 
-```text
-Create the basic app shell.
-```
+### 16.8 Explicit non-goals
 
-Tasks:
+- No inference proxy through the Controller.
+- No SSH-based normal control transport.
+- No SMB or network-drive dependency for discovery.
+- No arbitrary remote shell or `run-command` API.
+- No automatic model or dataset copying between Nodes.
+- No distributed inference, cluster scheduler, or load balancing across Nodes.
+- No automatic model replication.
+- No remote Windows service installation from the Controller in the first phase.
+- No automatic Tailscale provisioning or management API integration.
+- No automatic killing, adoption, or cleanup of unmanaged remote processes.
+- No multi-Node scheduling, even though identities and contracts must not hard-code one remote machine.
 
-```text
-Create monorepo
-Create Fastify service
-Create Svelte SPA
-Serve SPA from Fastify
-Add token auth
-Add /api/status
-Add settings JSON
-```
+### 16.9 Acceptance criteria
 
-Success condition:
+**Controller**
 
-```text
-ObsidianLM opens at http://localhost:8090
-and through Tailscale at http://100.84.76.75:8090
-```
+- A laptop ObsidianLM Controller can configure and connect to a Home PC Node.
+- A saved Node connection has an expected stable Node identity independent of its endpoint.
+- Post-pairing reconnect establishes the expected Node identity before disclosing a reusable saved Node credential or issuing privileged requests.
+- Reconnecting to an endpoint that identifies as another Node blocks credential disclosure and privileged operations and requires explicit re-pairing/re-authorization.
+- Endpoint updates do not silently redefine Node identity.
+- Controller-only Mode does not automatically scan or manage laptop models, builds, GPUs, processes, ports, discovery, or runtimes; Local Node capability is explicit.
+- Node identity and capability handshake establish online/offline and supported-action state.
+- Protocol/version mismatch allows only explicitly safe compatibility behavior, disables unsupported actions, and reports a clear warning without guessing or dangerous fallback.
+- Browser traffic goes to the laptop backend; the browser does not directly call a Node or arbitrary remote command endpoint.
+- Controller visibly identifies the active Node and keeps connection metadata, selection, protected credentials, and UI preferences separate from Node machine state.
+- Local and Remote NodeClient behavior has one typed semantic boundary without freezing public TypeScript names prematurely.
+- Unsupported actions are disabled with an explanation based on capability/protocol state.
 
----
+**Node**
 
-### Phase 1 — Basic llama.cpp Manager
+- Node owns local filesystem, models, builds, processes, ports, GPUs, logs, jobs, generated presets, and runtime state.
+- Node identity remains stable across hostname/IP/display-name changes, and all resource identities are Node-scoped.
+- Node-local discovery, validation, preset generation, persistence, and process ownership remain authoritative.
+- Controller-requested configuration changes are validated and persisted by the Node through typed APIs; no second authoritative Controller copy exists.
 
-Goal:
+**Discovery**
 
-```text
-Start and stop one configured llama.cpp profile.
-```
+- Remote discovery runs on the Node using its configured local roots.
+- The Controller can browse models from `D:`/`E:`-style roots, remote llama.cpp builds/tools, and tool inputs without direct filesystem access.
+- Remote absolute paths are displayed with Node context and are never interpreted as Controller-local paths.
+- No mount, SMB scan, SCP transfer, or Controller interpretation of remote paths is required.
 
-Tasks:
+**Runtime**
 
-```text
-Add llama.cpp runtime adapter
-Add profile JSON
-Start selected profile
-Stop managed process
-Stream logs
-Show generated command
-Show running status
-```
+- Typed operations preserve Phase 15 responsibility split: ObsidianLM selects builds and manages router lifecycle; llama.cpp manages same-build model residency.
+- The Controller can see router state, active build, configured/available model state, router catalog/load state, and generated preset details.
+- The Controller can start, stop, and restart the managed router through typed Node operations.
+- Same-build model requests and Node-executed cross-build replacement preserve Phase 15 semantics.
+- Presets are generated and persisted on the Node after validation.
+- Stale remote configuration mutations cannot silently overwrite newer authoritative Node state; conflicts fail safely and are reported clearly.
+- Disconnecting the Controller never stops the Node runtime; reconnect restores current state.
+- There is no arbitrary command endpoint, scheduler, or multiple permanent routers introduced by this phase.
 
-Success condition:
+**Independence**
 
-```text
-User can start Qwen 35B profile from ObsidianLM and OpenCode can connect to port 8085.
-```
+- External clients continue direct inference to the selected Node's llama.cpp `:8085/v1` endpoint.
+- SSH is admin/recovery only, not normal transport.
+- Removing a Node from a Controller does not alter Node resources.
 
----
+**Monitoring**
 
-### Phase 2 — Discovery
+- Remote GPU/process data is sanitized structured Node output; unknown processes remain unmanaged.
+- Remote service, router/runtime, router-child where supported, and job logs can be viewed with source and Node labels.
+- `llama-bench` and `llama-perplexity` jobs can run on the selected Node using Node-local tools, models, and inputs.
+- Logs, telemetry, jobs, SSE events, and bounded history include source and Node labels.
+- Offline/last-known state is distinct from stopped; reconnect is bounded and does not imply a restart.
+- Jobs identify Node, build, model, and dataset without normal large-file transfer.
 
-Goal:
+**Security**
 
-```text
-Detect models and llama.cpp builds from configured folders.
-```
+- Node API authentication is mandatory; Tailscale is documented as encrypted connectivity, not application authentication.
+- Plain HTTP is limited to localhost or an encrypted/authenticated overlay; credential-bearing remote operation outside such an overlay requires HTTPS/TLS.
+- Node endpoints are operational configuration that authorized Controllers may receive/display, not credentials; they remain absent from unrelated public surfaces and portable exports where deployment details do not belong.
+- Remote credentials are separate from Node metadata, model/router configuration, and portable exports.
+- Raw tokens, token hashes, passwords, pairing secrets, private authentication material, and credential-store values never appear in normal API responses, presets, previews, logs, exports, or telemetry.
+- Bootstrap, future token rotation/pairing, and OS secret storage have an explicit design path.
 
-Tasks:
+**Safety**
 
-```text
-Configure model folders
-Scan GGUF models
-Configure llama.cpp folders
-Scan llama-server.exe builds
-Create profile from detected model + build
-Validate profile paths
-```
+- Controllers never apply local FS/process/PID/port/GPU assumptions to remote reports.
+- Unknown-process and ownership evidence rules remain Node-local; no unsafe adoption or cleanup occurs after reconnect.
+- Node removal is non-destructive and Controller-side only.
 
----
+**Real deployment validation**
 
-### Phase 3 — Stale Process Detection
+- A laptop Controller operates a Home PC Node over Tailscale's encrypted transport plus ObsidianLM authentication, or over appropriately configured HTTPS/TLS plus ObsidianLM authentication, using generic placeholder identities and no committed secrets.
+- Local discovery on the Home PC finds models/builds without remote mounts; generated presets remain on the Home PC.
+- Same-build model loading and cross-build router replacement work on the Node while external clients continue direct `:8085/v1` access.
+- Controller disconnect leaves runtime, jobs, logs, and processes running; reconnect shows current state and clearly marked bounded last-known history.
+- Auth rejection, capability mismatch, stale/offline state, unknown-process safety, and safe Controller-side Node removal are verified.
 
-Goal:
+Phase 16 remains future/unimplemented until these criteria and real deployment checks are satisfied.
 
-```text
-Handle stale llama.cpp launches safely.
-```
+## 19. Later Work
 
-Tasks:
+Potential later work remains intentionally separate:
 
-```text
-Scan running llama-server.exe processes
-Detect old ObsidianLM-managed process
-Auto-stop previous managed stale process
-Detect unmanaged llama.cpp process
-Detect port conflict
-Show warning/action UI
-```
+- default/last build startup policy after safe recovery is proven;
+- richer build dependency/validation reports;
+- additional one-shot `llama-cli` jobs;
+- non-llama.cpp runtime adapters;
+- an inference-aware gateway only if a concrete future requirement justifies entering the data path.
 
----
+## 20. Open Decisions for Phase 15 Design
 
-### Phase 4 — GPU Monitor
+These decisions require contract prototypes and migration fixtures rather than guesses in this documentation run:
 
-Goal:
+- Whether the user-facing/current `profile` term evolves into `ModelProfile`, `ModelConfiguration`, or a versioned new type while retaining legacy import compatibility.
+- The exact stable-ID strategy for moved model artifacts and relocated build folders.
+- Which custom `extraArgs` can be represented structurally, which can be emitted safely into presets, and how unsupported keys are preserved for older/custom builds.
+- Which parent/child process evidence is reliable enough on supported Windows versions for control rather than warning-only attribution.
+- The exact router health/status API subset to trust across official, custom, and older supported builds.
+- The concrete router model-source isolation strategy for supported builds and how any external catalog entries are represented.
+- Whether unsupported builds are ineligible for managed inference or justify a separately maintained legacy compatibility mode.
 
-```text
-Show GPU/VRAM state and process usage.
-```
+## 21. Open Decisions for Phase 16
 
-Tasks:
+These remain implementation-time design decisions and are not resolved by this corrective pass:
 
-```text
-Run nvidia-smi
-Parse GPU name, VRAM, process list
-Show RTX 5080 and RTX 3060 cards
-Show llama.cpp VRAM usage where possible
-Show unknown GPU processes
-```
+- Exact Controller-to-Node API and protocol shape.
+- Node bootstrap and pairing mechanism.
+- Stable Node identity mechanism and proof during pairing/reconnect.
+- Credential storage backend, including whether and when to use OS-backed storage.
+- Detailed Node identity verification and re-authorization flow after endpoint changes.
+- Configured-model write authority details within the rule that the Node persists the authoritative state.
+- Controller/Node configuration revision and conflict mechanism.
+- Protocol/version compatibility policy, including the bounds of safe read-only compatibility.
+- Detailed TLS requirements outside encrypted overlay networks and whether product-managed certificate provisioning is ever in scope.
+- Whether the first Controller Mode release supports an optional Local Node.
+- Whether Local and Remote Nodes use exactly the same internal abstraction in the first implementation.
 
----
+## 22. Next Step
 
-### Phase 5 — Better Profile Editor
-
-Goal:
-
-```text
-Make profile creation and editing comfortable.
-```
-
-Tasks:
-
-```text
-Profile form UI
-Advanced args editor
-Common presets
-Duplicate profile
-Export/import profiles
-Copy OpenCode config
-Copy Illustria config
-```
-
----
-
-### Phase 6 — Job System
-
-Goal:
-
-```text
-Support one-shot llama.cpp tools.
-```
-
-Future tools:
-
-```text
-llama-bench
-llama-perplexity
-llama-cli test prompt
-```
-
-Tasks:
-
-```text
-Add jobs model
-Add queued/running/completed/failed/cancelled states
-Run job command
-Store job logs
-Store parsed results
-Support job cancellation
-```
-
----
-
-### Phase 7 — Windows Service Mode
-
-Goal:
-
-```text
-Make ObsidianLM reliable as a background service.
-```
-
-Tasks:
-
-```text
-Package service
-Add install-service command
-Add uninstall-service command
-Add auto-restart wrapper
-Add service logs
-Optional tray/helper app later
-```
-
----
-
-## 21. Implementation Rules
-
-These rules should guide the project:
-
-```text
-1. ObsidianLM controls llama.cpp; it does not replace llama.cpp.
-2. OpenCode and Illustria should continue talking directly to llama-server.
-3. The llama.cpp API port should stay stable at 8085.
-4. ObsidianLM UI/API should stay separate at 8090.
-5. Unknown processes should never be killed silently.
-6. Previous ObsidianLM-managed stale processes can be cleaned automatically.
-7. Every launch must generate a copyable command.
-8. Runtime-specific logic must live inside adapters.
-9. llama-bench and llama-perplexity should be modeled as jobs/tools, not server runtimes.
-10. The frontend should be static, light, and served by the Fastify service.
-11. Use generic runtime/provider/tool abstractions so future non-llama.cpp support is possible.
-12. Keep v1 simple and reliable before adding service packaging and advanced plugins.
-```
-
----
-
-## 22. Open Decisions
-
-### UI Style
-
-Possible options:
-
-```text
-A. Dark technical dashboard
-B. Clean Apple-like control panel
-C. Gaming/terminal cyber style
-D. Minimal admin panel
-```
-
-Recommended:
-
-```text
-Dark technical dashboard with Obsidian-inspired polish.
-```
-
-### Config Location
-
-Recommended:
-
-```text
-Development: ./data
-Installed service: %PROGRAMDATA%\ObsidianLM
-```
-
-### Future Diffusion Support
-
-Not decided yet.
-
-Possible future adapters:
-
-```text
-ComfyUI
-Stable Diffusion WebUI / Forge
-```
-
-### First Future Tool Support
-
-Likely:
-
-```text
-llama-bench
-llama-perplexity
-```
-
-These should be implemented as jobs, not long-running runtimes.
-
----
-
-## 23. Recommended Next Step
-
-The next step should be to create a focused builder prompt for:
-
-```text
-Phase 0 + Phase 1
-```
-
-That should include:
-
-```text
-Vite + Svelte SPA
-Fastify TypeScript service
-JSON config files
-single admin token auth
-profile start/stop
-llama.cpp command builder
-log streaming
-basic dashboard
-stable ports 8090 and 8085
-```
-
-Do not attempt all phases at once.
+Finish or deliberately re-scope the remaining Phase 14 UI work, then create focused Phase 15 builder runs beginning with architecture/contracts and migration fixtures. Do not combine schema migration, preset generation, runtime switching, process attribution, and the full UI into one implementation run.

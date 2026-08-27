@@ -9,7 +9,9 @@
 **Primary runtime target:** llama.cpp / `llama-server.exe`  
 **Primary users:** Local AI power users, developers, and builders running models from a main Windows PC while controlling the service locally or over Tailscale.
 
-ObsidianLM is **not** primarily a chat app and should not look like LM Studio. It is a focused operator console for starting, stopping, validating, monitoring, and switching local AI runtime profiles safely.
+ObsidianLM is **not** primarily a chat app and should not look like LM Studio. It is a focused operator console for starting, stopping, validating, monitoring, and switching local AI runtime configuration safely.
+
+**Architecture status:** the current implementation still launches one model-bound profile as one managed `llama-server`. Phase 14 is an in-progress UI restructure, not a completed runtime redesign. The planned Phase 15 architecture makes ObsidianLM responsible for one selected build and its managed router lifecycle, while llama.cpp owns same-build model loading, unloading, autoload, residency limits, and eviction. UI copy must not present that future behavior as implemented.
 
 ### Design Direction
 
@@ -55,23 +57,30 @@ Every screen that can affect a runtime must show the current state before showin
 Runtime state hierarchy:
 
 1. Service status
-2. Managed runtime status
-3. Active profile
-4. Bound port
-5. Process ID when available
-6. Command preview / launch arguments
-7. Warnings and safety gates
-8. Logs and diagnostics
+2. Managed runtime/router status
+3. Active llama.cpp build
+4. Router endpoint
+5. Configured models and router-reported model state when known
+6. Process ID and proven child-process information when available
+7. Command/preset preview
+8. Warnings and safety gates
+9. Logs and diagnostics
+
+Until Phase 15 is implemented, use the current active-profile fields and labels where required by the API. New planning/reference work should reserve enough hierarchy for build, router, and configured-model state rather than treating one profile as all three concepts forever.
+
+Planned router-mode model state should accommodate concepts such as available/unloaded, loading, loaded, sleeping, and unavailable/error without prematurely hardcoding exact labels or upstream response fields. Router health and router catalog are separate views: bounded health comes from `GET /health`, while configured-model availability/load state comes from `GET /models`; `/models/sse` may be considered later for live updates.
 
 ### 3.2 Safe By Default
 
-Do not hide risky actions inside pretty buttons. Stop, restart, kill, adopt, reset, and overwrite actions must be visually distinct and must explain what they affect.
+Do not hide risky actions inside pretty buttons. Stop, restart, kill, reset, and overwrite actions must be visually distinct and must explain what they affect. Process adoption must not be offered unless a future phase can prove ownership safely.
 
 Use confirmation only for genuinely risky actions. Avoid confirmation fatigue for harmless actions like refresh, copy command, open logs, or validate profile.
 
 ### 3.3 Local-First Honesty
 
 The UI should feel like it controls a real local machine, not a cloud SaaS. File paths, ports, process IDs, GPU names, logs, and command previews should be displayed clearly and copyably.
+
+In planned Phase 16 Controller Mode, "local-first" means honest machine ownership rather than pretending every resource belongs to the browser or Controller host. Every operational screen must keep the active Node visible, label remote paths as Node-local, and avoid presenting last-known remote state as live state.
 
 ### 3.4 Compact, Not Cramped
 
@@ -83,9 +92,9 @@ Each page should have one obvious primary action:
 
 - Dashboard: Start runtime / Open runtime controls
 - Runtime: Start, Stop, Restart depending on state
-- Profiles: Validate / Save profile
-- Models: Select model
-- Builds: Select build
+- Profiles/configurations: Validate / Save configuration
+- Models: Configure model / Switch model
+- Builds: Validate build / Switch build and restart router when required
 - Logs: Pause / Resume streaming
 - Settings: Save settings
 
@@ -309,18 +318,21 @@ Navigation rules:
 
 The dashboard should answer these questions immediately:
 
-1. Is ObsidianLM service healthy?
-2. Is a runtime currently managed?
-3. Which profile is active?
-4. Which port is llama.cpp using?
-5. Are there stale or unmanaged processes?
-6. What should I do next?
+1. Which Node is active, and is it local, remote, online, or offline?
+2. Is that Node's ObsidianLM service healthy?
+3. Is a runtime currently managed on that Node?
+4. Which current profile or configured model is selected?
+5. Which llama.cpp build is active?
+6. Which configured models are available and which model is loaded, if known?
+7. Which port is llama.cpp using on that Node?
+8. Are there stale or unmanaged processes?
+9. What should I do next?
 
 Recommended dashboard sections:
 
 - Runtime hero/status panel
 - Quick Actions
-- Active Profile Details
+- Active Build and Model Details
 - Recent Events
 - Health Checklist
 - Resource Snapshot
@@ -333,12 +345,12 @@ Runtime page should be the most operational page.
 Recommended layout:
 
 - Left/main: status timeline, controls, command preview, validation checklist
-- Right inspector: active profile, model path, build path, ports, process ID, uptime
+- Right inspector: active build, router endpoint, available/loaded model state, selected configuration, paths, process IDs, uptime
 - Bottom: streaming logs
 
 ### 5.5 Profiles Page Composition
 
-Profiles are configuration objects. The page should feel like a precise editor, not a chat prompt form.
+Profiles are the current configuration objects. The page should feel like a precise editor, not a chat prompt form. Planned router migration may rename or version this concept, but must preserve legacy profile compatibility.
 
 Recommended layout:
 
@@ -379,9 +391,11 @@ Required fields:
 
 - Runtime state badge: Running / Stopped / Starting / Stopping / Error / Stale detected
 - Runtime type: llama.cpp
-- Active profile name
+- Active build (planned router mode) or active profile (current implementation)
+- Configured models and their router state when known; do not infer loaded state from the router parent PID
 - Port
-- Process ID if known
+- Router/runtime process ID if known
+- Proven child-process summary when available
 - Uptime if running
 - Primary action based on state
 - Secondary actions: Restart, Copy endpoint, Open logs
@@ -451,6 +465,9 @@ Rules:
 - Provide Copy button.
 - Highlight changed/important args later if useful.
 - Include a note when command preview differs from currently running process.
+- Current mode shows the model-bound `llama-server` command.
+- Planned router mode shows two separate copyable views: the router launch command and the generated model-preset INI.
+- Label generated INI as a derived artifact, not the authoritative editable configuration.
 
 ### 6.7 Logs
 
@@ -464,6 +481,8 @@ Rules:
 - Severity colors: info/cyan, warn/amber, error/red, success/green.
 - Preserve timestamps.
 - Auto-scroll only when user is already at bottom.
+- Make source clear enough to distinguish service logs, router lifecycle output, router/model-child output, and one-shot job logs.
+- Do not promise per-child separation until the selected Windows build's router output has been validated.
 
 ### 6.8 Tables and Lists
 
@@ -491,7 +510,8 @@ Use command palette later for:
 
 - Start runtime
 - Stop runtime
-- Switch profile
+- Switch model
+- Switch build and restart router
 - Open logs
 - Copy endpoint
 - Validate profile
@@ -547,6 +567,9 @@ Use:
 
 - `Runtime is running`
 - `No managed runtime is active`
+- `No managed router is active`
+- `Switch model`
+- `Switch build & restart router`
 - `Stale llama.cpp process detected`
 - `This will stop only the managed runtime`
 - `Command preview`
@@ -563,7 +586,7 @@ Safety copy must be specific about scope.
 
 Example:
 
-> ObsidianLM found a llama.cpp process it did not start. It will not stop this process automatically. You can adopt it, ignore it, or stop it manually.
+> ObsidianLM found a llama.cpp process it did not start. It will not adopt or stop this process. Stop it manually only if you know it is safe to do so.
 
 ## 10. Page-Level Design Notes
 
@@ -573,9 +596,11 @@ Goal: fast overview and next action.
 
 Must include:
 
+- Active Node and online/offline state when Phase 16 is implemented
 - Service status
 - Managed runtime status
-- Active profile summary
+- Active build/router summary in planned router mode; active profile summary while current APIs remain model-bound
+- Available/loaded model state when safely known
 - Port summary
 - Warning panel
 - Recent logs preview
@@ -592,9 +617,10 @@ Goal: operate the active managed runtime safely.
 
 Must include:
 
+- Active Node and whether runtime state is live or last-known when Phase 16 is implemented
 - Start/stop/restart controls
 - Runtime state
-- Command preview
+- Router launch command preview and generated preset preview in planned router mode
 - Validation checklist
 - Runtime endpoint
 - Logs
@@ -610,13 +636,16 @@ Must include:
 - Validation state
 - Command preview
 - Requires-restart indicators for settings that cannot hot reload
+- Clear build requirement and router alias after the Phase 15 data model is implemented
+- Legacy import/migration state when an old profile cannot be mapped safely
 
 ### 10.4 Models
 
-Goal: browse and select local model files later.
+Goal: distinguish discovered local model artifacts from configured model presets.
 
 Must include when implemented:
 
+- Owning Node and local/remote source
 - Folder path
 - Search/filter
 - Model filename
@@ -624,18 +653,26 @@ Must include when implemented:
 - Size
 - Last modified
 - Selected profile usage
+- Configured-model identities/aliases that reference the artifact
+- Optional `mmproj` association and text-only versus multimodal configuration state when implemented
+- `Switch model` when available under the active build, or `Switch build & restart router` when another build is required
+- Managed/unmanaged source status when the router exposes cache- or environment-visible models outside ObsidianLM's configured catalog
 
 ### 10.5 Builds
 
-Goal: manage llama.cpp binary folders/builds later.
+Goal: manage llama.cpp binary folders/builds independently from model artifacts and configured models.
 
 Must include when implemented:
 
+- Owning Node and local/remote source
 - Build path
 - Detected executable
 - Version/build metadata if available
 - CUDA/Vulkan/CPU hints if available
 - Last verified date
+- Router capability validation for the selected executable
+- Safe unsupported-build status: not eligible for managed router use unless a separately designed legacy compatibility mode exists
+- Configured models that depend on the build before it is changed or removed
 
 ### 10.6 Logs
 
@@ -643,8 +680,11 @@ Goal: diagnose runtime/service behavior.
 
 Must include:
 
+- Node and source labels on every remote log stream/history view
 - Service logs
-- Runtime logs
+- Router/runtime lifecycle logs
+- Router/model-child output when available
+- One-shot job logs as a separate source
 - Filtering by severity/source
 - Copy visible logs
 - Pause/resume streaming
@@ -662,6 +702,21 @@ Must include:
 - Startup behavior
 - Stale process policy
 - Auth/admin token settings later
+- Known Node connections, active Node selection, and connection removal when Phase 16 is implemented; credentials are never displayed in normal responses
+
+### 10.8 Controller and Node Details (Phase 16 Planning)
+
+The shell must make the operated machine unambiguous. Add a Node selector in the shell or top status area and retain a persistent active-Node indicator even when only one Node is configured. Compact states may read `Active Node: Local` or `Active Node: Home PC · Online · Windows · 2 GPUs · Router running`. Controller-only Mode must not imply that the Controller laptop is also managed as a Local Node; Local Node capability is an explicit future/optional role.
+
+Node cards show `Local` or `Remote`, connection state, display name, stable identity, endpoint, protocol/version, and capabilities without exposing credentials. A Node endpoint is displayable operational configuration, not a credential. Remote paths stay copyable but are labeled as paths on the selected Node; the Controller must never imply that it can browse them through its own filesystem.
+
+Offline is not stopped. When a Node is unreachable, show `Node offline/unreachable`, the last update time, and clearly marked last-known runtime state such as `Last known router state: Running`. Disable destructive or state-changing actions until current state is available. Cached data may remain visible only with stale/last-known labeling.
+
+Connection UI must account for `Online`, `Offline`, `Identity mismatch`, `Authentication required`, `Capability limited`, `Version incompatible`, and `Configuration conflict` without prescribing final components or copy. An identity mismatch blocks privileged actions and requires explicit re-pairing; editing an endpoint must not silently redefine the saved Node identity. Configuration conflicts preserve the newer authoritative Node state and explain that the attempted save was not applied.
+
+Capability negotiation controls availability. Unsupported or version-incompatible actions remain disabled with a reason rather than disappearing, being attempted optimistically, or falling back to a generic command. Destructive and lifecycle copy names the target, for example `Restart router on Home PC`, `Stop runtime on Home PC`, or `Cancel job on Home PC`. Removing a connection explains that it does not stop the Node, uninstall its service, or delete its models, configuration, logs, jobs, or runtime state.
+
+Connection management must never present SSH as the normal transport. Tailscale must be described as encrypted connectivity, not ObsidianLM authentication; application authentication remains required. These are Phase 16 requirements only; they do not redesign the current Obsidian Operator visual language or claim that Controller/Node support exists today.
 
 ## 11. Responsive Behavior
 
@@ -759,6 +814,8 @@ Before completing UI work, check:
 
 The dashboard reference in `docs/design/reference/obsidianlm-dashboard.html` supersedes earlier Phase 14 shell dimensions where they conflict. The current priority is to keep the interface aligned with this real operator-console baseline.
 
+Phase 14 is in progress. `DashboardPage.svelte` and `RuntimePage.svelte` implement part of the focused-page direction; the other planned pages and the full acceptance checklist remain future work. Existing reference copy that says `profile`, `managed server`, or one model/build path describes the current runtime contract. Phase 15 implementation should evolve those labels without rewriting the visual system.
+
 ### Approved Reference Screens
 
 Use the dashboard reference as the primary visual reference for shell and dashboard UI work:
@@ -837,7 +894,7 @@ Rules:
 The top status strip should be compact and persistent:
 
 ```text
-● Service healthy | ● Runtime running | Port 8085 | Uptime 02h 41m 32s
+● Service healthy | ● Router running | Build: Latest Official | Port 8085 | Uptime 02h 41m 32s
 ```
 
 It may also contain compact icon actions such as terminal, notifications, settings, and operator/session.
@@ -855,10 +912,12 @@ Use a right inspector to remove detail clutter from the main canvas.
 Good inspector content:
 
 - Endpoint
-- Process details
-- Active profile
-- Model path
-- Build path
+- Router and proven child-process details
+- Active build
+- Available and loaded model state
+- Selected model configuration/preset
+- Model and optional mmproj paths
+- Build path and validation
 - Port/network
 - Validation summary
 - Runtime facts
@@ -901,35 +960,40 @@ Right inspector:
 - Build
 - Validation
 
+For current Phase 14 implementation, `Active Profile Summary` remains accurate because the API is profile-bound. In planned router mode this region becomes active build/router state plus configured-model availability; it must not imply that every model selection restarts the runtime.
+
 Dashboard rules:
 
 - Dashboard summarizes. It must not contain full profile editors, full discovery lists, full job forms, or large settings textareas.
 - Runtime Status Card must be visually dominant.
 - There should be one obvious next action.
+- In Phase 16, the active Node and whether displayed state is live or last-known remain visible above runtime actions.
 
-### 16.2 Runtime / Managed Server
+### 16.2 Runtime / Managed Runtime
 
-Goal: operate the managed llama.cpp server safely.
+Goal: operate the managed llama.cpp runtime safely now and the managed router safely after Phase 15.
 
 Page header:
 
-- Eyebrow: `Managed server`
+- Eyebrow: `Managed runtime`
 - Title: `Control llama.cpp runtime`
-- Subtitle: `Manage and operate your local llama.cpp server with precision.`
+- Subtitle: `Manage the active llama.cpp runtime, endpoint, and lifecycle with precision.`
 
 Main content order:
 
 1. Runtime Status Card
-2. Runtime action bar: Start runtime, Stop runtime, Restart, Validate, Copy endpoint
+2. Runtime action bar: Start runtime, Stop, Restart, Validate, Copy endpoint
 3. Validation Checklist
-4. Command Preview
+4. Router Command Preview and Generated Preset Preview when router mode is implemented
 5. Startup & Safety
 6. Runtime Logs
 
 Right inspector:
 
-- Active Profile
-- Model Path
+- Active Build
+- Available Configured Models
+- Router Model State (for example unloaded, loading, loaded, sleeping, or unavailable/error) when known
+- Model / mmproj Path for the selected configuration
 - Build Path
 - Port & Network
 - Runtime Facts
@@ -940,16 +1004,19 @@ Runtime rules:
 - Stop/restart actions must explain scope.
 - Logs should be visible without passing through unrelated UI.
 - Command preview is first-class, not hidden behind a disclosure.
+- Same-build model actions say `Switch model`; cross-build actions say `Switch build & restart router`.
+- Do not infer loaded model or GPU ownership solely from the router PID.
+- In Phase 16, controls name the target Node and are disabled while that Node is offline or lacks the required capability.
 
-### 16.3 Profiles / Launch Configs
+### 16.3 Profiles / Model Configurations
 
-Goal: configure repeatable launch profiles with precision.
+Goal: preserve current repeatable launch profiles and evolve them into configured model presets through an explicit compatibility migration.
 
 Page header:
 
-- Eyebrow: `Launch configs`
-- Title: `Manage runtime profiles`
-- Subtitle: `Create, edit, and manage runtime launch configurations.`
+- Eyebrow: `Model configs`
+- Title: `Manage model configurations`
+- Subtitle: `Configure model identity, build requirements, and llama.cpp preset parameters.`
 
 Desktop layout:
 
@@ -961,7 +1028,8 @@ Profile list  | Profile editor                              | Validation / Comma
 Profile editor sections:
 
 - Identity
-- Model & Build
+- Model artifact, optional mmproj, and Build requirement
+- Router alias
 - Runtime Parameters
 - KV Cache Settings
 - GPU / Offload Settings
@@ -980,31 +1048,41 @@ Profiles rules:
 - `Save profile` is primary.
 - `Duplicate` is secondary.
 - `Delete` is danger and visually separated.
-- Show `Requires restart` indicators for settings that cannot hot reload.
+- Show `Requires build switch` for configurations outside the active build.
+- Do not show `Requires restart` for same-build model selection merely because the historical profile flow restarted a server.
+- Keep legacy profile import/export and migration status visible until compatibility work is complete.
 
 ### 16.4 Models
 
-Goal: browse and select local GGUF model files.
+Goal: browse local GGUF artifacts and the configured model presets that reference them.
 
 Must include:
 
 - Folder/search/rescan toolbar.
+- Owning Node plus clear remote-path labels in Phase 16.
 - Compact model table/list.
 - Selected model inspector.
 - Quantization hint when derivable.
 - Size and modified time.
 - Profile usage if known.
+- Optional mmproj candidates/association without automatic same-directory pairing claims.
+- Separate artifact identity from each configured model identity and router alias.
 
 ### 16.5 Builds
 
-Goal: browse detected llama.cpp builds/tools.
+Goal: browse detected llama.cpp builds/tools and understand configured-model dependencies.
 
 Must include:
 
 - Rescan toolbar.
+- Owning Node plus clear remote-path labels in Phase 16.
 - Build list/table.
 - Detected executables/tools.
 - Build/version/compiler metadata if available.
+- Router flag/preset capability validation.
+- Clear ineligible/unsupported state when a build lacks required router behavior; version labels alone are not proof of capability.
+- Official/custom/experimental/compatibility classification only when known or explicitly configured.
+- Dependent configured models and whether selecting one requires a router restart.
 - Selected build inspector.
 
 ### 16.6 Jobs
@@ -1014,15 +1092,17 @@ Goal: run one-shot llama.cpp tools without confusing them with the managed runti
 Must include:
 
 - Job type selector or tabs.
+- Selected Node, build/tool, model artifact, and dataset/input in Phase 16.
 - Running job summary.
 - llama-bench form.
 - llama-perplexity form.
 - Job history.
 - Job details/logs.
+- Clear copy that jobs execute on the selected Node and do not transfer model/dataset files through the Controller.
 
 Required copy:
 
-> Jobs are one-shot tools. They do not start or replace the managed llama.cpp server runtime.
+> Jobs are one-shot tools. They do not become router model instances or replace the managed llama.cpp router.
 
 ### 16.7 Logs
 
@@ -1031,22 +1111,28 @@ Goal: diagnose runtime/service behavior.
 Must include:
 
 - Source/severity/search toolbar.
+- Node/source labels, bounded recent history, reconnect state, and safe refresh/resumption in Phase 16.
 - Full log viewer.
 - Pause/resume streaming.
 - Copy visible.
 - Clear visible.
+- Source distinctions for service, router lifecycle, router/model-child output, and jobs.
 
 ### 16.8 Telemetry / Processes
 
-Goal: inspect local machine state.
+Goal: inspect the selected Node's machine state without treating remote telemetry as Controller-local evidence.
 
 Must include:
 
+- Active Node plus live/offline/last-known state in Phase 16.
 - GPU devices.
 - GPU processes.
 - llama.cpp-like process detection.
+- Managed router and proven router-child classification when implemented.
 - Port status.
 - Clear read-only safety copy for external processes.
+- Unknown processes remain warning-only; managing one router never grants ownership of every `llama-server.exe`.
+- Process ownership and GPU classification come from the Node; the Controller does not independently infer ownership.
 
 ### 16.9 Settings / System
 
@@ -1055,6 +1141,7 @@ Goal: configure low-frequency app and service settings.
 Must include:
 
 - Auth/session controls.
+- Known Nodes, active Node selection, capability/version state, and safe connection removal in Phase 16.
 - Service mode metadata.
 - Data/log directory mode.
 - Default managed runtime port.

@@ -17,6 +17,8 @@ Follow the global OpenCode rules first. This file only adds ObsidianLM-specific 
 - Preserve existing API shapes, settings formats, storage paths, auth behavior, and Windows service behavior unless the task asks for a change.
 - Do not move or rewrite project structure casually.
 - Do not add dependencies unless clearly justified.
+- Code handling model, build, or runtime resources must respect Node ownership and must not interpret remote paths, processes, or GPUs as local.
+- Do not send Node-management credentials after a remote endpoint identifies as a different Node than the saved expected Node identity.
 
 ## Safety
 
