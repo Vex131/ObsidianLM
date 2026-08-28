@@ -15,10 +15,12 @@ import { createManagedRouterEnvironment } from "../src/router/environment.js";
 import { validateFunctionalRouterBuild, RouterValidationError } from "../src/router/functional-validator.js";
 import { runRouterProbe, type RouterProbeWorkspace } from "../src/router/probe-runner.js";
 import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { reconcileBuildFingerprintInSnapshot, type Phase15DomainSnapshot } from "../src/config/phase15-domain.js";
+import { getLlamaBuildCapabilitiesForServer } from "../src/discovery/llama-build-capabilities.js";
+import { fingerprintServerExecutable } from "../src/router/fingerprint.js";
 
 const observedAt = "2026-08-28T00:00:00.000Z";
 const modelId = createConfiguredModelId("router-model");
@@ -64,6 +66,16 @@ test("reconcileRouterCatalog preserves ownership boundaries, duplicates, missing
 test("createManagedRouterEnvironment removes inherited LLAMA variables and controls cache", () => {
   const environment = createManagedRouterEnvironment({ LLAMA_CACHE: "inherited", llama_server: "spoofed", PATH: "safe" }, "C:/controlled/cache");
   assert.deepEqual(environment, { PATH: "safe", LLAMA_CACHE: "C:/controlled/cache" });
+});
+
+test("executable fingerprints and capability cache change for same-size timestamp-preserving replacement", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "obsidianlm-fingerprint-test-")); const server = join(directory, "llama-server.exe"); t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(server, "AAAA"); const originalTime = (await stat(server)).mtime; const firstFingerprint = await fingerprintServerExecutable(server); let probes = 0;
+  const runner = async (_server: string, args: string[]) => { probes += 1; return { ok: true, stdout: args[0] === "--help" ? "  --models-preset FILE  preset\n  --models-max N  max\n  --models-autoload  autoload\n" : "llama.cpp version 1.0.0", stderr: "" }; };
+  await getLlamaBuildCapabilitiesForServer(server, "same-size-a", [], runner);
+  await writeFile(server, "BBBB"); await utimes(server, originalTime, originalTime); const secondFingerprint = await fingerprintServerExecutable(server);
+  await getLlamaBuildCapabilitiesForServer(server, "same-size-a", [], runner);
+  assert.notEqual(secondFingerprint, firstFingerprint); assert.equal(probes, 6);
 });
 
 test("runRouterProbe uses a bounded safe command, controlled environment, and cleans up", async (t) => {
@@ -220,4 +232,13 @@ test("Build fingerprint reconciliation invalidates executable replacement but co
   reconcileBuildFingerprintInSnapshot(state, buildId, "fingerprint-replaced");
   assert.equal(stored.id, buildId); assert.equal(stored.displayName, "Cosmetic rename"); assert.equal(stored.classification, "custom");
   assert.equal(stored.managedInferenceEligibility, "not_validated"); assert.equal(stored.functionalEvidence, undefined); assert.equal(stored.validatedAt, undefined);
+});
+
+test("functional validation omits negative-only autoload flag only when help proves enabled default", async () => {
+  let autoloadFlag: string | undefined;
+  const negative = manifest(); negative.flags = [{ canonicalName: "--models-preset", aliases: [] }, { canonicalName: "--models-max", aliases: [] }, { canonicalName: "--no-models-autoload", aliases: [], description: "Disable autoload (default: enabled)" }];
+  await validateFunctionalRouterBuild(buildId, undefined, { ...dependencies(), staticProbe: async () => negative, probe: async (input) => { autoloadFlag = input.autoloadFlag; return await eligibleProbe(); } });
+  assert.equal(autoloadFlag, undefined);
+  negative.flags[2]!.description = "Disable autoload";
+  await assert.rejects(() => validateFunctionalRouterBuild(buildId, undefined, { ...dependencies(), staticProbe: async () => negative, probe: eligibleProbe }), /does not prove/);
 });

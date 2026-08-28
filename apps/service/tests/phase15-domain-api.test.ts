@@ -21,7 +21,7 @@ const validationManifest = (buildId: string): LlamaBuildCapabilitiesManifest => 
   status: "ready",
   devices: [],
   backendHints: [],
-  flags: ["--models-preset", "--models-max", "--models-autoload"].map((canonicalName) => ({ canonicalName, aliases: [] })),
+  flags: [...["--host", "--port", "--models-preset", "--models-max", "--ctx-size"].map((canonicalName) => ({ canonicalName, aliases: [], valuePlaceholder: "VALUE" })), { canonicalName: "--models-autoload", aliases: [] }],
   router: { status: "candidate", evidence: { modelsPreset: true, modelsMax: true, modelsAutoload: true }, missingRequiredFlags: [], compatibilityHints: [] },
   warnings: []
 });
@@ -168,6 +168,37 @@ test("router validation API authenticates, validates payloads, and exposes injec
   await probeStarted;
   const concurrent = await f.app.inject({ method: "POST", url: `/api/builds/${build.id}/validate-router`, headers: f.auth, payload: { configuredModelId: configured.id } });
   assert.equal(concurrent.statusCode, 409); release(); assert.equal((await first).statusCode, 200);
+});
+
+test("router preset and launch APIs are authenticated, read-only until generation, and share exact artifact bytes", async (t) => {
+  const options: CreateServerOptions = {
+    functionalRouterValidatorDependencies: {
+      fingerprint: async () => "api-preset-fingerprint",
+      staticProbe: async (build) => validationManifest(build.id),
+      resourceAvailable: async () => true,
+      managedPort: async () => 8085,
+      probe: async ({ routerAlias }) => ({ launchAttempted: true, presetAccepted: true, healthVerified: true, modelsVerified: true, models: [{ id: routerAlias, status: "unloaded" }], classification: "eligible", reason: "fixture", warnings: [], failures: [], cleanup: { childTerminated: true, workspaceRemoved: true } })
+    },
+    routerPresetDependencies: {
+      fingerprint: async () => "api-preset-fingerprint",
+      capabilities: async (_server, id) => validationManifest(id)
+    }
+  };
+  const f = await fixture(t, options);
+  assert.equal((await f.app.inject({ method: "GET", url: "/api/builds/unknown/router-preset/preview" })).statusCode, 401);
+  assert.equal((await f.app.inject({ method: "GET", url: "/api/builds/unknown/router-preset/preview", headers: f.auth })).statusCode, 404);
+  const build = (await f.app.inject({ method: "POST", url: "/api/builds/register", headers: f.auth, payload: { discoveryId: f.buildId } })).json().build;
+  const artifact = (await f.app.inject({ method: "POST", url: "/api/model-artifacts/register", headers: f.auth, payload: { discoveryId: f.modelId } })).json().artifact;
+  assert.equal((await f.app.inject({ method: "PATCH", url: `/api/model-artifacts/${artifact.id}`, headers: f.auth, payload: { kind: "model" } })).statusCode, 200);
+  const model = (await f.app.inject({ method: "POST", url: "/api/configured-models", headers: f.auth, payload: { displayName: "Preset API", artifactId: artifact.id, buildId: build.id, enabled: true, llamaArgs: { ctxSize: 4096 } } })).json().model;
+  assert.equal((await f.app.inject({ method: "GET", url: `/api/builds/${build.id}/router-preset/preview`, headers: f.auth })).statusCode, 409);
+  assert.equal((await f.app.inject({ method: "POST", url: `/api/builds/${build.id}/validate-router`, headers: f.auth, payload: { configuredModelId: model.id } })).statusCode, 200);
+  const expectedPath = path.join(f.dir, "generated", "llama-router", `${build.id}.ini`);
+  const preview = await f.app.inject({ method: "GET", url: `/api/builds/${build.id}/router-preset/preview`, headers: f.auth }); assert.equal(preview.statusCode, 200); assert.equal(preview.json().artifact.freshness, "unknown"); assert.equal(preview.json().artifact.resource.locator, expectedPath); await assert.rejects(() => readFile(expectedPath));
+  const launch = await f.app.inject({ method: "GET", url: `/api/builds/${build.id}/router-launch/preview`, headers: f.auth }); assert.equal(launch.statusCode, 200); assert.equal(launch.json().artifact.resource.locator, expectedPath); assert.equal(launch.json().command.args.includes(expectedPath), true); await assert.rejects(() => readFile(expectedPath));
+  const generated = await f.app.inject({ method: "POST", url: `/api/builds/${build.id}/router-preset/generate`, headers: f.auth }); assert.equal(generated.statusCode, 200); assert.equal(generated.json().artifact.freshness, "current"); assert.equal((await readFile(expectedPath)).toString(), preview.json().content);
+  assert.equal((await f.app.inject({ method: "POST", url: `/api/builds/${build.id}/router-preset/generate`, headers: f.auth, payload: { content: "forged" } })).statusCode, 400);
+  await writeFile(expectedPath, `${preview.json().content}# manual edit\n`); const stale = await f.app.inject({ method: "GET", url: `/api/builds/${build.id}/router-preset/preview`, headers: f.auth }); assert.equal(stale.json().artifact.freshness, "stale"); assert.equal((await loadPhase15Domain(f.dir)).configuredModels[0]!.id, model.id);
 });
 
 test("domain mutations serialize and failed atomic rename preserves bytes", async (t) => {

@@ -6,6 +6,7 @@ import { getLlamaBuildCapabilitiesForServer } from "../discovery/llama-build-cap
 import { reconcileRouterCatalog } from "./catalog.js";
 import { fingerprintServerExecutable } from "./fingerprint.js";
 import { runRouterProbe, type RouterProbeInput, type RouterProbeResult } from "./probe-runner.js";
+import { routerAutoloadArgument } from "./autoload-policy.js";
 
 export type RouterValidationErrorCode = "not_found" | "invalid_payload" | "conflict" | "prerequisite" | "validation_in_progress";
 
@@ -117,8 +118,7 @@ export async function validateFunctionalRouterBuild(buildId: string, configuredM
       }
       throw error;
     }
-    const flagNames = new Set(manifest.flags.flatMap((flag) => [flag.canonicalName, ...flag.aliases]));
-    const autoloadFlag = flagNames.has("--no-models-autoload") && !flagNames.has("--models-autoload") ? "--no-models-autoload" : "--models-autoload";
+    const autoloadFlag = routerAutoloadArgument(manifest);
     const probeResult = await probe({ executable: locator, modelPath: selected.path, routerAlias: selected.model.routerAlias, autoloadFlag, forbiddenPorts: [await managedPort()] });
     const catalog = probeResult.models === undefined ? undefined : reconcileRouterCatalog(probeResult.models, [{ routerAlias: selected.model.routerAlias, configuredModelId: selected.model.id }], now().toISOString());
     const expected = catalog?.entries.find((entry) => entry.ownership === "managed" && entry.configuredModelId === selected.model.id);

@@ -8,7 +8,7 @@ This document separates three things that earlier revisions mixed together:
 
 - **Completed foundation/history:** Phases 0-13 are implemented. Their original single-model runtime architecture was valid for those phases.
 - **Completed UI restructure:** Phase 14 provides focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Its discovery view reports static router CLI evidence.
-- **Phase 15 foundation:** Builder Run 4 adds bounded functional Build validation and catalog-source isolation to the Run 3 domain, migration, persistent artifact/build, and Configured Model foundation. Production preset and router lifecycle integration remain future work; Phase 16 later adds Remote Nodes / Controller Mode.
+- **Phase 15 foundation:** Builder Run 5 adds deterministic exact-Build production preset generation and separate preset/launch previews to the Run 4 validated domain. Production router lifecycle integration remains future work; Phase 16 later adds Remote Nodes / Controller Mode.
 
 The current implementation still stores a model-bound launch profile:
 
@@ -528,13 +528,13 @@ Phase 14 remains a UI restructuring phase. It does not implement the router, mig
 
 ## 17. Phase 15 - llama.cpp Router Integration
 
-**Status:** Foundation implemented through Builder Run 4. Router integration is not complete.
+**Status:** Foundation implemented through Builder Run 5. Router integration is not complete.
 
 ### Goal
 
 Evolve the one-profile/one-server runtime into one ObsidianLM-managed llama.cpp router for one selected build, with generated per-model presets and safe cross-build replacement on the stable `:8085` endpoint.
 
-Run 4 does not claim router or Phase 15 completion. It adds bounded exact-executable capability validation, executable-fingerprint invalidation, controlled temporary cache/environment isolation, and reusable `/models` catalog reconciliation. It does not generate production presets, load models, perform inference, change `RuntimeManager`, or launch the managed `:8085` router.
+Run 5 does not claim router or Phase 15 completion. It adds deterministic exact-executable, capability-aware production presets, atomic derived-artifact generation, freshness evaluation, and separate read-only preset/launch previews. It does not load models, perform inference, change `RuntimeManager`, or launch the managed `:8085` router.
 
 ### Forward-compatible ownership constraint
 

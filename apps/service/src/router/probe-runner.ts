@@ -13,13 +13,14 @@ const maxOutputBytes = 8_192;
 const maxModelsResponseBytes = 128 * 1024;
 
 export type RouterProbeClassification = "eligible" | "ineligible" | "failed";
-export type RouterAutoloadFlag = "--models-autoload" | "--no-models-autoload";
+export type RouterAutoloadFlag = "--models-autoload";
 
 export interface RouterProbeInput {
   executable: string;
   modelPath: string;
   routerAlias: string;
-  autoloadFlag: RouterAutoloadFlag;
+  /** Omitted only when negative-only help proves enabled-by-default autoload. */
+  autoloadFlag?: RouterAutoloadFlag;
   forbiddenPorts?: readonly number[];
   timeoutMs?: number;
 }
@@ -157,7 +158,7 @@ async function boundedJson(response: Response): Promise<unknown> {
 }
 
 async function runAttempt(input: RouterProbeInput, workspace: RouterProbeWorkspace, port: number, deadline: number, dependencies: Required<Pick<RouterProbeDependencies, "spawn" | "fetch" | "sleep" | "now">>): Promise<AttemptResult> {
-  const args = ["--host", "127.0.0.1", "--port", String(port), "--models-preset", workspace.presetPath, "--models-max", "1", input.autoloadFlag];
+  const args = ["--host", "127.0.0.1", "--port", String(port), "--models-preset", workspace.presetPath, "--models-max", "1", ...(input.autoloadFlag ? [input.autoloadFlag] : [])];
   const failures: string[] = [];
   const warnings: string[] = [];
   let child: ChildProcess | undefined;

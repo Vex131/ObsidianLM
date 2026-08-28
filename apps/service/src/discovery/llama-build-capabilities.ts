@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { stat } from "node:fs/promises";
 import type { DiscoveredLlamaCppBuild, DiscoveredLlamaCppTool, DiscoveryWarning, LlamaBuildCapabilitiesManifest, LlamaBuildDeviceCapability, LlamaBuildFlagCapability, LlamaBuildOrigin, LlamaBuildRouterAssessment, LlamaBuildVersionInfo } from "@obsidianlm/shared";
+import { fingerprintServerExecutable } from "../router/fingerprint.js";
 
 const probeTimeoutMs = 5_000;
 const maxProbeOutputBytes = 128 * 1024;
@@ -200,8 +200,7 @@ export async function getLlamaBuildCapabilities(build: DiscoveredLlamaCppBuild, 
   const inspectedAt = new Date().toISOString();
   let fingerprint: string;
   try {
-    const info = await stat(build.serverPath);
-    fingerprint = `${build.serverPath}\u0000${info.size}\u0000${info.mtimeMs}`;
+    fingerprint = await fingerprintServerExecutable(build.serverPath);
   } catch {
     return {
       buildId: build.id,

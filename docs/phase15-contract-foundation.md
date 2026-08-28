@@ -1,6 +1,6 @@
 # Phase 15 Contract Foundation
 
-Builder Runs 1-4 add the versioned domain contract, storage, legacy Profile migration, persistent model/build foundations, and bounded functional Build validation. Run 4 validates capability only: it does not generate production presets, launch the managed router, or change `RuntimeManager`.
+Builder Runs 1-5 add the versioned domain contract, storage, legacy Profile migration, persistent model/build foundations, bounded functional Build validation, and the production derived-preset pipeline. Run 5 generates and previews production presets and launch commands; it does not launch the managed router or change `RuntimeManager`.
 
 ## Terms and authority
 
@@ -38,7 +38,7 @@ Functional validation certifies the required router controls and control-plane b
 
 ## Router boundaries
 
-Run 4 adds a validation-only router probe but no managed-router lifecycle, generated production presets, or UI. The route families remain `/api/model-artifacts`, `/api/configured-models`, and `/api/builds`; discovery endpoints remain evidence-producing and non-authoritative.
+Run 4 adds a validation-only router probe. Run 5 adds authenticated read-only preset and launch previews plus explicit preset generation under the `/api/builds` route family; discovery endpoints remain evidence-producing and non-authoritative.
 
 - `GET /health` supplies bounded router/server health evidence.
 - `GET /models` supplies the router catalog and model load state.
@@ -46,7 +46,15 @@ Run 4 adds a validation-only router probe but no managed-router lifecycle, gener
 
 Catalog entries are normalized and deterministically discriminated by ownership. A managed entry requires the exact expected router alias-to-Configured-Model relationship. Identifiable unexpected entries are external; malformed, duplicate, or ambiguous identifiers are unknown/mismatched. External or unknown entries cannot carry a Configured Model ID. Path, filename, metadata, source hints, or cache visibility are never management proof. The controlled one-model probe fails catalog-boundary verification if anything unexpected appears. This parser and isolation environment are reusable by the later managed router.
 
-Router launch previews and generated model-preset previews remain future production work. The disposable probe INI is not a `GeneratedRouterArtifact`. Router runtime state is also separate from the current Profile-era `RuntimeState`; current `activeProfileId`, legacy runtime health, and model-bound `RuntimeManager` behavior remain unchanged. Profile APIs continue to project/translate through the domain after cutover.
+## Production preset pipeline
+
+Run 5 derives `<data>/generated/llama-router/<build-id>.ini` from one eligible local Build and all enabled Configured Models assigned to it. `phase15-domain.json` remains authoritative; generated files have `authority: "derived"`, are disposable, are never imported, and can be regenerated. Generator semantics are identified by `llama-router-preset-v1`. A deterministic per-Build SHA-256 source revision includes only generation-relevant Build fingerprint, exact capability evidence, enabled model configuration, and referenced model/projector resources. The content hash is SHA-256 of the exact UTF-8, LF-only INI bytes.
+
+The exact executable is fingerprinted around capability acquisition and again before atomic commit. Structured settings resolve through that Build's parsed flag manifest. Unsupported model behavior, unsafe INI values, duplicate effective keys, unsafe router-owned overrides, unrepresentable raw arguments, and secret-bearing options invalidate generation rather than disappearing. Only explicit projectors emit `mmproj`; candidates are not selected. Legacy `metrics` and `webui` values produce bounded warnings because they are router-global, not model-child settings.
+
+`GET /api/builds/:id/router-preset/preview` and `GET /api/builds/:id/router-launch/preview` are read-only. `POST /api/builds/:id/router-preset/generate` performs the loss-resistant temporary-write, byte/hash verification, source recheck, and rename. Freshness compares bounded existing bytes with expected bytes: matching is `current`, differing is `stale`, and missing is `unknown`. A failed regeneration leaves an older stale file intact. The launch preview uses the exact registered executable and generated resource, `--models-max 1`, host `0.0.0.0`, the managed llama port, and enabled autoload semantics. A positive autoload flag is preferred; a negative-only disabling flag is omitted only when exact help proves enabled-by-default behavior. It is never passed to mean enabled.
+
+Generator validation means authoritative inputs, exact-Build mappings, and serialization are coherent. It does not mean the full production preset has been accepted by a running router. The disposable Run 4 probe INI is not a `GeneratedRouterArtifact`. Router runtime state remains separate from Profile-era `RuntimeState`; current `activeProfileId`, legacy runtime health, and model-bound `RuntimeManager` behavior remain unchanged. Run 6 owns production launch and managed environment use.
 
 ## Migration
 
