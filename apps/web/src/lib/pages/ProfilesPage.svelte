@@ -71,12 +71,13 @@
   }
 
   async function processHandoff(): Promise<boolean> {
-    if (handoffProcessed) return Boolean(selectedId || draft.modelPath);
+    if (handoffProcessed) return Boolean(selectedId || draft.modelPath || draft.buildPath);
     handoffProcessed = true;
     const query = window.location.hash.includes("?") ? window.location.hash.slice(window.location.hash.indexOf("?") + 1) : "";
     const params = new URLSearchParams(query);
     const profileId = params.get("profile");
     const modelId = params.get("model");
+    const buildId = params.get("build");
     if (profileId) {
       const profile = profiles.find((item) => item.id === profileId);
       if (profile) { await selectProfile(profile); return true; }
@@ -94,6 +95,12 @@
       }
       if (model && allowed) { handoffModelId = model.id; newProfile(); await selectModel(model.path); message = "Model selected from the artifact library. Choose a build to continue."; return true; }
       message = "Requested model is unavailable or is not a primary model.";
+      return false;
+    }
+    if (buildId) {
+      const build = builds.find((item) => item.id === buildId);
+      if (build) { newProfile(); await selectBuild(build.serverPath); message = "Build selected from the toolchain library. Choose a model to continue."; return true; }
+      message = "Requested build is no longer available. Rescan discovery and choose another build.";
     }
     return false;
   }

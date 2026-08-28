@@ -7,7 +7,7 @@ ObsidianLM is a lightweight local AI runtime manager. It is the control plane fo
 This document separates three things that earlier revisions mixed together:
 
 - **Completed foundation/history:** Phases 0-13 are implemented. Their original single-model runtime architecture was valid for those phases.
-- **Current work:** Phase 14 is a UI restructuring phase. Dashboard and Runtime pages exist, but the complete Phase 14 page set and acceptance checklist are not yet complete.
+- **Current work:** Phase 14 is a UI restructuring phase. Dashboard, Runtime, Profiles, Models, and the discovered-toolchain Builds library exist, but the complete Phase 14 page set and acceptance checklist are not yet complete. Builds reports static router CLI evidence only; functional router validation remains Phase 15.
 - **Planned architecture:** Phase 15 introduces llama.cpp's built-in multi-model router while retaining ObsidianLM as the build and managed-router lifecycle manager. Phase 16 later adds Remote Nodes / Controller Mode. Neither phase is implemented yet.
 
 The current implementation still stores a model-bound launch profile:

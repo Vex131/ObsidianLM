@@ -5,6 +5,7 @@
   import RuntimePage from "./lib/pages/RuntimePage.svelte";
   import ProfilesPage from "./lib/pages/ProfilesPage.svelte";
   import ModelsPage from "./lib/pages/ModelsPage.svelte";
+  import BuildsPage from "./lib/pages/BuildsPage.svelte";
   import PlaceholderPage from "./lib/pages/PlaceholderPage.svelte";
   import { defaultShellStatus, type ShellStatusSummary, type ShellStatusTone } from "./lib/layout/shell-status";
   import { API_ENDPOINTS, fetchJson, publicFetchJson, readStoredAdminToken, type RuntimeState, type StatusResponse } from "./lib/api";
@@ -193,6 +194,8 @@
     <ProfilesPage />
   {:else if activeHash === "#models"}
     <ModelsPage />
+  {:else if activeHash === "#builds"}
+    <BuildsPage />
   {:else}
     <PlaceholderPage title={currentPageLabel} />
   {/if}

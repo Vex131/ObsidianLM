@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
-import type { DiscoveredLlamaCppBuild, DiscoveryWarning, LlamaBuildCapabilitiesManifest, LlamaBuildDeviceCapability, LlamaBuildFlagCapability } from "@obsidianlm/shared";
+import type { DiscoveredLlamaCppBuild, DiscoveryWarning, LlamaBuildCapabilitiesManifest, LlamaBuildDeviceCapability, LlamaBuildFlagCapability, LlamaBuildOrigin, LlamaBuildRouterAssessment, LlamaBuildVersionInfo } from "@obsidianlm/shared";
 
 const probeTimeoutMs = 5_000;
 const maxProbeOutputBytes = 128 * 1024;
@@ -73,12 +73,72 @@ export function parseLlamaBuildHelp(helpText: string): { flags: LlamaBuildFlagCa
 
 export function parseLlamaBuildDevices(output: string): LlamaBuildDeviceCapability[] {
   const devices: LlamaBuildDeviceCapability[] = [];
+  const seen = new Set<string>();
   for (const line of output.split(/\r?\n/u)) {
-    const match = line.match(/^\s*([A-Za-z][A-Za-z0-9_.-]*\d+|\d+)\s*:\s*(\S.*)\s*$/u);
-    if (!match || /^available devices$/iu.test(match[2])) continue;
-    devices.push({ id: match[1], label: match[2] });
+    const match = line.match(/^\s*(?:\[([A-Za-z][A-Za-z0-9 _-]*)\]\s*)?((?:[A-Za-z][A-Za-z0-9_.-]*\d*|\d+))\s*(?::|-|\()\s*(\S.*?)(?:\))?\s*$/u);
+    if (!match || /^available devices$/iu.test(match[3])) continue;
+    const id = match[2];
+    if (seen.has(id.toLowerCase())) continue;
+    seen.add(id.toLowerCase());
+    devices.push({ id, label: match[3] });
   }
   return devices;
+}
+
+export function parseLlamaBuildVersion(output: string): LlamaBuildVersionInfo | undefined {
+  const raw = output.trim().slice(0, 4096);
+  if (!raw) return undefined;
+  const semantic = raw.match(/(?:\bllama(?:\.cpp)?\b\s*(?:version\s*)?|\bversion\s*[:=]?\s*)v?(\d+)\.(\d+)(?:\.(\d+))?/iu);
+  const buildNumber = raw.match(/(?:\bbuild|\bversion)\s*[:#=]?\s*b?(\d{3,})\b/iu) ?? raw.match(/\bb(\d{3,})\b/u);
+  const commit = raw.match(/(?:\bcommit|\bgit)\s*[:#=]?\s*([0-9a-f]{7,40})\b/iu) ?? raw.match(/\(([0-9a-f]{7,40})\)/iu);
+  const toolchain = raw.match(/\bbuilt with\s+(.+?)\s+for\s+([^\r\n]+)/iu);
+  return {
+    raw,
+    ...(buildNumber ? { buildNumber: Number(buildNumber[1]) } : {}),
+    ...(semantic ? { major: Number(semantic[1]), minor: Number(semantic[2]), ...(semantic[3] ? { patch: Number(semantic[3]) } : {}) } : {}),
+    ...(commit ? { commit: commit[1] } : {}),
+    ...(toolchain ? { compiler: toolchain[1].trim(), target: toolchain[2].trim() } : {})
+  };
+}
+
+function classifyOrigin(build: DiscoveredLlamaCppBuild, versionOutput: string, helpOutput: string): LlamaBuildOrigin {
+  const pathText = `${build.name} ${build.buildRootHint ?? ""} ${build.relativeServerPath ?? ""}`;
+  const probeText = `${versionOutput}\n${helpOutput}`;
+  if (/\b(custom|patched|fork|unofficial|modified)\b/iu.test(pathText)) {
+    return { classification: "custom", source: "path_hint", evidence: ["Build folder naming explicitly indicates a custom, patched, or fork build."] };
+  }
+  if (/\b(custom|patched|fork|unofficial|modified|koboldcpp|ollama|text-generation-webui)\b/iu.test(probeText)) {
+    return { classification: "custom", source: "version_hint", evidence: ["Executable output explicitly identifies a custom, modified, or fork build."] };
+  }
+  if (/\b(official|upstream)\b/iu.test(pathText)) {
+    return { classification: "official", source: "path_hint", evidence: ["Build folder naming explicitly indicates an official or upstream package."] };
+  }
+  if (/\b(official build|upstream build)\b/iu.test(probeText)) {
+    return { classification: "official", source: "version_hint", evidence: ["Executable output explicitly identifies an official or upstream build."] };
+  }
+  return { classification: "unknown", source: "unknown", evidence: ["No reliable official or custom provenance marker was detected."] };
+}
+
+function assessRouter(flags: LlamaBuildFlagCapability[], helpProbed: boolean): LlamaBuildRouterAssessment {
+  const names = new Set(flags.flatMap((flag) => [flag.canonicalName, ...flag.aliases]));
+  const evidence = { modelsPreset: names.has("--models-preset"), modelsMax: names.has("--models-max"), modelsAutoload: names.has("--models-autoload") || names.has("--no-models-autoload") };
+  const missingRequiredFlags = [...(evidence.modelsPreset ? [] : ["--models-preset"]), ...(evidence.modelsMax ? [] : ["--models-max"]), ...(evidence.modelsAutoload ? [] : ["--models-autoload / --no-models-autoload"])];
+  if (!helpProbed) return { status: "unknown", evidence, missingRequiredFlags, compatibilityHints: ["Router compatibility is unknown because --help could not be inspected."] };
+  if (missingRequiredFlags.length === 0) return { status: "candidate", evidence, missingRequiredFlags, compatibilityHints: ["Required router CLI options were detected. Functional router startup and API validation remain Phase 15 work."] };
+  if (missingRequiredFlags.length < 3) return { status: "partial", evidence, missingRequiredFlags, compatibilityHints: [`Some static router evidence was found; missing ${missingRequiredFlags.join(", ")}.`] };
+  return { status: "unsupported", evidence, missingRequiredFlags, compatibilityHints: ["Required static router CLI options were absent from parsed --help output; this is a legacy compatibility candidate, not a final support decision."] };
+}
+
+function backendHints(devices: LlamaBuildDeviceCapability[], output: string): string[] {
+  const hints = new Set<string>();
+  for (const device of devices) {
+    const backend = device.id.match(/^[A-Za-z]+/u)?.[0];
+    if (backend) hints.add(backend.toUpperCase());
+  }
+  for (const backend of ["CUDA", "VULKAN", "METAL", "HIP", "SYCL", "OPENCL", "CPU"]) {
+    if (new RegExp(`\\b${backend}\\b`, "iu").test(output)) hints.add(backend);
+  }
+  return [...hints].sort((a, b) => a.localeCompare(b));
 }
 
 export const runLlamaBuildProbe: LlamaBuildProbeRunner = (serverPath, args) => new Promise((resolve) => {
@@ -137,12 +197,24 @@ function probeWarning(name: string, result: LlamaBuildProbeResult): DiscoveryWar
 }
 
 export async function getLlamaBuildCapabilities(build: DiscoveredLlamaCppBuild, runner: LlamaBuildProbeRunner = runLlamaBuildProbe): Promise<LlamaBuildCapabilitiesManifest> {
+  const inspectedAt = new Date().toISOString();
   let fingerprint: string;
   try {
     const info = await stat(build.serverPath);
     fingerprint = `${build.serverPath}\u0000${info.size}\u0000${info.mtimeMs}`;
   } catch {
-    return { buildId: build.id, serverPath: build.serverPath, status: "failed", devices: [], flags: [], warnings: [{ code: "server_unavailable", message: "The discovered llama.cpp server is no longer available." }] };
+    return {
+      buildId: build.id,
+      serverPath: build.serverPath,
+      inspectedAt,
+      origin: { classification: "unknown", source: "unknown", evidence: ["The executable disappeared before provenance could be inspected."] },
+      status: "failed",
+      devices: [],
+      backendHints: [],
+      flags: [],
+      router: { status: "unknown", evidence: { modelsPreset: false, modelsMax: false, modelsAutoload: false }, missingRequiredFlags: ["--models-preset", "--models-max", "--models-autoload / --no-models-autoload"], compatibilityHints: ["Router compatibility is unknown because the server is unavailable."] },
+      warnings: [{ code: "server_unavailable", message: "The discovered llama.cpp server is no longer available." }]
+    };
   }
   const cached = capabilityCache.get(fingerprint);
   if (cached) return cached;
@@ -152,13 +224,22 @@ export async function getLlamaBuildCapabilities(build: DiscoveredLlamaCppBuild, 
   const parsedHelp = help.ok ? parseLlamaBuildHelp(`${help.stdout}\n${help.stderr}`) : { flags: [], warnings: [] };
   warnings.push(...parsedHelp.warnings);
   const successes = [version, help, devices].filter((result) => result.ok).length;
+  const versionOutput = `${version.stdout}\n${version.stderr}`;
+  const helpOutput = `${help.stdout}\n${help.stderr}`;
+  const deviceOutput = `${devices.stdout}\n${devices.stderr}`;
+  const parsedDevices = devices.ok ? parseLlamaBuildDevices(deviceOutput) : [];
+  const parsedVersion = version.ok ? parseLlamaBuildVersion(versionOutput) : undefined;
   const manifest: LlamaBuildCapabilitiesManifest = {
     buildId: build.id,
     serverPath: build.serverPath,
-    ...(version.ok && version.stdout.trim() ? { versionText: version.stdout.trim().slice(0, 4096) } : {}),
+    inspectedAt,
+    ...(parsedVersion ? { versionText: parsedVersion.raw, versionInfo: parsedVersion } : {}),
+    origin: classifyOrigin(build, versionOutput, helpOutput),
     status: successes === 3 && warnings.length === 0 ? "ready" : successes > 0 ? "partial" : "failed",
-    devices: devices.ok ? parseLlamaBuildDevices(`${devices.stdout}\n${devices.stderr}`) : [],
+    devices: parsedDevices,
+    backendHints: backendHints(parsedDevices, `${versionOutput}\n${helpOutput}\n${deviceOutput}`),
     flags: parsedHelp.flags,
+    router: assessRouter(parsedHelp.flags, help.ok),
     warnings
   };
   capabilityCache.set(fingerprint, manifest);

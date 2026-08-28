@@ -678,6 +678,10 @@ Current and forward-looking requirements:
 
 Goal: manage llama.cpp binary folders/builds independently from model artifacts and configured models.
 
+Implemented Phase 14 behavior: Builds is a read-only discovered toolchain library. It scans only configured roots with bounded, symlink-safe recursion; keeps distinct `llama-server` executables separate; associates same-directory companion tools; and lazily reuses the Profiles capability manifest for version, flags, devices, backend hints, provenance hints, and profile dependencies. Discovery identities remain path-derived and machine-local.
+
+`Router candidate` means required router CLI options were statically detected in parsed `--help` output. It is not functional router validation: Phase 14 does not launch a router or call `/health` or `/models`. Persisted build identities, authoritative classification, configured-model dependencies, and router lifecycle remain Phase 15 work.
+
 Must include when implemented:
 
 - Owning Node and local/remote source
@@ -1095,7 +1099,7 @@ Must include:
 - Build list/table.
 - Detected executables/tools.
 - Build/version/compiler metadata if available.
-- Router flag/preset capability validation.
+- Static router flag/preset capability evidence; functional validation remains Phase 15.
 - Clear ineligible/unsupported state when a build lacks required router behavior; version labels alone are not proof of capability.
 - Official/custom/experimental/compatibility classification only when known or explicitly configured.
 - Dependent configured models and whether selecting one requires a router restart.

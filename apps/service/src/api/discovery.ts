@@ -41,6 +41,22 @@ export async function registerDiscoveryRoutes(app: FastifyInstance): Promise<voi
 
   app.post("/api/discovery/llama-builds/rescan", async () => discoverLlamaBuilds());
 
+  app.get("/api/discovery/llama-builds/usage", async () => {
+    const [discovery, profiles] = await Promise.all([discoverLlamaBuilds(), listProfiles()]);
+    const byPath = new Map(discovery.builds.map((build) => [normalizePathForCompare(build.serverPath), build.id]));
+    const usage = new Map<string, string[]>();
+    const missingProfileIds: string[] = [];
+    for (const profile of profiles) {
+      const buildId = byPath.get(normalizePathForCompare(profile.buildPath));
+      if (!buildId) {
+        missingProfileIds.push(profile.id);
+        continue;
+      }
+      usage.set(buildId, [...(usage.get(buildId) ?? []), profile.id]);
+    }
+    return { usage: [...usage].map(([buildId, profileIds]) => ({ buildId, profileIds })), missingProfileIds };
+  });
+
   app.get<{ Params: { id: string } }>("/api/discovery/llama-builds/:id/capabilities", async (request, reply) => {
     const discovery = await discoverLlamaBuilds();
     const build = discovery.builds.find((item) => item.id === request.params.id);

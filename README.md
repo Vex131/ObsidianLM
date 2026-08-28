@@ -361,7 +361,7 @@ Follow `docs/validation/local-real-smoke.md` for the manual checklist before rel
 
 ## Phase 14 Status
 
-Phase 14 is in progress, not complete. Focused Dashboard, Runtime, Profiles, and Models pages are present. Builds, Jobs, Logs, Telemetry, Settings, and System still use planned/placeholder page work where applicable; the full `DESIGN.md` Phase 14 acceptance checklist has not been completed.
+Phase 14 is in progress, not complete. Focused Dashboard, Runtime, Profiles, Models, and Builds pages are present. Jobs, Logs, Telemetry, Settings, and System still use planned/placeholder page work where applicable; the full `DESIGN.md` Phase 14 acceptance checklist has not been completed. Build discovery scans configured roots with bounded depth and directory/result limits so common nested `build/bin/Release` layouts are visible without whole-machine recursion.
 
 Phase 14 changes UI structure only. Current runtime APIs and profiles still launch one model-bound server.
 

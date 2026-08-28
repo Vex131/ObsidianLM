@@ -77,6 +77,9 @@ export interface DiscoveredLlamaCppBuild {
   serverPath: string;
   tools: DiscoveredLlamaCppTool[];
   detectedAt: string;
+  discoveryRoot?: string;
+  buildRootHint?: string;
+  relativeServerPath?: string;
 }
 
 export interface ModelDiscoveryResponse {
@@ -91,6 +94,11 @@ export interface ModelArtifactUsageResponse {
   missingProfileIds: string[];
 }
 
+export interface LlamaBuildUsageResponse {
+  usage: Array<{ buildId: string; profileIds: string[] }>;
+  missingProfileIds: string[];
+}
+
 export interface LlamaBuildDiscoveryResponse {
   builds: DiscoveredLlamaCppBuild[];
   warnings: DiscoveryWarning[];
@@ -99,6 +107,39 @@ export interface LlamaBuildDiscoveryResponse {
 }
 
 export type LlamaBuildCapabilitiesStatus = "ready" | "partial" | "failed";
+
+export interface LlamaBuildVersionInfo {
+  raw: string;
+  buildNumber?: number;
+  major?: number;
+  minor?: number;
+  patch?: number;
+  commit?: string;
+  compiler?: string;
+  target?: string;
+}
+
+export type LlamaBuildOriginClassification = "official" | "custom" | "unknown";
+export type LlamaBuildOriginSource = "path_hint" | "version_hint" | "unknown";
+
+export interface LlamaBuildOrigin {
+  classification: LlamaBuildOriginClassification;
+  source: LlamaBuildOriginSource;
+  evidence: string[];
+}
+
+export type LlamaBuildRouterStatus = "candidate" | "partial" | "unsupported" | "unknown";
+
+export interface LlamaBuildRouterAssessment {
+  status: LlamaBuildRouterStatus;
+  evidence: {
+    modelsPreset: boolean;
+    modelsMax: boolean;
+    modelsAutoload: boolean;
+  };
+  missingRequiredFlags: string[];
+  compatibilityHints: string[];
+}
 
 export interface LlamaBuildDeviceCapability {
   id: string;
@@ -119,10 +160,15 @@ export interface LlamaBuildFlagCapability {
 export interface LlamaBuildCapabilitiesManifest {
   buildId: string;
   serverPath: string;
+  inspectedAt: string;
   versionText?: string;
+  versionInfo?: LlamaBuildVersionInfo;
+  origin: LlamaBuildOrigin;
   status: LlamaBuildCapabilitiesStatus;
   devices: LlamaBuildDeviceCapability[];
+  backendHints: string[];
   flags: LlamaBuildFlagCapability[];
+  router: LlamaBuildRouterAssessment;
   warnings: DiscoveryWarning[];
 }
 
