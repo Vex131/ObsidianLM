@@ -76,11 +76,14 @@ export async function registerProfileRoutes(app: FastifyInstance, runtimeManager
     })
   );
 
-  app.post<{ Body: { profiles?: RuntimeProfile[]; rejectConflicts?: boolean } | RuntimeProfile[] }>("/api/profiles/import", async (request, reply) =>
+  app.post<{ Body: { exportVersion?: number; profiles?: RuntimeProfile[]; rejectConflicts?: boolean } | RuntimeProfile[] }>("/api/profiles/import", async (request, reply) =>
     withProfileStorage(reply, async () => {
       const isValidPayload = Array.isArray(request.body) || (request.body && typeof request.body === "object" && Array.isArray(request.body.profiles));
       if (!isValidPayload) {
         return reply.status(400).send({ error: "invalid_import_payload", message: "Import body must be a profiles array or an object with a profiles array." });
+      }
+      if (!Array.isArray(request.body) && request.body.exportVersion !== undefined && request.body.exportVersion !== 1) {
+        return reply.status(400).send({ error: "unsupported_export_version", message: `Profile export version ${String(request.body.exportVersion)} is not supported.` });
       }
       const rejectConflicts = !Array.isArray(request.body) && request.body?.rejectConflicts === true;
       return importManualProfiles(request.body, rejectConflicts);

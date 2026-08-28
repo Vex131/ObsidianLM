@@ -226,8 +226,30 @@ test("POST /api/profiles/import imports arrays and wrapped exports with safe con
   assert.equal(wrapped.json().skipped, 1);
   assert.ok(wrapped.json().errors.length >= 1);
 
+  const legacy = profile(fixture, {
+    id: "legacy-duplicate",
+    name: "Imported Direct",
+    llamaArgs: { ctxSize: 32768, flashAttention: true },
+    flagOverrides: [{ flag: "--custom-flag", values: ["safe-value"] }],
+    extraArgs: ["--future-option", "preserve-me"]
+  });
+  const noVersion = await app.inject({ method: "POST", url: "/api/profiles/import", headers: authHeader(), payload: { profiles: [legacy] } });
+  assert.equal(noVersion.statusCode, 200);
+  assert.equal(noVersion.json().imported, 1);
+  const imported = JSON.parse(await readFile(path.join(fixture.dataDir, "profiles.json"), "utf8"));
+  const preserved = imported.find((item: LlamaCppProfile) => item.id === "legacy-duplicate");
+  assert.deepEqual(preserved.llamaArgs, legacy.llamaArgs);
+  assert.deepEqual(preserved.flagOverrides, legacy.flagOverrides);
+  assert.deepEqual(preserved.extraArgs, legacy.extraArgs);
+
+  const beforeUnsupported = await readFile(path.join(fixture.dataDir, "profiles.json"), "utf8");
+  const unsupported = await app.inject({ method: "POST", url: "/api/profiles/import", headers: authHeader(), payload: { exportVersion: 99, profiles: [legacy] } });
+  assert.equal(unsupported.statusCode, 400);
+  assert.equal(unsupported.json().error, "unsupported_export_version");
+  assert.equal(await readFile(path.join(fixture.dataDir, "profiles.json"), "utf8"), beforeUnsupported);
+
   const stored = JSON.parse(await readFile(path.join(fixture.dataDir, "profiles.json"), "utf8"));
-  assert.equal(stored.length, 3);
+  assert.equal(stored.length, 4);
 });
 
 test("POST /api/profiles/import rejects malformed payloads", async (t) => {

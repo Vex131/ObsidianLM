@@ -156,17 +156,17 @@ test("readiness reports ready-ish discovered counts from temp folders", async (t
   assert.equal(body.gpu.available, false);
 });
 
-test("readiness includes startup storage warnings without exposing raw paths", async (t) => {
+test("startup fails safely on malformed profile storage without exposing raw paths", async (t) => {
   const fixture = await makeFixture(t);
   await writeFile(path.join(fixture.dataDir, "settings.json"), `${JSON.stringify({ ...defaultSettings, adminTokenHash: await hashAdminToken(adminToken) }, null, 2)}\n`, "utf8");
   await writeFile(path.join(fixture.dataDir, "profiles.json"), "{ invalid json", "utf8");
-  const app = await createReadinessServer(t);
-
-  const response = await app.inject({ method: "GET", url: "/api/readiness", headers: authHeader() });
-  assert.equal(response.statusCode, 200);
-  const body = response.json();
-  assert.ok(body.storageWarnings.some((warning: string) => warning.includes("profiles.json was invalid JSON")));
-  assert.doesNotMatch(response.body, new RegExp(fixture.root.replace(/[\\^$.*+?()[\]{}|]/gu, "\\$&"), "u"));
+  await assert.rejects(() => createReadinessServer(t), (error: Error) => {
+    assert.match(error.message, /profiles\.json is invalid JSON/u);
+    assert.doesNotMatch(error.message, new RegExp(fixture.root.replace(/[\\^$.*+?()[\]{}|]/gu, "\\$&"), "u"));
+    return true;
+  });
+  assert.equal(await readFile(path.join(fixture.dataDir, "profiles.json"), "utf8"), "{ invalid json");
+  assert.ok((await readdir(fixture.dataDir)).some((file) => /^profiles\.json\.phase15-.*\.bak$/u.test(file)));
 });
 
 test("readiness does not repair or back up storage files during the request", async (t) => {

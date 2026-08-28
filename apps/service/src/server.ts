@@ -14,6 +14,7 @@ import { registerAuthRoutes } from "./api/auth.js";
 import { registerServiceLogRoutes } from "./api/logs.js";
 import { registerAdminAuthProtection } from "./auth/protect.js";
 import { ensureStorageFiles } from "./config/storage.js";
+import { migratePhase15Domain } from "./config/phase15-domain.js";
 import { ensureAppDirectories, webDistDir } from "./config/paths.js";
 import type { GpuMonitorOptions } from "./monitoring/gpu-monitor.js";
 import { RuntimeManager } from "./runtime/manager.js";
@@ -39,6 +40,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   });
 
   await ensureAppDirectories();
+  await migratePhase15Domain();
   await ensureStorageFiles();
   const runtimeManager = new RuntimeManager();
   const jobManager = new JobManager();

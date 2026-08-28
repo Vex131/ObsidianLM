@@ -105,6 +105,7 @@ export const phase15CompletedMigration: ProfileMigrationRecord = {
     const legacyProfile = phase15LegacyProfiles.find((profile) => profile.id === mapping.legacyProfileId)!;
     return {
       ...mapping,
+      legacyRuntimeEndpoint: { host: legacyProfile.host, port: legacyProfile.port },
       preservedFields: (["llamaArgs", "flagOverrides", "extraArgs"] as const).filter((field) => legacyProfile[field] !== undefined),
       warnings: [],
       errors: []

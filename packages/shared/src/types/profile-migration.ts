@@ -25,6 +25,10 @@ export interface LegacyProfileMapping {
   configuredModelId: ConfiguredModelId;
   artifactId: ModelArtifactId;
   buildId: LlamaCppBuildId;
+  legacyRuntimeEndpoint: {
+    host: string;
+    port: number;
+  };
   preservedFields: Array<"llamaArgs" | "flagOverrides" | "extraArgs">;
   warnings: string[];
   errors: string[];

@@ -1,6 +1,6 @@
 # Phase 15 Contract Foundation
 
-Builder Run 1 adds versioned, additive shared contracts only. It does not migrate Profile data, generate presets, launch a router, or change `RuntimeManager`.
+Builder Run 1 added versioned, additive shared contracts. Builder Run 2 adds their storage and legacy Profile migration foundation. Neither run generates presets, launches a router, or changes `RuntimeManager`.
 
 ## Terms and authority
 
@@ -34,3 +34,14 @@ Router launch previews and generated model-preset previews are separate contract
 ## Migration
 
 Migration contracts record source and target versions, source revision, status, backup evidence, deterministic mappings, invalid references, warnings/errors, and recoverability. Completed-source metadata supports repeat detection; `in_progress` and `interrupted` states support later recovery handling. Missing model, build, or projector references remain explicit invalid records rather than being discarded. Test fixtures use only `/fixtures/...` paths and perform no writes.
+
+## Storage and legacy migration
+
+- `phase15-domain.json` is the schema-version-1 atomic snapshot for model artifacts, Configured Models, stable builds, and completed migration evidence. It is a persistence foundation only; `profiles.json` remains runtime/API authority in Run 2.
+- A SHA-256 hash of canonical, ID-ordered legacy Profile content is the source revision. Stable IDs use normalized local resource keys and legacy Profile IDs; duplicate-name alias allocation follows that deterministic order.
+- Startup migrates before forgiving legacy storage recovery. Missing, valid, invalid JSON, unsupported shape, and I/O failure are distinct. Invalid or unsupported Profile bytes receive a migration-specific `profiles.json.phase15-<timestamp>-<hash>.bak` backup and startup fails; they never become a successful empty migration.
+- A verified, unique backup of valid original Profile bytes precedes complete in-memory target construction. The target is written to a transaction-owned temporary file and atomically renamed only after validation. Exact completed source revisions are not rewritten; changed valid sources rebuild a complete replacement snapshot.
+- Malformed, unsupported, or structurally inconsistent Phase 15 targets receive a unique `phase15-domain.json.corrupt-phase15-<timestamp>-<hash>.bak` backup and startup fails. They are never reset to an empty authoritative store.
+- Missing model/build files remain stored as missing references and disable/invalidate only their Configured Models. Existing resources remain `not_validated`; migration does not infer eligibility or projector relationships.
+- Each mapping records the legacy `host`/`port` as `legacyRuntimeEndpoint` and preserves legacy Profile ID to Configured Model ID translation. Endpoints are not copied into Configured Models or settings.
+- Legacy Profile imports still accept raw arrays, wrappers without `exportVersion`, and version 1 wrappers. Explicit unsupported versions are rejected. Export remains version 1.
