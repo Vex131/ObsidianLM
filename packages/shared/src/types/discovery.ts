@@ -7,6 +7,32 @@ export interface DiscoveryWarning {
   path?: string;
 }
 
+export type GgufArtifactKind = "model" | "mmproj" | "adapter" | "imatrix" | "other" | "unknown";
+export type GgufArtifactKindSource = "metadata" | "filename" | "unknown";
+export type GgufMetadataStatus = "ready" | "partial" | "invalid" | "unsupported";
+export type GgufMetadataValue = string | number | boolean;
+
+export interface GgufMetadataInspection {
+  artifactId: string;
+  status: GgufMetadataStatus;
+  artifactKind: GgufArtifactKind;
+  artifactKindSource: GgufArtifactKindSource;
+  version?: number;
+  tensorCount?: number;
+  kvCount?: number;
+  displayName?: string;
+  architecture?: string;
+  trainedContext?: number;
+  embeddingLength?: number;
+  blockCount?: number;
+  expertCount?: number;
+  expertUsedCount?: number;
+  nextnPredictLayers?: number;
+  isMoE?: boolean;
+  metadata: Record<string, GgufMetadataValue>;
+  warnings: string[];
+}
+
 export interface DiscoveredModel {
   id: string;
   name: string;
@@ -19,6 +45,8 @@ export interface DiscoveredModel {
   detectedAt: string;
   quantizationGuess?: string;
   familyGuess?: string;
+  artifactKindGuess?: GgufArtifactKind;
+  artifactKindSource?: Exclude<GgufArtifactKindSource, "metadata">;
 }
 
 export interface DiscoveredToolInputFile {
@@ -56,6 +84,11 @@ export interface ModelDiscoveryResponse {
   warnings: DiscoveryWarning[];
   scannedFolders: string[];
   detectedAt: string;
+}
+
+export interface ModelArtifactUsageResponse {
+  usage: Array<{ artifactId: string; profileIds: string[] }>;
+  missingProfileIds: string[];
 }
 
 export interface LlamaBuildDiscoveryResponse {

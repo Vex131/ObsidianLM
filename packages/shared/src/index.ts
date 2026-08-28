@@ -84,12 +84,18 @@ export type {
   DiscoveredToolInputFile,
   DiscoverySettingsUpdate,
   DiscoveryWarning,
+  GgufArtifactKind,
+  GgufArtifactKindSource,
+  GgufMetadataInspection,
+  GgufMetadataStatus,
+  GgufMetadataValue,
   LlamaBuildCapabilitiesManifest,
   LlamaBuildCapabilitiesStatus,
   LlamaBuildDeviceCapability,
   LlamaBuildFlagCapability,
   LlamaBuildDiscoveryResponse,
   ModelDiscoveryResponse,
+  ModelArtifactUsageResponse,
   ToolInputDiscoveryResponse
 } from "./types/discovery.js";
 export type {

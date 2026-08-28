@@ -3,13 +3,39 @@ import type { CreateProfileFromDiscoveryRequest } from "@obsidianlm/shared";
 import { discoverLlamaBuilds } from "../discovery/llama-builds.js";
 import { getLlamaBuildCapabilities } from "../discovery/llama-build-capabilities.js";
 import { discoverModels } from "../discovery/models.js";
+import { inspectGgufMetadata } from "../discovery/gguf-metadata.js";
 import { discoverToolInputs } from "../discovery/tool-inputs.js";
 import { createProfileFromDiscovery, validateCreateProfileRequest } from "../discovery/profile-factory.js";
+import { normalizePathForCompare } from "../discovery/helpers.js";
+import { listProfiles } from "../runtime/profiles.js";
 
 export async function registerDiscoveryRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/discovery/models", async () => discoverModels());
 
   app.post("/api/discovery/models/rescan", async () => discoverModels());
+
+  app.get("/api/discovery/models/usage", async () => {
+    const [discovery, profiles] = await Promise.all([discoverModels(), listProfiles()]);
+    const byPath = new Map(discovery.models.map((model) => [normalizePathForCompare(model.path), model.id]));
+    const usage = new Map<string, string[]>();
+    const missingProfileIds: string[] = [];
+    for (const profile of profiles) {
+      const artifactId = byPath.get(normalizePathForCompare(profile.modelPath));
+      if (!artifactId) {
+        missingProfileIds.push(profile.id);
+        continue;
+      }
+      usage.set(artifactId, [...(usage.get(artifactId) ?? []), profile.id]);
+    }
+    return { usage: [...usage].map(([artifactId, profileIds]) => ({ artifactId, profileIds })), missingProfileIds };
+  });
+
+  app.get<{ Params: { id: string } }>("/api/discovery/models/:id/metadata", async (request, reply) => {
+    const discovery = await discoverModels();
+    const model = discovery.models.find((item) => item.id === request.params.id);
+    if (!model) return reply.status(404).send({ error: "not_found", message: "Discovered GGUF model not found." });
+    return inspectGgufMetadata(model.path, model.id);
+  });
 
   app.get("/api/discovery/llama-builds", async () => discoverLlamaBuilds());
 

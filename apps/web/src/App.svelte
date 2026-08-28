@@ -4,6 +4,7 @@
   import DashboardPage from "./lib/pages/DashboardPage.svelte";
   import RuntimePage from "./lib/pages/RuntimePage.svelte";
   import ProfilesPage from "./lib/pages/ProfilesPage.svelte";
+  import ModelsPage from "./lib/pages/ModelsPage.svelte";
   import PlaceholderPage from "./lib/pages/PlaceholderPage.svelte";
   import { defaultShellStatus, type ShellStatusSummary, type ShellStatusTone } from "./lib/layout/shell-status";
   import { API_ENDPOINTS, fetchJson, publicFetchJson, readStoredAdminToken, type RuntimeState, type StatusResponse } from "./lib/api";
@@ -158,7 +159,8 @@
   }
 
   function syncHash() {
-    activeHash = window.location.hash || pathRoutes[window.location.pathname.replace(/\/+$/, "") || "/"] || "#dashboard";
+    const hash = window.location.hash.split("?")[0];
+    activeHash = hash || pathRoutes[window.location.pathname.replace(/\/+$/, "") || "/"] || "#dashboard";
   }
 
   onMount(() => {
@@ -189,6 +191,8 @@
     <RuntimePage {shellStatus} {status} {runtimeState} {runtimeWarnings} />
   {:else if activeHash === "#profiles"}
     <ProfilesPage />
+  {:else if activeHash === "#models"}
+    <ModelsPage />
   {:else}
     <PlaceholderPage title={currentPageLabel} />
   {/if}

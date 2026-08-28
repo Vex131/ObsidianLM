@@ -3,6 +3,7 @@ import path from "node:path";
 import type { AppSettings, DiscoveredModel, DiscoveryWarning, ModelDiscoveryResponse } from "@obsidianlm/shared";
 import { loadSettings } from "../config/storage.js";
 import { stableId } from "./helpers.js";
+import { guessGgufArtifactKind } from "./gguf-metadata.js";
 
 const maxDepth = 8;
 const maxResults = 1000;
@@ -87,6 +88,7 @@ async function scanFolder(folder: string, currentPath: string, depth: number, de
       continue;
     }
     const modelName = path.basename(entry.name, path.extname(entry.name));
+    const artifactKindGuess = guessGgufArtifactKind(entry.name);
     models.push({
       id: stableId(entryPath),
       name: modelName,
@@ -98,7 +100,9 @@ async function scanFolder(folder: string, currentPath: string, depth: number, de
       modifiedAt: stats.mtime.toISOString(),
       detectedAt,
       quantizationGuess: guessQuantization(entry.name),
-      familyGuess: guessFamily(entry.name)
+      familyGuess: guessFamily(entry.name),
+      artifactKindGuess,
+      artifactKindSource: artifactKindGuess === "unknown" ? "unknown" : "filename"
     });
   }
 }

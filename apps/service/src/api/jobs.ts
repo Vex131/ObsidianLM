@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import path from "node:path";
 import type { DiscoveredLlamaCppBuild, DiscoveredLlamaCppTool, DiscoveredModel, DiscoveredToolInputFile, JobActionResponse, JobDetailResponse, JobListResponse, JobLogsResponse, LlamaBenchRequest, LlamaPerplexityRequest } from "@obsidianlm/shared";
 import { JobManager, redactLocalPaths, sanitizeJobForApi } from "../jobs/manager.js";
 import { discoverLlamaBuilds } from "../discovery/llama-builds.js";
@@ -9,11 +8,7 @@ import { buildLlamaBenchCommand, validateLlamaBenchRequestShape } from "../tools
 import { parseLlamaBenchOutput } from "../tools/llama-bench/result-parser.js";
 import { buildLlamaPerplexityCommand, validateLlamaPerplexityRequestShape } from "../tools/llama-perplexity/command-builder.js";
 import { parseLlamaPerplexityOutput } from "../tools/llama-perplexity/result-parser.js";
-
-function normalizePathForCompare(value: string): string {
-  const resolved = path.resolve(value);
-  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-}
+import { normalizePathForCompare } from "../discovery/helpers.js";
 
 function findBenchTool(request: LlamaBenchRequest, builds: DiscoveredLlamaCppBuild[]): { tool: DiscoveredLlamaCppTool; build: DiscoveredLlamaCppBuild } | { error: string; statusCode: number } {
   const candidates = builds.flatMap((build) => build.tools.filter((tool) => tool.kind === "bench" && tool.exists).map((tool) => ({ build, tool })));

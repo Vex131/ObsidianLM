@@ -5,6 +5,11 @@ export function stableId(input: string): string {
   return createHash("sha256").update(input).digest("hex").slice(0, 16);
 }
 
+export function normalizePathForCompare(value: string): string {
+  const resolved = path.resolve(value);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
 export function friendlyNameFromFolder(folder: string): string {
   const baseName = path.basename(folder).trim() || folder;
   return baseName

@@ -655,7 +655,11 @@ Must include:
 
 Goal: distinguish discovered local model artifacts from configured model presets.
 
-Must include when implemented:
+Implemented Phase 14 behavior: Models displays GGUF artifacts discovered in configured model folders. It distinguishes primary models from projector, adapter, importance-matrix, and other/unknown GGUF files using explicit filename hints first and authoritative whitelisted GGUF metadata after lazy inspection. The selected-artifact inspector performs bounded header/KV inspection without loading tensor data or starting llama.cpp, shows current Profile usage and active-profile runtime usage, and can open an unsaved Profiles draft with the artifact preselected.
+
+Discovery IDs remain path-derived and do not survive a move or folder rename. Projector matches are candidates only; Models does not persist model/projector relationships. Configured router models, aliases, presets, switching, and authoritative multimodal relationships remain Phase 15 work.
+
+Current and forward-looking requirements:
 
 - Owning Node and local/remote source
 - Folder path
@@ -664,7 +668,7 @@ Must include when implemented:
 - Quantization hint if derivable
 - Size
 - Last modified
-- Selected profile usage
+- Current Profile usage
 - Configured-model identities/aliases that reference the artifact
 - Optional `mmproj` association and text-only versus multimodal configuration state when implemented
 - `Switch model` when available under the active build, or `Switch build & restart router` when another build is required

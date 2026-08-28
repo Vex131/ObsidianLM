@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { defaultProfileEditorDefaults, type LlamaBuildCapabilitiesManifest, type LlamaBuildFlagCapability, type LlamaCppArgs, type LlamaCppProfile, type ProfileDraftPreviewResponse, type ProfileDraftValidationResponse, type ProfileValidationResponse, type RuntimeState } from "@obsidianlm/shared";
+  import { defaultProfileEditorDefaults, type GgufMetadataInspection, type LlamaBuildCapabilitiesManifest, type LlamaBuildFlagCapability, type LlamaCppArgs, type LlamaCppProfile, type ProfileDraftPreviewResponse, type ProfileDraftValidationResponse, type ProfileValidationResponse, type RuntimeState } from "@obsidianlm/shared";
   import PageHeader from "../components/PageHeader.svelte";
   import CommandPreview from "../components/CommandPreview.svelte";
   import { API_ENDPOINTS, fetchJson, type AppSettings, type LlamaBuildDiscoveryResponse, type ModelDiscoveryResponse, type ProfileListResponse, type ProfileMutationResponse } from "../api";
@@ -34,9 +34,12 @@
   let scheduledPreview = "";
   let probeRequest = 0;
   let inspectionRequest = 0;
+  let handoffProcessed = false;
+  let handoffModelId: string | null = null;
 
   $: selectedBuild = builds.find((build) => build.serverPath === draft.buildPath);
   $: selectedModel = models.find((model) => model.path === draft.modelPath);
+  $: selectableModels = models.filter((model) => model.id === handoffModelId || model.artifactKindGuess === "model" || (model.artifactKindGuess ?? "unknown") === "unknown");
   $: completeSelection = Boolean(draft.buildPath && draft.modelPath);
   $: activeFlags = manifest?.flags ?? [];
   $: selectableDevices = (manifest?.devices ?? []).filter((device) => !/^cpu$/i.test(device.id) && !/^cpu$/i.test(device.label ?? ""));
@@ -61,9 +64,38 @@
       scannedFolders = [...modelResponse.scannedFolders, ...buildResponse.scannedFolders];
       activeProfileId = runtimeResponse.state.activeProfileId;
       managedPort = settings.managedLlamaPort;
-      if (!selectedId && !draft.modelPath && !draft.buildPath) draft = blankDraft();
-      if (profiles[0]) void selectProfile(profiles[0]);
+       if (!selectedId && !draft.modelPath && !draft.buildPath) draft = blankDraft();
+       if (await processHandoff()) return;
+       if (profiles[0] && !selectedId) void selectProfile(profiles[0]);
     } catch (error) { message = error instanceof Error ? error.message : "Could not load profile library"; }
+  }
+
+  async function processHandoff(): Promise<boolean> {
+    if (handoffProcessed) return Boolean(selectedId || draft.modelPath);
+    handoffProcessed = true;
+    const query = window.location.hash.includes("?") ? window.location.hash.slice(window.location.hash.indexOf("?") + 1) : "";
+    const params = new URLSearchParams(query);
+    const profileId = params.get("profile");
+    const modelId = params.get("model");
+    if (profileId) {
+      const profile = profiles.find((item) => item.id === profileId);
+      if (profile) { await selectProfile(profile); return true; }
+      message = "Requested profile is no longer available.";
+      return false;
+    }
+    if (modelId) {
+      const model = models.find((item) => item.id === modelId);
+      let allowed = model && (model.artifactKindGuess === "model" || (model.artifactKindGuess ?? "unknown") === "unknown");
+      if (model && !allowed) {
+        try {
+          const inspection = await fetchJson<GgufMetadataInspection>(API_ENDPOINTS.discovery.modelMetadata(model.id));
+          allowed = inspection.status !== "invalid" && inspection.status !== "unsupported" && inspection.artifactKindSource === "metadata" && inspection.artifactKind === "model";
+        } catch { allowed = false; }
+      }
+      if (model && allowed) { handoffModelId = model.id; newProfile(); await selectModel(model.path); message = "Model selected from the artifact library. Choose a build to continue."; return true; }
+      message = "Requested model is unavailable or is not a primary model.";
+    }
+    return false;
   }
 
   function newProfile() { probeRequest += 1; inspectionRequest += 1; selectedId = null; draft = blankDraft(); savedDraft = null; rawExtra = ""; manifest = null; capabilityState = "idle"; validation = null; preview = null; scheduledPreview = ""; message = "Select a model and build. Rescan discovery if either is missing."; }
@@ -140,7 +172,7 @@
   <div class="profiles-grid">
     <aside class="panel profiles-library" aria-label="Profile library"><div class="panel-head"><h2 class="section-title">Library</h2><span class="mini-pill">{profiles.length}</span></div><label class="library-search">Search profiles<input aria-label="Search profiles" bind:value={search} placeholder="Name, model, build" /></label><div class="profiles-list">{#each filteredProfiles as profile}<button class:active={profile.id === selectedId} class="profile-entry" type="button" on:click={() => selectProfile(profile)}><span><strong>{profile.name}</strong>{#if profile.id === activeProfileId}<b class="mini-pill">Active</b>{/if}</span><small>{profile.llamaArgs?.ctxSize ? `${profile.llamaArgs.ctxSize} ctx` : "Context default"}{#if profile.llamaArgs?.flashAttention === false} · <i title="Saved explicit off is preserved">!</i>{/if}</small><span>{profile.modelPath.split(/[\\/]/).pop()} · {profile.buildPath.split(/[\\/]/).pop()}</span></button>{:else}<p class="empty-state">No saved profiles match. {scannedFolders.length ? "Check configured folders or rescan discovery." : "Configure model and build folders, then rescan."}</p>{/each}</div></aside>
     <section class="panel profiles-editor" aria-label="Profile editor"><div class="panel-head"><h2 class="section-title">{selectedId ? "Edit profile" : "New local draft"}</h2>{#if completeSelection}<span class="mini-pill">{capabilityState}</span>{/if}</div><div class="profile-form">
-      <label>Model<select aria-label="Model" value={draft.modelPath} on:change={(event) => selectModel(event.currentTarget.value)}><option value="">Select a discovered model</option>{#each models as model}<option value={model.path}>{model.name}</option>{/each}</select>{#if selectedModel}<small>{selectedModel.quantizationGuess ?? "Quantization unknown"} · {Math.round(selectedModel.sizeBytes / 1024 / 1024)} MiB</small>{/if}</label>
+      <label>Model<select aria-label="Model" value={draft.modelPath} on:change={(event) => selectModel(event.currentTarget.value)}><option value="">Select a discovered model</option>{#each selectableModels as model}<option value={model.path}>{model.name}</option>{/each}</select>{#if selectedModel}<small>{selectedModel.quantizationGuess ?? "Quantization unknown"} · {Math.round(selectedModel.sizeBytes / 1024 / 1024)} MiB</small>{/if}</label>
       <label>Build<select aria-label="Build" value={draft.buildPath} on:change={(event) => selectBuild(event.currentTarget.value)}><option value="">Select a llama.cpp build</option>{#each builds as build}<option value={build.serverPath}>{build.name}</option>{/each}</select>{#if selectedBuild}<small>{selectedBuild.serverPath}</small>{/if}</label>
       {#if !completeSelection}<p class="discovery-guide">Choose both sources before options appear. {modelWarnings.concat(buildWarnings).join(" ") || "Rescan discovery after moving a model or build."}</p>{:else if capabilityState === "resolving"}<p class="discovery-guide">Resolving build capabilities…</p>{:else}
         {#if capabilityState !== "failed"}<section class="profile-section"><h3>PROFILE</h3>{#each profileFields as field}<label>{field.label}<input aria-label="Profile name" bind:value={draft.name} /></label>{/each}</section>{:else if selectedId}<section class="profile-section"><h3>PROFILE</h3>{#each profileFields as field}<label>{field.label}<input aria-label="Profile name" bind:value={draft.name} /></label>{/each}</section>{:else}<p class="warning">Structured options are unavailable until this build can be probed.</p>{/if}
