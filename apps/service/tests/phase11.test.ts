@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { EventEmitter } from "node:events";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -69,91 +70,78 @@ function installMockFetch(t: TestContext, handler: (url: string, init?: RequestI
   });
 }
 
-test("runtime health and test chat routes are protected after auth setup", async (t) => {
+test("runtime APIs require auth and preserve the no-inference diagnostic contract", async (t) => {
   await configureRuntime(t);
-  installMockFetch(t, (url) => {
-    if (url.endsWith("/models")) {
-      return Response.json({ data: [] });
-    }
-    return Response.json({ choices: [{ message: { content: "OK" } }] });
-  });
   const app = await createServer();
   t.after(async () => app.close());
 
-  for (const route of [
-    { method: "GET", url: "/api/runtime/health" },
-    { method: "POST", url: "/api/runtime/test-chat" }
-  ] as const) {
-    const noToken = await app.inject(route);
-    assert.equal(noToken.statusCode, 401, `${route.method} ${route.url} without token`);
-    const goodToken = await app.inject({ ...route, headers: authHeader() });
-    assert.equal(goodToken.statusCode, 200, `${route.method} ${route.url} with token`);
-  }
+  const health = await app.inject({ method: "GET", url: "/api/runtime/health" });
+  assert.equal(health.statusCode, 401);
+  const chat = await app.inject({ method: "POST", url: "/api/runtime/test-chat", payload: { prompt: "Say OK" } });
+  assert.equal(chat.statusCode, 401);
+  const authorized = await app.inject({ method: "POST", url: "/api/runtime/test-chat", headers: authHeader(), payload: { prompt: "Say OK" } });
+  assert.equal(authorized.statusCode, 200);
+  assert.equal(authorized.json().error, "router_model_selection_required");
+  assert.match(authorized.json().message, /No inference request was sent/u);
 });
 
-test("runtime health checks /v1/models with local host mapping", async (t) => {
+test("runtime API exposes router state and strictly validates start/restart payloads", async (t) => {
   await configureRuntime(t);
-  const calls: string[] = [];
-  installMockFetch(t, (url) => {
-    calls.push(url);
-    return Response.json({ data: [{ id: "tiny" }] });
-  });
   const app = await createServer();
   t.after(async () => app.close());
-
-  const response = await app.inject({ method: "GET", url: "/api/runtime/health", headers: authHeader() });
-  assert.equal(response.statusCode, 200);
-  assert.equal(response.json().ok, true);
-  assert.equal(response.json().status, "healthy");
-  assert.equal(response.json().endpoint, "http://127.0.0.1:8085/v1");
-  assert.equal(response.json().modelsCount, 1);
-  assert.deepEqual(calls, ["http://127.0.0.1:8085/v1/models"]);
+  const state = await app.inject({ method: "GET", url: "/api/runtime", headers: authHeader() });
+  assert.equal(state.statusCode, 200);
+  assert.ok(state.json().state);
+  assert.ok(state.json().routerState);
+  assert.equal((await app.inject({ method: "POST", url: "/api/runtime/start", headers: authHeader(), payload: { buildId: "build-a", port: 9999 } })).statusCode, 400);
+  assert.equal((await app.inject({ method: "POST", url: "/api/runtime/restart", headers: authHeader(), payload: { buildId: "build-a" } })).statusCode, 400);
 });
 
-test("runtime test chat bounds request body and returns preview", async (t) => {
+test("runtime health and catalog report no current managed router without probing inference", async (t) => {
   await configureRuntime(t);
-  let capturedPromptLength = 0;
-  let capturedMaxTokens = 0;
-  installMockFetch(t, async (url, init) => {
-    assert.equal(url, "http://127.0.0.1:8085/v1/chat/completions");
-    const requestBody = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }>; max_tokens: number };
-    capturedPromptLength = requestBody.messages[0]?.content.length ?? 0;
-    capturedMaxTokens = requestBody.max_tokens;
-    return Response.json({ choices: [{ message: { content: "OK. The runtime is responding." } }] });
-  });
   const app = await createServer();
   t.after(async () => app.close());
-
-  const response = await app.inject({ method: "POST", url: "/api/runtime/test-chat", headers: authHeader(), payload: { prompt: "x".repeat(900), maxTokens: 999, timeoutMs: 1 } });
-  assert.equal(response.statusCode, 200);
-  assert.equal(response.json().ok, true);
-  assert.equal(response.json().promptLength, 500);
-  assert.equal(response.json().maxTokens, 64);
-  assert.equal(response.json().responsePreview, "OK. The runtime is responding.");
-  assert.equal(capturedPromptLength, 500);
-  assert.equal(capturedMaxTokens, 64);
-});
-
-test("runtime diagnostics return safe timeout and network errors", async (t) => {
-  await configureRuntime(t);
-  installMockFetch(t, () => {
-    const error = new Error("connect ENOENT C:\\private\\model.gguf");
-    throw error;
-  });
-  const app = await createServer();
-  t.after(async () => app.close());
-
   const health = await app.inject({ method: "GET", url: "/api/runtime/health", headers: authHeader() });
-  assert.equal(health.statusCode, 200);
-  assert.equal(health.json().ok, false);
-  assert.equal(health.json().error, "runtime_unreachable");
-  assert.doesNotMatch(JSON.stringify(health.json()), /private|model\.gguf/u);
+  assert.equal(health.statusCode, 404);
+  assert.equal(health.json().error, "not_running");
+  const catalog = await app.inject({ method: "GET", url: "/api/runtime/catalog", headers: authHeader() });
+  assert.equal(catalog.statusCode, 404);
+});
 
-  const chat = await app.inject({ method: "POST", url: "/api/runtime/test-chat", headers: authHeader(), payload: { prompt: "Say OK" } });
-  assert.equal(chat.statusCode, 200);
-  assert.equal(chat.json().ok, false);
-  assert.equal(chat.json().error, "runtime_unreachable");
-  assert.doesNotMatch(JSON.stringify(chat.json()), /private|model\.gguf/u);
+test("injected router start enables health/catalog APIs, while test-chat sends no inference", async (t) => {
+  await configureRuntime(t);
+  const child = new (class extends EventEmitter { pid = 9753; exitCode: number | null = null; stdout = new EventEmitter(); stderr = new EventEmitter(); kill(signal: NodeJS.Signals) { this.exitCode = 0; this.emit("exit", 0, signal); return true; } })();
+  let spawned = false;
+  let healthCalls = 0;
+  let modelCalls = 0;
+  const artifact = { schemaVersion: 1 as const, authority: "derived" as const, buildId: "build-a" as `build_${string}`, resource: { owner: { scope: "local" as const }, locator: "router.ini" }, generatorVersion: "test", sourceRevision: "revision", contentHash: "hash", freshness: "current" as const, validationState: "valid" as const, warnings: [], errors: [] };
+  const app = await createServer({ runtimeManagerOptions: {
+    startupDetectorOptions: { processOptions: { platform: "linux", commandRunner: async () => { throw new Error("detector unavailable"); } } },
+    loadRouterState: async () => ({ stateVersion: 1, activeRuntimeId: null, activeBuildId: null, pid: null, host: null, port: null, startedByObsidianLM: false, ownershipEvidence: "unproven", startedAt: null, commandHash: null, status: "stopped", health: { endpoint: "/health", state: "unknown" }, configuredModelStates: [], warnings: [], errors: [], compatibilityProfileId: null }),
+    saveRouterState: async () => undefined,
+    analyzePreset: async () => ({ preview: { artifact, configuredModelIds: ["model-a"] } } as any),
+    buildLaunchPreview: async () => ({ kind: "router_launch", command: { executable: "fixture-server", args: ["--host", "0.0.0.0", "--port", "8085", "--models-preset", "router.ini", "--models-max", "1", "--models-autoload"], displayCommand: "fixture-server --host 0.0.0.0 --port 8085 --models-preset router.ini --models-max 1 --models-autoload", commandHash: "hash" }, artifact, policy: { modelsMax: 1, modelsAutoload: true } }),
+    loadDomain: async () => ({ configuredModels: [{ id: "model-a", buildId: "build-a", enabled: true, routerAlias: "managed-model" }] } as any),
+    portDetector: async (port, host = "127.0.0.1") => ({ port, host, inUse: spawned && child.exitCode === null, ownerPid: spawned && child.exitCode === null ? child.pid : null, detectionMethod: "test", warnings: [] }),
+    spawnRuntime: (() => { spawned = true; return child as any; }) as any,
+    routerClient: { health: async () => { healthCalls += 1; }, models: async () => { modelCalls += 1; return [{ id: "managed-model", status: "unloaded" }]; } },
+    sleep: async () => undefined,
+    dataDir: () => process.env.OBSIDIANLM_DATA_DIR!,
+    mkdir: async () => undefined
+  } });
+  t.after(async () => app.close());
+  const unauthorized = await app.inject({ method: "POST", url: "/api/runtime/start", payload: { buildId: "build-a" } });
+  assert.equal(unauthorized.statusCode, 401);
+  const started = await app.inject({ method: "POST", url: "/api/runtime/start", headers: authHeader(), payload: { buildId: "build-a" } });
+  assert.equal(started.statusCode, 200);
+  const protectedPort = await app.inject({ method: "PATCH", url: "/api/settings/runtime", headers: authHeader(), payload: { managedLlamaPort: 18080 } });
+  assert.equal(protectedPort.statusCode, 409);
+  const health = await app.inject({ method: "GET", url: "/api/runtime/health", headers: authHeader() });
+  assert.equal(health.statusCode, 200); assert.equal(health.json().status, "healthy");
+  const catalog = await app.inject({ method: "GET", url: "/api/runtime/catalog", headers: authHeader() });
+  assert.equal(catalog.statusCode, 200); assert.equal(catalog.json().catalog.entries[0].state, "unloaded");
+  const chat = await app.inject({ method: "POST", url: "/api/runtime/test-chat", headers: authHeader(), payload: { prompt: "hello" } });
+  assert.equal(chat.statusCode, 200); assert.equal(chat.json().error, "router_model_selection_required"); assert.equal(healthCalls >= 2, true); assert.equal(modelCalls >= 2, true);
 });
 
 test("malformed JSON files are backed up, defaulted, and surfaced through status", async (t) => {

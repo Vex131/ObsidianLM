@@ -41,7 +41,7 @@ test("service logs are authenticated, bounded, empty-safe, and skip symlinks", a
   assert.ok(body.warnings.every((warning: string) => !warning.includes(serviceLogs)));
 });
 
-test("runtime settings validate ports, protect active runtime changes, and keep folders independent", async (t) => {
+test("runtime settings validate ports, ignore legacy runtime evidence, and keep folders independent", async (t) => {
   await fixture(t);
   await saveRuntimeState({ ...defaultRuntimeState, status: "running" });
   const app = await createServer(); t.after(() => app.close());
@@ -49,7 +49,7 @@ test("runtime settings validate ports, protect active runtime changes, and keep 
   assert.equal(invalid.statusCode, 400);
   const unchanged = await app.inject({ method: "PATCH", url: "/api/settings/runtime", headers: auth, payload: { managedLlamaPort: defaultSettings.managedLlamaPort } });
   assert.equal(unchanged.statusCode, 200); assert.equal(unchanged.json().settings.adminTokenHash, null);
-  assert.equal((await app.inject({ method: "PATCH", url: "/api/settings/runtime", headers: auth, payload: { managedLlamaPort: 18080 } })).statusCode, 409);
+  assert.equal((await app.inject({ method: "PATCH", url: "/api/settings/runtime", headers: auth, payload: { managedLlamaPort: 18080 } })).statusCode, 200);
   const folders = await app.inject({ method: "PATCH", url: "/api/settings/discovery-folders", headers: auth, payload: { modelFolders: ["models"], llamaCppFolders: ["builds"] } });
   assert.equal(folders.statusCode, 200); assert.equal(folders.json().settings.adminTokenHash, null);
 });

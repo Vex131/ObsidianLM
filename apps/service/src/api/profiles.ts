@@ -15,6 +15,7 @@ import {
   validateProfile
 } from "../runtime/profiles.js";
 import type { RuntimeManager } from "../runtime/manager.js";
+import { getCompatibilityBinding, loadPhase15Domain } from "../config/phase15-domain.js";
 
 function storageError(error: unknown): { error: string; message: string } | null {
   if (error instanceof SyntaxError || error instanceof Error && error.message.startsWith("Phase 15 migration:")) {
@@ -197,7 +198,16 @@ export async function registerProfileRoutes(app: FastifyInstance, runtimeManager
   });
 
   app.post<{ Params: { id: string } }>("/api/profiles/:id/start", async (request, reply) => {
-    const result = await runtimeManager.start(request.params.id);
-    return reply.status(result.ok ? 200 : result.error === "port_conflict" ? 409 : 400).send(result);
+    const profile = await getProfile(request.params.id);
+    if (!profile) return reply.status(404).send({ error: "not_found", message: "Compatibility Profile not found." });
+    const domain = await loadPhase15Domain();
+    const binding = getCompatibilityBinding(domain, request.params.id);
+    const model = binding ? domain.configuredModels.find((entry) => entry.id === binding.configuredModelId) : undefined;
+    if (!binding || !model) return reply.status(409).send({ error: "invalid_compatibility_binding", message: "Profile is not mapped to a current Configured Model." });
+    if (!model.enabled) return reply.status(409).send({ error: "configured_model_disabled", message: "The Configured Model mapped to this Profile is disabled." });
+    if (!domain.builds.some((build) => build.id === model.buildId)) return reply.status(409).send({ error: "invalid_compatibility_binding", message: "The mapped Configured Model does not reference a registered Build." });
+    const result = await runtimeManager.start(model.buildId, profile.id);
+    const warnings = [...(result.warnings ?? []), "Compatibility Profile start launches its Build router and does not explicitly load a model."];
+    return reply.status(result.ok ? 200 : result.error === "not_found" ? 404 : 409).send({ ...result, warnings });
   });
 }

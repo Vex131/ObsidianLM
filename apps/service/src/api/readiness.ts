@@ -69,7 +69,7 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
       check("profiles", "Profiles", hasProfiles(profiles) ? "pass" : "block", hasProfiles(profiles) ? `${profiles.length} profile(s) configured.` : "Create or import a llama.cpp server profile before starting runtime validation.", profiles.length),
       check("managed-port", "Managed port", portStatus.conflict ? "block" : "pass", portStatus.conflict ? portStatus.conflictMessage ?? "Managed llama.cpp port is already in use by another process." : `Managed llama.cpp port ${settings.managedLlamaPort} is available or owned by the current managed runtime.`),
       check("gpu-monitor", "GPU monitor", gpuStatus.available ? "pass" : "unavailable", gpuStatus.available ? `${gpuStatus.summary.gpuCount} NVIDIA GPU(s) visible.` : "GPU monitoring is unavailable or no NVIDIA GPU was detected; CPU-only validation can still proceed."),
-      check("runtime", "Runtime", runtimeActive ? "pass" : "warning", runtimeActive ? `Runtime state is ${state.status}.` : "No active managed runtime is running; start a profile for runtime health validation."),
+      check("runtime", "Managed router", runtimeActive ? "pass" : "warning", runtimeActive ? `Managed router state is ${state.status}.` : "No active managed router is running; start an eligible Build for router health validation."),
       check("storage", "Storage", storageWarnings.length === 0 ? "pass" : "warning", storageWarnings.length === 0 ? "No storage warnings reported." : "Storage warnings were reported; review local data JSON backups.", storageWarnings.length)
     ];
 

@@ -2,6 +2,7 @@ import { DEFAULT_LLAMA_CPP_PORT, DEFAULT_OBSIDIANLM_PORT } from "../constants/po
 import type { AppSettings } from "../types/settings.js";
 import type { ProfileEditorDefaults } from "../types/profile-editor.js";
 import type { RuntimeState } from "../types/runtime-state.js";
+import type { RouterRuntimeState } from "../types/router.js";
 
 export const defaultSettings: AppSettings = {
   uiPort: DEFAULT_OBSIDIANLM_PORT,
@@ -37,4 +38,27 @@ export const defaultProfileEditorDefaults: ProfileEditorDefaults = {
   llamaArgs: {},
   flagOverrides: [],
   extraArgs: []
+};
+
+export const defaultRouterRuntimeState: RouterRuntimeState = {
+  stateVersion: 1,
+  activeRuntimeId: null,
+  activeBuildId: null,
+  pid: null,
+  host: null,
+  port: null,
+  startedByObsidianLM: false,
+  ownershipEvidence: "unproven",
+  startedAt: null,
+  commandHash: null,
+  status: "stopped",
+  exitedAt: null,
+  exitCode: null,
+  signal: null,
+  message: null,
+  health: { endpoint: "/health", state: "unknown" },
+  configuredModelStates: [],
+  warnings: [],
+  errors: [],
+  compatibilityProfileId: null
 };

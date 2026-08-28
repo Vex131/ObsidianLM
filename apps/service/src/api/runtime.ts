@@ -1,251 +1,108 @@
 import type { FastifyInstance } from "fastify";
-import type { RuntimeDiagnosticProfile, RuntimeHealthResponse, RuntimeLogEntry, RuntimeProfile, RuntimeTestChatRequest, RuntimeTestChatResponse, RuntimeState } from "@obsidianlm/shared";
+import type { RuntimeHealthResponse, RuntimeLogEntry, RuntimeTestChatRequest, RuntimeTestChatResponse } from "@obsidianlm/shared";
 import type { RuntimeManager } from "../runtime/manager.js";
-import { getProfile, isLlamaCppServerProfile } from "../runtime/profiles.js";
 import { sanitizeDetectionForApi } from "./sanitize.js";
 
-const defaultHealthTimeoutMs = 3000;
-const defaultTestChatTimeoutMs = 5000;
-const maxPromptLength = 500;
-const defaultTestPrompt = "Say OK in one short sentence.";
+const actionStatus = (result: { ok: boolean; error?: string }): number => {
+  if (result.ok) return 200;
+  if (result.error === "not_found") return 404;
+  if (["prerequisite", "conflict", "port_conflict", "runtime_active", "different_build_active", "stop_timeout"].includes(result.error ?? "")) return 409;
+  return 400;
+};
 
-function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
-  const numberValue = typeof value === "number" ? value : Number(value);
-  if (!Number.isInteger(numberValue)) {
-    return fallback;
-  }
-  return Math.max(min, Math.min(max, numberValue));
-}
-
-function localCheckHost(host: string): string {
-  return host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
-}
-
-function apiBaseUrl(profile: RuntimeProfile): string | null {
-  if (!isLlamaCppServerProfile(profile)) {
-    return null;
-  }
-  return `http://${localCheckHost(profile.host)}:${profile.port}/v1`;
-}
-
-function diagnosticProfile(profile: RuntimeProfile | null, state: RuntimeState): RuntimeDiagnosticProfile | null {
-  if (!profile || !isLlamaCppServerProfile(profile)) {
-    return null;
-  }
-  return {
-    id: profile.id,
-    name: profile.name,
-    host: localCheckHost(profile.host),
-    port: profile.port,
-    runtimeStatus: state.status
-  };
-}
-
-async function activeDiagnosticTarget(runtimeManager: RuntimeManager): Promise<{ state: RuntimeState; profile: RuntimeProfile | null; endpoint: string | null }> {
-  const state = runtimeManager.getState();
-  const profile = runtimeManager.getActiveProfile() ?? (state.activeProfileId ? await getProfile(state.activeProfileId) : null);
-  return { state, profile, endpoint: profile ? apiBaseUrl(profile) : null };
-}
-
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function safeDiagnosticError(error: unknown): { error: string; message: string } {
-  if (error instanceof Error && error.name === "AbortError") {
-    return { error: "runtime_timeout", message: "Runtime API request timed out." };
-  }
-  return { error: "runtime_unreachable", message: "Runtime API could not be reached." };
-}
-
-function responseTextPreview(data: unknown): string | null {
-  const content = (data as { choices?: Array<{ message?: { content?: unknown }; text?: unknown }> }).choices?.[0]?.message?.content ?? (data as { choices?: Array<{ text?: unknown }> }).choices?.[0]?.text;
-  if (typeof content !== "string") {
-    return null;
-  }
-  return content.trim().slice(0, 500) || null;
+function validStartBody(value: unknown): value is { buildId: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const body = value as Record<string, unknown>;
+  return Object.keys(body).length === 1 && typeof body.buildId === "string" && body.buildId.length > 0;
 }
 
 export async function registerRuntimeRoutes(app: FastifyInstance, runtimeManager: RuntimeManager): Promise<void> {
   app.get("/api/runtime", async () => ({
     state: runtimeManager.getState(),
+    routerState: runtimeManager.getRouterState(),
     warnings: runtimeManager.getWarnings()
   }));
 
   app.get("/api/runtime/detection", async () => sanitizeDetectionForApi(await runtimeManager.refreshDetection({ reconcileStaleState: false })));
 
-  app.get("/api/runtime/command", async (request, reply) => {
-    const command = runtimeManager.getActiveCommand();
-    if (!command) {
-      return reply.status(404).send({ error: "not_found", message: "No active profile command is available." });
-    }
-
-    return { command };
+  app.post<{ Body: unknown }>("/api/runtime/start", async (request, reply) => {
+    if (!validStartBody(request.body)) return reply.status(400).send({ error: "invalid_payload", message: "Body must contain only a non-empty buildId." });
+    const result = await runtimeManager.start(request.body.buildId);
+    return reply.status(actionStatus(result)).send(result);
   });
 
-  app.get("/api/runtime/health", async (): Promise<RuntimeHealthResponse> => {
-    const checkedAt = new Date().toISOString();
-    const { state, profile, endpoint } = await activeDiagnosticTarget(runtimeManager);
-    const profileInfo = diagnosticProfile(profile, state);
-    if (!profile || !endpoint || !profileInfo) {
-      return {
-        ok: false,
-        status: "not_configured",
-        checkedAt,
-        latencyMs: null,
-        endpoint: null,
-        profile: null,
-        error: "runtime_not_configured",
-        message: "No active llama.cpp server profile is available for diagnostics."
-      };
-    }
-
-    const startedAt = Date.now();
-    try {
-      const response = await fetchWithTimeout(`${endpoint}/models`, { method: "GET", headers: { Accept: "application/json" } }, defaultHealthTimeoutMs);
-      const latencyMs = Date.now() - startedAt;
-      if (!response.ok) {
-        return { ok: false, status: "unhealthy", checkedAt, latencyMs, endpoint, profile: profileInfo, error: "runtime_http_error", message: `Runtime API returned HTTP ${response.status}.` };
-      }
-      const data = (await response.json().catch(() => ({}))) as { data?: unknown[] };
-      return { ok: true, status: "healthy", checkedAt, latencyMs, endpoint, profile: profileInfo, modelsCount: Array.isArray(data.data) ? data.data.length : undefined, message: "Runtime API responded to /v1/models." };
-    } catch (error) {
-      const safeError = safeDiagnosticError(error);
-      return { ok: false, status: "unhealthy", checkedAt, latencyMs: Date.now() - startedAt, endpoint, profile: profileInfo, ...safeError };
-    }
-  });
-
-  app.post<{ Body: RuntimeTestChatRequest }>("/api/runtime/test-chat", async (request): Promise<RuntimeTestChatResponse> => {
-    const checkedAt = new Date().toISOString();
-    const { state, profile, endpoint } = await activeDiagnosticTarget(runtimeManager);
-    const profileInfo = diagnosticProfile(profile, state);
-    const rawPrompt = typeof request.body?.prompt === "string" && request.body.prompt.trim() ? request.body.prompt.trim() : defaultTestPrompt;
-    const prompt = rawPrompt.slice(0, maxPromptLength);
-    const maxTokens = clampInteger(request.body?.maxTokens, 16, 1, 64);
-    const timeoutMs = clampInteger(request.body?.timeoutMs, defaultTestChatTimeoutMs, 1000, 15000);
-
-    if (!profile || !endpoint || !profileInfo) {
-      return {
-        ok: false,
-        checkedAt,
-        latencyMs: null,
-        endpoint: null,
-        profile: null,
-        promptLength: prompt.length,
-        maxTokens,
-        responsePreview: null,
-        error: "runtime_not_configured",
-        message: "No active llama.cpp server profile is available for diagnostics."
-      };
-    }
-
-    const startedAt = Date.now();
-    try {
-      const response = await fetchWithTimeout(
-        `${endpoint}/chat/completions`,
-        {
-          method: "POST",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [{ role: "user", content: prompt }], max_tokens: maxTokens, temperature: 0 })
-        },
-        timeoutMs
-      );
-      const latencyMs = Date.now() - startedAt;
-      if (!response.ok) {
-        return { ok: false, checkedAt, latencyMs, endpoint, profile: profileInfo, promptLength: prompt.length, maxTokens, responsePreview: null, error: "runtime_http_error", message: `Runtime API returned HTTP ${response.status}.` };
-      }
-      const data = await response.json().catch(() => ({}));
-      return { ok: true, checkedAt, latencyMs, endpoint, profile: profileInfo, promptLength: prompt.length, maxTokens, responsePreview: responseTextPreview(data), message: "Runtime API responded to diagnostic chat request." };
-    } catch (error) {
-      const safeError = safeDiagnosticError(error);
-      return { ok: false, checkedAt, latencyMs: Date.now() - startedAt, endpoint, profile: profileInfo, promptLength: prompt.length, maxTokens, responsePreview: null, ...safeError };
-    }
-  });
-
-  app.post("/api/runtime/stop", async (request, reply) => {
+  app.post("/api/runtime/stop", async (_request, reply) => {
     const result = await runtimeManager.stop();
-    return reply.status(result.ok ? 200 : 400).send(result);
+    return reply.status(actionStatus(result)).send(result);
   });
 
-  app.post("/api/runtime/restart", async (request, reply) => {
+  app.post<{ Body: unknown }>("/api/runtime/restart", async (request, reply) => {
+    if (request.body && typeof request.body === "object" && Object.keys(request.body).length > 0) return reply.status(400).send({ error: "invalid_payload", message: "Restart does not accept a Build or launch parameters." });
     const result = await runtimeManager.restart();
-    return reply.status(result.ok ? 200 : 400).send(result);
+    return reply.status(actionStatus(result)).send(result);
   });
 
-  app.get<{ Querystring: { limit?: string } }>("/api/runtime/logs", async (request) => {
-    const limit = Number.parseInt(request.query.limit ?? "300", 10);
-    return { logs: await runtimeManager.logs.getRecent(limit) };
+  app.get("/api/runtime/command", async (_request, reply) => {
+    const command = runtimeManager.getActiveCommand();
+    return command ? { command } : reply.status(404).send({ error: "not_found", message: "No active managed router command is available." });
   });
+
+  app.get("/api/runtime/health", async (_request, reply): Promise<RuntimeHealthResponse> => {
+    const checkedAt = new Date().toISOString();
+    const routerState = runtimeManager.getRouterState();
+    if (routerState.status !== "running" || routerState.port === null || routerState.ownershipEvidence !== "current_process_child") {
+      return reply.status(404).send({ ok: false, status: "not_configured", checkedAt, latencyMs: null, endpoint: null, profile: null, error: "not_running", message: "No current in-memory managed router is running." });
+    }
+    const started = Date.now();
+    const health = await runtimeManager.refreshRouterHealth();
+    return {
+      ok: health.state === "healthy",
+      status: health.state === "healthy" ? "healthy" : "unhealthy",
+      checkedAt: health.checkedAt ?? checkedAt,
+      latencyMs: Date.now() - started,
+      endpoint: `http://127.0.0.1:${routerState.port}/health`,
+      profile: null,
+      ...(health.state === "healthy" ? {} : { error: "runtime_unhealthy" }),
+      message: health.message ?? (health.state === "healthy" ? "Managed router responded to /health." : "Managed router /health check failed.")
+    };
+  });
+
+  app.get("/api/runtime/catalog", async (_request, reply) => {
+    const state = runtimeManager.getRouterState();
+    if (state.status !== "running" || state.ownershipEvidence !== "current_process_child") return reply.status(404).send({ error: "not_running", message: "No current in-memory managed router is running." });
+    return { catalog: await runtimeManager.refreshRouterControlPlane(), routerState: runtimeManager.getRouterState() };
+  });
+
+  app.post<{ Body: RuntimeTestChatRequest }>("/api/runtime/test-chat", async (request): Promise<RuntimeTestChatResponse> => ({
+    ok: false,
+    checkedAt: new Date().toISOString(),
+    latencyMs: null,
+    endpoint: null,
+    profile: null,
+    promptLength: typeof request.body?.prompt === "string" ? request.body.prompt.length : 0,
+    maxTokens: typeof request.body?.maxTokens === "number" ? request.body.maxTokens : 16,
+    responsePreview: null,
+    error: "router_model_selection_required",
+    message: "Diagnostic inference is disabled until an explicit router model is selected. No inference request was sent."
+  }));
+
+  app.get<{ Querystring: { limit?: string } }>("/api/runtime/logs", async (request) => ({ logs: await runtimeManager.logs.getRecent(Number.parseInt(request.query.limit ?? "300", 10)) }));
 
   app.get<{ Querystring: { limit?: string } }>("/api/runtime/logs/stream", async (request, reply) => {
     reply.hijack();
-    reply.raw.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no"
-    });
-
+    reply.raw.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
     let closed = false;
-    let heartbeat: ReturnType<typeof setInterval> | null = null;
     let unsubscribe = (): void => {};
-
-    const cleanup = (): void => {
-      closed = true;
-      if (heartbeat) {
-        clearInterval(heartbeat);
-        heartbeat = null;
-      }
-      unsubscribe();
-      unsubscribe = (): void => {};
-    };
-
-    request.raw.on("close", cleanup);
-
-    const sendEvent = (event: string, data: unknown): void => {
-      if (closed || reply.raw.destroyed) {
-        return;
-      }
-
-      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    };
-
+    const sendEvent = (event: string, data: unknown): void => { if (!closed && !reply.raw.destroyed) reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
     const send = (entry: RuntimeLogEntry): void => {
       sendEvent("log", entry);
-      if (entry.source === "system" && entry.message.startsWith("Runtime process exited")) {
-        sendEvent("stopped", { timestamp: entry.timestamp, message: entry.message });
-      }
+      if (entry.source === "system" && entry.message.startsWith("Router process exited")) sendEvent("stopped", { timestamp: entry.timestamp, state: runtimeManager.getState(), routerState: runtimeManager.getRouterState() });
     };
-
-    sendEvent("connection", { ok: true, state: runtimeManager.getState() });
-
-    const limit = Number.parseInt(request.query.limit ?? "300", 10);
-    for (const entry of await runtimeManager.logs.getRecent(limit)) {
-      if (closed || reply.raw.destroyed) {
-        return;
-      }
-      send(entry);
-    }
-
-    if (closed || reply.raw.destroyed) {
-      return;
-    }
-
-    const state = runtimeManager.getState();
-    if (["stopped", "exited", "failed", "unknown_previous_runtime"].includes(state.status)) {
-      sendEvent("stopped", { state });
-    }
-
-    heartbeat = setInterval(() => {
-      sendEvent("heartbeat", { timestamp: new Date().toISOString() });
-    }, 15000);
-
+    const heartbeat = setInterval(() => sendEvent("heartbeat", { timestamp: new Date().toISOString() }), 15_000);
+    request.raw.on("close", () => { closed = true; clearInterval(heartbeat); unsubscribe(); });
+    sendEvent("connection", { ok: true, state: runtimeManager.getState(), routerState: runtimeManager.getRouterState() });
+    for (const entry of await runtimeManager.logs.getRecent(Number.parseInt(request.query.limit ?? "300", 10))) send(entry);
+    if (["stopped", "exited", "failed", "unknown_previous_runtime"].includes(runtimeManager.getRouterState().status)) sendEvent("stopped", { state: runtimeManager.getState(), routerState: runtimeManager.getRouterState() });
     unsubscribe = runtimeManager.logs.subscribe(send);
   });
 }

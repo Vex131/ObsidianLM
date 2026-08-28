@@ -11,7 +11,7 @@
 
 ObsidianLM is **not** primarily a chat app and should not look like LM Studio. It is a focused operator console for starting, stopping, validating, monitoring, and switching local AI runtime configuration safely.
 
-**Architecture status:** the current implementation still launches one model-bound profile as one managed `llama-server`. Phase 14 is a complete UI restructure, not a runtime redesign. The planned Phase 15 architecture makes ObsidianLM responsible for one selected build and its managed router lifecycle, while llama.cpp owns same-build model loading, unloading, autoload, residency limits, and eviction. UI copy must not present that future behavior as implemented.
+**Architecture status:** the current implementation uses one selected Build and one managed llama.cpp router. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence. A Profile start is a temporary Build-selection hint and loads no model. Same-build model switching and cross-Build/model switching remain Run 7 work; GPU child/log attribution remains Run 8 work. Do not claim Phase 15 complete.
 
 ### Design Direction
 
@@ -66,7 +66,7 @@ Runtime state hierarchy:
 8. Warnings and safety gates
 9. Logs and diagnostics
 
-Until Phase 15 is implemented, use the current active-profile fields and labels where required by the API. New planning/reference work should reserve enough hierarchy for build, router, and configured-model state rather than treating one profile as all three concepts forever.
+Legacy active-profile fields remain available only as a compatibility projection where required by the API. Runtime UI should lead with Build/router state and the configured-model catalog; `activeProfileId` is not lifecycle authority.
 
 Planned router-mode model state should accommodate concepts such as available/unloaded, loading, loaded, sleeping, and unavailable/error without prematurely hardcoding exact labels or upstream response fields. Router health and router catalog are separate views: bounded health comes from `GET /health`, while configured-model availability/load state comes from `GET /models`; `/models/sse` may be considered later for live updates.
 
@@ -402,7 +402,7 @@ Required fields:
 
 - Runtime state badge: Running / Stopped / Starting / Stopping / Error / Stale detected
 - Runtime type: llama.cpp
-- Active build (planned router mode) or active profile (current implementation)
+- Active Build/router, with legacy active Profile projection where applicable
 - Configured models and their router state when known; do not infer loaded state from the router parent PID
 - Port
 - Router/runtime process ID if known
@@ -610,7 +610,7 @@ Must include:
 - Active Node and online/offline state when Phase 16 is implemented
 - Service status
 - Managed runtime status
-- Active build/router summary in planned router mode; active profile summary while current APIs remain model-bound
+- Active Build/router summary; legacy active-profile summary only for compatibility projection
 - Available/loaded model state when safely known
 - Port summary
 - Warning panel
@@ -631,7 +631,7 @@ Must include:
 - Active Node and whether runtime state is live or last-known when Phase 16 is implemented
 - Start/stop/restart controls
 - Runtime state
-- Router launch command preview and generated preset preview in planned router mode
+- Router launch command preview and generated preset preview
 - Validation checklist
 - Runtime endpoint
 - Logs
@@ -656,7 +656,7 @@ Goal: distinguish discovered local model artifacts from configured model presets
 
 Implemented Phase 14 behavior: Models displays GGUF artifacts discovered in configured model folders. It distinguishes primary models from projector, adapter, importance-matrix, and other/unknown GGUF files using explicit filename hints first and authoritative whitelisted GGUF metadata after lazy inspection. The selected-artifact inspector performs bounded header/KV inspection without loading tensor data or starting llama.cpp, shows current Profile usage and active-profile runtime usage, and can open an unsaved Profiles draft with the artifact preselected.
 
-Discovery IDs remain path-derived and do not survive a move or folder rename. Projector matches are candidates only; Models does not persist model/projector relationships. Configured router models, aliases, presets, switching, and authoritative multimodal relationships remain Phase 15 work.
+Discovery IDs remain path-derived and do not survive a move or folder rename. Projector matches are candidates only; Models does not persist model/projector relationships. Configured router models, aliases, and presets are current Phase 15 contracts; switching remains Run 7 work.
 
 Current and forward-looking requirements:
 
@@ -679,7 +679,7 @@ Goal: manage llama.cpp binary folders/builds independently from model artifacts 
 
 Implemented Phase 14 behavior: Builds is a read-only discovered toolchain library. It scans only configured roots with bounded, symlink-safe recursion; keeps distinct `llama-server` executables separate; associates same-directory companion tools; and lazily reuses the Profiles capability manifest for version, flags, devices, backend hints, provenance hints, and profile dependencies. Discovery identities remain path-derived and machine-local.
 
-`Router candidate` means required router CLI options were statically detected in parsed `--help` output. It is not functional router validation: Phase 14 does not launch a router or call `/health` or `/models`. Persisted build identities, authoritative classification, configured-model dependencies, and router lifecycle remain Phase 15 work.
+`Router candidate` means required router CLI options were statically detected in parsed `--help` output. It is not functional router validation. Run 4/6 separately provide functional Build validation and managed router lifecycle; launch still requires current capability evidence and strict `/health`/`/models` reconciliation.
 
 Must include when implemented:
 
@@ -833,7 +833,7 @@ Before completing UI work, check:
 
 The dashboard reference in `docs/design/reference/obsidianlm-dashboard.html` supersedes earlier Phase 14 shell dimensions where they conflict. The current priority is to keep the interface aligned with this real operator-console baseline.
 
-Phase 14 is complete. Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System are focused operator-console pages. Existing reference copy that says `profile`, `managed server`, or one model/build path describes the current runtime contract. Phase 15 implementation should evolve those labels without rewriting the visual system.
+Phase 14 is complete. Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System are focused operator-console pages. Existing reference copy that says `profile` or `managed server` may describe legacy compatibility surfaces; current runtime state is Build/router based.
 
 ### Approved Reference Screens
 
@@ -979,7 +979,7 @@ Right inspector:
 - Build
 - Validation
 
-For current Phase 14 implementation, `Active Profile Summary` remains accurate because the API is profile-bound. In planned router mode this region becomes active build/router state plus configured-model availability; it must not imply that every model selection restarts the runtime.
+The active summary is Build/router state plus configured-model availability. Legacy Profile details may appear as a compatibility projection; the summary must not imply that model selection restarts the runtime.
 
 Dashboard rules:
 
@@ -990,7 +990,7 @@ Dashboard rules:
 
 ### 16.2 Runtime / Managed Runtime
 
-Goal: operate the managed llama.cpp runtime safely now and the managed router safely after Phase 15.
+Goal: operate the managed Build-selected llama.cpp router safely.
 
 Page header:
 
@@ -1003,7 +1003,7 @@ Main content order:
 1. Runtime Status Card
 2. Runtime action bar: Start runtime, Stop, Restart, Validate, Copy endpoint
 3. Validation Checklist
-4. Router Command Preview and Generated Preset Preview when router mode is implemented
+4. Router Command Preview and Generated Preset Preview
 5. Startup & Safety
 6. Runtime Logs
 
@@ -1023,7 +1023,7 @@ Runtime rules:
 - Stop/restart actions must explain scope.
 - Logs should be visible without passing through unrelated UI.
 - Command preview is first-class, not hidden behind a disclosure.
-- Same-build model actions say `Switch model`; cross-build actions say `Switch build & restart router`.
+- Profile start is a temporary Build-selection hint and loads no model. Same-build and cross-Build/model switching remain Run 7 work.
 - Do not infer loaded model or GPU ownership solely from the router PID.
 - In Phase 16, controls name the target Node and are disabled while that Node is offline or lacks the required capability.
 
@@ -1098,7 +1098,7 @@ Must include:
 - Build list/table.
 - Detected executables/tools.
 - Build/version/compiler metadata if available.
-- Static router flag/preset capability evidence; functional validation remains Phase 15.
+- Static router flag/preset capability evidence plus separate functional Build validation; current launch requires both.
 - Clear ineligible/unsupported state when a build lacks required router behavior; version labels alone are not proof of capability.
 - Official/custom/experimental/compatibility classification only when known or explicitly configured.
 - Dependent configured models and whether selecting one requires a router restart.
@@ -1136,7 +1136,7 @@ Must include:
 - Copy visible.
 - Clear visible.
 - Current source distinctions for managed runtime stdout/stderr/system entries, persisted job logs, and bounded service-wrapper files.
-- Router lifecycle, router-child/model output, and remote Node-labelled streams remain Phase 15/16 work.
+- Router lifecycle is current Phase 15 work; GPU child/log attribution remains Run 8, and remote Node-labelled streams remain Phase 16 work.
 
 ### 16.8 Telemetry / Processes
 

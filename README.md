@@ -4,13 +4,13 @@ ObsidianLM is a lightweight local AI runtime manager. It is a control plane for 
 
 ## Architecture Status
 
-The implemented Phases 1-13 use one model-bound profile per managed `llama-server` process. That historical architecture remains the current runtime behavior:
+The implemented Phases 1-13 used one model-bound profile per managed `llama-server` process. That remains historical compatibility evidence; the production `RuntimeManager` is now Build/router based:
 
 ```text
 profile = llama-server build + GGUF model + model arguments + endpoint
 ```
 
-The Phase 15 foundation is implemented through Builder Run 3; router lifecycle and preset integration remain planned. The foundation provides authoritative domain schema v2, strict verified v1-to-v2 migration, persistent Model Artifacts, stable Builds, and explicit Configured Model operations. ObsidianLM remains the control plane; it will not become a general inference proxy.
+The Phase 15 foundation and production router lifecycle are implemented through Builder Run 6. `RuntimeManager` selects one validated Build, generates/uses its derived preset, launches one managed router, and persists current lifecycle authority in `router-runtime-state.json`. ObsidianLM remains the control plane; it will not become a general inference proxy.
 
 ```text
 Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
@@ -18,7 +18,7 @@ Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
 OpenCode / Illustria / local clients → llama.cpp :8085/v1
 ```
 
-Same-build model selection and cross-build replacement remain future router work. See the [Project Plan](docs/ObsidianLM_Project_Plan.md) for migration and safety requirements.
+Profile start is a temporary compatibility Build-selection hint and loads no model. Restart reuses the same Build. Same-build model switching and cross-Build/model switching remain Run 7 work; GPU child/log attribution remains Run 8 work. See the [Project Plan](docs/ObsidianLM_Project_Plan.md) for migration and safety requirements.
 
 ## Package Manager
 
@@ -363,15 +363,15 @@ Follow `docs/validation/local-real-smoke.md` for the manual checklist before rel
 
 Phase 14 is complete. The operator console now has focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Visible navigation contains no placeholder page. Build discovery remains bounded, Jobs remain one-shot tools, runtime SSE stays bearer-authenticated, and process/telemetry surfaces remain read-only for unknown or external processes.
 
-Phase 14 preserves the current runtime model: `RuntimeManager` and `activeProfileId` remain model-bound. Phase 15's domain/migration/artifact/build foundation is implemented through Builder Run 3; router behavior remains unimplemented.
+Phase 14's profile-bound behavior remains historical compatibility behavior. Phase 15 Run 6 uses a Build/router runtime; `activeProfileId` is a legacy projection only. `router-runtime-state.json` is current lifecycle authority. `runtime-state.json` is preserved legacy evidence and is not rewritten by the router lifecycle.
 
 ## Phase 15 Foundation and Planned Router Evolution
 
 The implemented Phase 15 foundation establishes schema-v2 authority and explicit API families `/api/model-artifacts`, `/api/configured-models`, and `/api/builds`. Discovery endpoints remain non-authoritative evidence. Persistent Model Artifacts and stable Builds are distinct from Phase 14 discovery; IDs are stable, dependent deletion is protected, Configured Model CRUD/duplicate/revalidate and projector associations are explicit, and candidates are never auto-selected.
 
-`phase15-domain.json` is authoritative. Its canonical revision changes only when stored authoritative content changes. The strict v1-to-v2 upgrade was verified with backup and atomic replacement; valid v2 ignores `profiles.json` changes. `profiles.json` is retained as legacy migration/recovery material and is never rewritten by Profile API after cutover. A separate `LegacyProfileCompatibilityBinding` preserves legacy IDs and `host`/`port`; Profile API operations project/translate through one domain transaction. `RuntimeManager` remains model-bound and `activeProfileId` is unchanged.
+`phase15-domain.json` is authoritative for configuration. Its canonical revision changes only when stored authoritative content changes. The strict v1-to-v2 upgrade was verified with backup and atomic replacement; valid v2 ignores `profiles.json` changes. `profiles.json` is retained as legacy migration/recovery material and is never rewritten by Profile API after cutover. A separate `LegacyProfileCompatibilityBinding` preserves legacy IDs and `host`/`port`; Profile API operations project/translate through one domain transaction. Runtime lifecycle authority is `router-runtime-state.json`; `runtime-state.json` remains preserved legacy evidence.
 
-Run 3 does not add router probes, lifecycle, presets, or UI. Static Build evidence/classification is independent of managed eligibility, which remains `not_validated`.
+Run 6 adds production router launch and managed environment use after Run 4 validation and Run 5 preset generation. Static Build evidence/classification remains independent of managed eligibility.
 
 The planned router evolution will adopt llama.cpp's built-in router/preset capability while preserving ObsidianLM's conservative single-managed-runtime policy:
 
@@ -383,13 +383,13 @@ one active llama.cpp router on :8085
 generated model presets
 ```
 
-The target default is conceptually `--models-max 1 --models-autoload` to preserve single-large-model residency. Generated INI files will be derived artifacts under the resolved ObsidianLM data directory; authoritative structured configuration remains in ObsidianLM. Existing `profiles.json` data, imports/exports, custom arguments, and runtime-state references use the verified backed-up, fail-safe migration and compatibility projection.
+The current Run 5 launch argv is the exact registered server executable followed by `--host 0.0.0.0 --port <managed-port> --models-preset <data>/generated/llama-router/<build-id>.ini --models-max 1` and the positive autoload flag proven by that Build's help. It does not pass `--models-dir` or `--model`. Generated INI files are derived artifacts; authoritative structured configuration remains in ObsidianLM. The router uses a controlled per-Build cache/environment.
 
 One router uses one `llama-server` executable/build family for its model children. Same-build model selection can be handled by llama.cpp. Cross-build selection must be initiated through ObsidianLM and restarts the managed router on the stable `:8085` endpoint. No transparent request-driven cross-build proxying, multiple permanent routers, automatic build updates, or unknown-process killing is planned for the initial integration.
 
-Phase 15 router diagnostics will separate `GET /health` for bounded router/server health from `GET /models` for the router catalog and model load state. Catalog states may include unloaded, loading, loaded, sleeping, and an unavailable/failure condition where applicable; exact response fields remain build-sensitive. `GET /models/sse` may support later live state updates but is not required initially. OpenAI-compatible `/v1/*` endpoints remain for inference clients and bounded inference validation, not as the router control-plane catalog.
+Phase 15 router diagnostics separate `GET /health` for bounded router/server health from `GET /models` for the router catalog and model load state. Start requires both checks and strict reconciliation against the expected configured-model aliases. Catalog states may include unloaded, loading, loaded, sleeping, and an unavailable/failure condition where applicable. OpenAI-compatible `/v1/*` endpoints remain for inference clients and bounded inference validation, not as the router control-plane catalog.
 
-The managed router's catalog must not silently treat models discovered through a shared llama.cpp cache or environment as ObsidianLM-managed presets. Phase 15 must choose and validate a catalog-isolation or explicit unmanaged-model policy. It must also define safe behavior for builds that fail actual router capability checks: router-capable builds are the normal path, while any legacy one-model compatibility mode requires an explicit value-versus-maintenance decision rather than automatic preservation.
+The managed router uses a controlled cache/environment, and initial external or unknown catalog entries block startup. No legacy adoption or kill is performed. Builds that fail actual router capability checks do not become the active managed router.
 
 ## Future Controller / Node Architecture (Unimplemented)
 
@@ -586,7 +586,7 @@ Perplexity (`PPL`) is a language-model evaluation measure where lower is general
 
 ## Configure a llama.cpp Profile (Current Runtime Model)
 
-This section documents the still model-bound RuntimeManager behavior. Profiles remain available through the compatibility projection; `profiles.json` is retained for legacy migration/recovery and is not rewritten after cutover.
+This section documents the legacy Profile compatibility surface. Current `RuntimeManager` lifecycle is Build/router based; Profiles remain available through the compatibility projection, and `profiles.json` is retained for legacy migration/recovery and is not rewritten after cutover.
 
 `data/profiles.json` is retained legacy migration/recovery material. Use `data/profiles.example.json` as a template only when preparing legacy input; after cutover, valid v2 domain state is authoritative and ignores `profiles.json` changes.
 
@@ -689,7 +689,7 @@ From the UI:
 4. Start the profile.
 5. Connect external tools directly to llama.cpp at `http://localhost:8085/v1` unless your profile uses a different port.
 
-These steps describe the current model-bound profile runtime. Planned router mode will instead start one selected build's router and expose its configured models at the same default endpoint.
+These steps retain the legacy Profile workflow for compatibility. Current managed runtime start selects a Build and launches its router; a Profile start is only a temporary Build-selection hint and loads no model. Restart reuses the same Build.
 
 View runtime logs in the dashboard **Logs** panel. It streams live output while a managed runtime is running and can refresh recent persisted runtime logs from disk. The **Jobs** panel shows job logs separately.
 
@@ -699,7 +699,7 @@ ObsidianLM only stops the child process started by the current ObsidianLM servic
 
 Saving, duplicating, deleting, importing, or exporting profiles never starts, restarts, stops, or kills llama.cpp. Edits to a running profile are saved for the next start and do not change the currently running process. Deleting the currently running managed profile is blocked. Imports append/merge by default and do not overwrite existing profiles unless future explicit overwrite behavior is added.
 
-If `data/runtime-state.json` says a previous runtime was running, ObsidianLM performs conservative startup detection. If no matching live process is found, the stale state is marked stopped. If a possible previous managed process is found, ObsidianLM marks it as `unknown_previous_runtime`, shows a warning, and does not adopt or clean it up.
+`data/router-runtime-state.json` is current lifecycle authority. If it records a previous router as running, ObsidianLM performs conservative startup detection; uncertain evidence is marked `unknown_previous_runtime` and is not adopted or stopped. `data/runtime-state.json` remains preserved legacy evidence.
 
 When a profile port is already in use, ObsidianLM refuses to start another runtime on that port. It does not try to determine intent from the process name alone, and it does not free the port automatically.
 
@@ -709,7 +709,7 @@ GPU monitoring is read-only. ObsidianLM calls `nvidia-smi` to display GPU state,
 
 ### Port `8085` is already in use
 
-Another process is listening on the default llama.cpp API port. ObsidianLM will show a `port_conflict` warning and block starting a duplicate runtime. Stop the other process yourself, or change the profile port in `data/profiles.json` and point external tools to the new `/v1` URL.
+Another process is listening on the configured managed llama.cpp API port. ObsidianLM shows a `port_conflict` warning and blocks starting a duplicate router. It does not kill or adopt the owner.
 
 ### Manual `llama-server` is running
 
@@ -717,7 +717,7 @@ If you started `llama-server.exe` outside ObsidianLM, Phase 3 classifies it as `
 
 ### Previous runtime state warning
 
-If ObsidianLM was closed while a runtime was running, `data/runtime-state.json` may still say a runtime was active. On the next startup, ObsidianLM checks for a matching live process. If none is found, it marks the state stopped; if a possible match is found, it warns and leaves the process alone.
+If ObsidianLM was closed while a router was running, `data/router-runtime-state.json` may contain prior evidence. On startup, ObsidianLM checks for a matching live process; uncertain evidence warns and leaves the process alone.
 
 ### `nvidia-smi` is missing
 

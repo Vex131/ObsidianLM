@@ -8,9 +8,9 @@ This document separates three things that earlier revisions mixed together:
 
 - **Completed foundation/history:** Phases 0-13 are implemented. Their original single-model runtime architecture was valid for those phases.
 - **Completed UI restructure:** Phase 14 provides focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Its discovery view reports static router CLI evidence.
-- **Phase 15 foundation:** Builder Run 5 adds deterministic exact-Build production preset generation and separate preset/launch previews to the Run 4 validated domain. Production router lifecycle integration remains future work; Phase 16 later adds Remote Nodes / Controller Mode.
+- **Phase 15 foundation:** Builder Run 6 adds Build/router lifecycle integration to Run 5's deterministic exact-Build production preset and launch previews. Phase 15 remains incomplete; Phase 16 later adds Remote Nodes / Controller Mode.
 
-The current implementation still stores a model-bound launch profile:
+The legacy compatibility surface still stores a model-bound launch profile:
 
 ```text
 one ObsidianLM profile
@@ -24,7 +24,7 @@ that model's llama.cpp arguments
 one managed llama-server process
 ```
 
-The current shared contract reflects this history with `buildPath`, `modelPath`, `llamaArgs`, `host`, and `port` in one profile. Phase 15 evolves that model; it does not retroactively change what earlier phases delivered.
+The shared contract preserves this history with `buildPath`, `modelPath`, `llamaArgs`, `host`, and `port` in one Profile projection. Current runtime lifecycle state is Build/router based and is stored in `router-runtime-state.json`; `runtime-state.json` remains legacy evidence.
 
 ## 2. Control Plane and Data Plane
 
@@ -136,7 +136,7 @@ The upstream behavior summarized here was verified on 2026-08-28 against llama.c
 
 Current upstream router construction combines models from the llama.cpp cache, an optional `--models-dir`, and `--models-preset`. Therefore, generated ObsidianLM presets alone do not prove that every router-visible model is an ObsidianLM-managed configuration.
 
-Phase 15 must define and validate the managed router's catalog boundary. A model becoming visible through llama.cpp's environment or cache must not silently gain the same managed/autoloadable status as an ObsidianLM-configured model preset. The implementation decision may use an ObsidianLM-controlled cache location, environment isolation, catalog filtering/validation, an upstream-supported source restriction, or clear external/unmanaged classification. No disabling flag is assumed here; the chosen strategy must be verified against supported builds.
+The managed router uses a controlled per-Build cache/environment. Initial external or unknown catalog entries block startup; they never silently become managed/autoloadable models. No legacy adoption or kill is performed.
 
 ## 5. Phase 15 Target Runtime Architecture
 
@@ -206,7 +206,7 @@ Router-capable builds are the normal/default architecture. Option B must not be 
 
 ### Same-build model switch
 
-When the requested configured model belongs to the active build, llama.cpp performs routing and loading. Clients select it using the normal model identifier in their inference request.
+Same-build model switching is not yet implemented. Profile start is a temporary Build-selection hint and loads no model; clients must not infer switching support from the current lifecycle contract.
 
 The target machine default is conceptually:
 
@@ -357,30 +357,23 @@ These views must not be conflated. The exact accepted keys remain build-version-
 
 ## 10. RuntimeManager Evolution
 
-The existing `RuntimeManager` should evolve rather than be replaced wholesale.
+The production `RuntimeManager` has evolved to the Build/router lifecycle; legacy Profile projection remains for compatibility.
 
 ```text
-Historical/current
+Historical compatibility
 RuntimeManager → one model-bound llama-server
 
-Target
+Current
 RuntimeManager → one router for selected build
-               → router loads/unloads model child instances
+               → strict `/health` and `/models` startup reconciliation
 ```
 
-Future work includes:
+Remaining work includes:
 
-- router launch command building and preset generation;
-- selected-build capability validation;
-- bounded router health through `/health`;
-- router catalog and same-build load-state reporting through `/models`;
+- same-build model switching and cross-build stop/release/replacement transitions (Run 7);
 - optional later `/models/sse` integration only if polling proves insufficient;
 - separate bounded inference validation through relevant `/v1` endpoints;
-- cross-build stop, port release, replacement start, and post-start validation;
-- graceful router shutdown and startup recovery;
-- active build and generated-artifact state;
-- router/model-child log visibility;
-- child-process awareness without unsafe ownership inference.
+- GPU child/log attribution and router/model-child process awareness (Run 8), without unsafe ownership inference.
 
 The safety rule remains absolute:
 
@@ -528,13 +521,13 @@ Phase 14 remains a UI restructuring phase. It does not implement the router, mig
 
 ## 17. Phase 15 - llama.cpp Router Integration
 
-**Status:** Foundation implemented through Builder Run 5. Router integration is not complete.
+**Status:** Foundation and Build/router lifecycle implemented through Builder Run 6. Phase 15 is not complete.
 
 ### Goal
 
 Evolve the one-profile/one-server runtime into one ObsidianLM-managed llama.cpp router for one selected build, with generated per-model presets and safe cross-build replacement on the stable `:8085` endpoint.
 
-Run 5 does not claim router or Phase 15 completion. It adds deterministic exact-executable, capability-aware production presets, atomic derived-artifact generation, freshness evaluation, and separate read-only preset/launch previews. It does not load models, perform inference, change `RuntimeManager`, or launch the managed `:8085` router.
+Run 5 added deterministic exact-executable, capability-aware production presets, atomic derived-artifact generation, freshness evaluation, and separate read-only preset/launch previews. Run 6 adds production launch through a Build/router `RuntimeManager`, controlled cache/environment, managed port preflight/ownership, and strict `/health`/`/models` reconciliation. It does not claim Phase 15 completion.
 
 ### Forward-compatible ownership constraint
 
@@ -543,7 +536,7 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 ### Dependencies
 
 - Existing Phases 0-13 foundation.
-- Phase 14 UI restructuring is complete; Run 3 delivers the Phase 15 Models/Builds foundation, while runtime/router evolution depends on the remaining router contracts.
+- Phase 14 UI restructuring is complete; Runs 3-6 deliver the Phase 15 domain, validation, preset, and Build/router lifecycle contracts.
 - A current official build and representative custom/compatibility Windows builds for capability testing.
 - Real local GGUF configurations, including multimodal and duplicate-artifact cases, kept outside committed defaults/tests.
 
@@ -552,11 +545,11 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 1. **Architecture and contracts:** **Implemented through Run 3.** Domain schema v2, canonical revisions, stable IDs, authority boundaries, route families, and explicit artifact/build/configured-model operations are established.
 2. **Compatibility and migration:** **Implemented through Run 3.** Strict v1-to-v2 backup/atomic upgrade and legacy Profile compatibility/recovery behavior are verified. `profiles.json` is not rewritten after cutover.
 3. **Build capability and catalog safety:** **Implemented in Run 4.** Exact local executables receive bounded static and functional control-plane validation on an isolated temporary loopback router. Current fingerprint evidence and explicit alias reconciliation are required for eligibility; unexpected catalog entries never become managed.
-4. **Preset generation:** Implement deterministic atomic production INI generation per build, Windows path handling, capability-aware validation, and separate launch/preset previews.
-5. **RuntimeManager router support:** Launch one router, validate `/health` separately from `/models` catalog/load state and diagnostic inference, stop safely, recover startup state, and retain stable port ownership rules.
-6. **Build switching:** Add explicit cross-build stop/release/start/validate transitions while same-build selection remains router-native.
-7. **Models/builds/runtime UI:** Expose artifact versus configuration, active build, available/loaded model status, and clear `Switch model` versus `Switch build & restart router` actions.
-8. **Process/GPU/log awareness:** Classify proven router children, attribute GPU use conservatively, preserve useful router/child logs, and warn on uncertain ownership.
+4. **Preset generation:** **Implemented in Run 5.** Deterministic atomic production INI generation per Build, Windows path handling, capability-aware validation, and separate launch/preset previews.
+5. **RuntimeManager router support:** **Implemented in Run 6.** Launch one router, validate `/health` and strictly reconcile `/models`, stop safely, recover startup state, and retain managed port ownership rules.
+6. **Build switching:** Run 7. Add explicit cross-build stop/release/start/validate transitions; same-build model switching also remains Run 7.
+7. **Models/builds/runtime UI:** Run 7. Expose artifact versus configuration, active build, available/loaded model status, and switching actions.
+8. **Process/GPU/log awareness:** Run 8. Classify proven router children, attribute GPU use conservatively, preserve useful router/child logs, and warn on uncertain ownership.
 9. **Real-machine validation:** Validate official, custom, and compatibility builds; same-build autoload/eviction; cross-build restart; multimodal/text-only configurations; service restart; failure recovery; and direct client access.
 
 ### Safety requirements
@@ -592,13 +585,12 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 - Configured models can explicitly enable/disable/select `mmproj` and validate model/projector/build compatibility.
 - ObsidianLM deterministically generates a validated preset containing all enabled configured models for one build.
 - The UI can preview/copy both router launch command and generated preset.
-- One managed router starts on `:8085`, reports available models, and is the only normal managed runtime.
+- One managed router starts on the configured managed port, reports available models, and is the only normal managed runtime.
 - Bounded router health uses `/health`; router catalog/load state uses `/models` rather than treating `/v1/models` as the control-plane catalog; diagnostic inference remains a separate check.
 - ObsidianLM owns the managed build/router start, stop, restart, replacement, generated configuration, and endpoint lifecycle; llama.cpp owns same-build model loading, unloading, autoload, residency limits, and eviction.
 - Router-visible models outside ObsidianLM's configured catalog are isolated, rejected, or clearly distinguished as external/unmanaged and cannot silently become normal managed/autoloadable models.
 - The selected build is verified by actual capability evidence to provide required router behavior; unsupported builds have an explicitly designed safe ineligible or legacy-compatibility behavior.
-- With the validated default policy, same-build requests select/autoload models while keeping at most one model resident.
-- Cross-build selection stops the owned router, verifies port release, starts the selected build, and validates availability on the same endpoint.
+- Same-build model selection and cross-Build/model switching remain Run 7; Run 6 does not claim either behavior.
 - Process, GPU, and log views distinguish the router, proven children, unmanaged processes, and uncertainty without unsafe cleanup.
 - `llama-bench` and `llama-perplexity` continue to run as independent one-shot jobs.
 - OpenCode, Illustria, and local clients continue direct access through `http://<home-pc>:8085/v1`.

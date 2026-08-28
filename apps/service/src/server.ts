@@ -18,7 +18,7 @@ import { ensureStorageFiles } from "./config/storage.js";
 import { migratePhase15Domain } from "./config/phase15-domain.js";
 import { ensureAppDirectories, webDistDir } from "./config/paths.js";
 import type { GpuMonitorOptions } from "./monitoring/gpu-monitor.js";
-import { RuntimeManager } from "./runtime/manager.js";
+import { RuntimeManager, type RuntimeManagerOptions } from "./runtime/manager.js";
 import { JobManager } from "./jobs/manager.js";
 import type { FunctionalRouterValidatorDependencies } from "./router/functional-validator.js";
 import type { RouterPresetDependencies } from "./router/preset-generator.js";
@@ -27,6 +27,7 @@ export interface CreateServerOptions {
   gpuMonitorOptions?: GpuMonitorOptions;
   functionalRouterValidatorDependencies?: FunctionalRouterValidatorDependencies;
   routerPresetDependencies?: RouterPresetDependencies;
+  runtimeManagerOptions?: RuntimeManagerOptions;
 }
 
 export async function createServer(options: CreateServerOptions = {}): Promise<FastifyInstance> {
@@ -47,7 +48,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   await ensureAppDirectories();
   await migratePhase15Domain();
   await ensureStorageFiles();
-  const runtimeManager = new RuntimeManager();
+  const runtimeManager = new RuntimeManager(undefined, options.runtimeManagerOptions);
   const jobManager = new JobManager();
   await runtimeManager.initialize();
   await jobManager.initialize();

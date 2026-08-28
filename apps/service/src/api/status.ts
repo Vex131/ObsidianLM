@@ -4,7 +4,7 @@ import { getStorageWarnings, loadSettings } from "../config/storage.js";
 import { getAppPaths } from "../config/paths.js";
 import { getGpuMonitoringStatus, type GpuMonitorOptions } from "../monitoring/gpu-monitor.js";
 import type { RuntimeManager } from "../runtime/manager.js";
-import { getProfile, isLlamaCppServerProfile } from "../runtime/profiles.js";
+import { getProfile } from "../runtime/profiles.js";
 import { sanitizeDetectionForApi } from "./sanitize.js";
 
 export async function registerStatusRoutes(app: FastifyInstance, runtimeManager: RuntimeManager, gpuMonitorOptions: GpuMonitorOptions = {}): Promise<void> {
@@ -13,9 +13,10 @@ export async function registerStatusRoutes(app: FastifyInstance, runtimeManager:
     const paths = getAppPaths();
     const detection = sanitizeDetectionForApi(await runtimeManager.refreshDetection({ reconcileStaleState: false }));
     const state = runtimeManager.getState();
+    const routerState = runtimeManager.getRouterState();
     const gpuStatus = await getGpuMonitoringStatus(state.pid, gpuMonitorOptions);
     const activeProfile = runtimeManager.getActiveProfile() ?? (state.activeProfileId ? await getProfile(state.activeProfileId) : null);
-    const hasActiveRuntime = state.status !== "stopped" && state.status !== "unknown_previous_runtime";
+    const hasActiveRuntime = ["starting", "running", "stopping"].includes(state.status);
 
     return {
       service: "running",
@@ -34,7 +35,7 @@ export async function registerStatusRoutes(app: FastifyInstance, runtimeManager:
             pid: state.pid,
             profileId: state.activeProfileId,
             profileName: activeProfile?.name ?? null,
-            apiUrl: activeProfile && isLlamaCppServerProfile(activeProfile) ? `http://localhost:${activeProfile.port}/v1` : null
+            apiUrl: routerState.port === null ? null : `http://localhost:${routerState.port}/v1`
           }
         : null,
       warnings: [...runtimeManager.getWarnings(), ...getStorageWarnings()],

@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { PassThrough } from "node:stream";
 import test, { type TestContext } from "node:test";
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { defaultRuntimeState, defaultSettings, type DetectedProcess, type LlamaCppProfile, type RuntimeState } from "@obsidianlm/shared";
 import { createServer } from "../src/server.js";
 import { detectPort, parseWindowsNetstat } from "../src/process/port-detector.js";
@@ -94,16 +91,6 @@ function runningPreviousState(pid: number, port = 8085): RuntimeState {
   };
 }
 
-function fakeChild(pid: number): ChildProcessWithoutNullStreams {
-  const child = new EventEmitter() as ChildProcessWithoutNullStreams;
-  child.pid = pid;
-  child.stdout = new PassThrough();
-  child.stderr = new PassThrough();
-  child.stdin = new PassThrough() as ChildProcessWithoutNullStreams["stdin"];
-  child.kill = (() => true) as ChildProcessWithoutNullStreams["kill"];
-  return child;
-}
-
 test("port detection reports temporary TCP server as in use and then free", async (t) => {
   const { port } = await withTcpServer(t);
   const inUse = await detectPort(port, "127.0.0.1", {
@@ -179,56 +166,14 @@ test("process API sanitizer redacts local path and command line details", () => 
   assert.match(sanitized.reasons.join(" "), /redacted/);
 });
 
-test("RuntimeManager.start blocks an occupied profile port before spawning", async (t) => {
-  const fixture = await makeDataFixture();
-  process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
-  t.after(() => delete process.env.OBSIDIANLM_DATA_DIR);
-
-  const profile = makeProfile(fixture.buildPath, fixture.modelPath, 8085);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile]), "utf8");
-  let spawnCalled = false;
-  const manager = new RuntimeManager(undefined, {
-    portDetector: async (port) => ({ port, host: "127.0.0.1", inUse: true, ownerPid: null, detectionMethod: "test", warnings: [] }),
-    spawnRuntime: ((() => {
-      spawnCalled = true;
-      return fakeChild(4444);
-    }) as unknown) as typeof import("node:child_process").spawn,
-    startupDetectorOptions: {
-      processOptions: { commandRunner: async () => ({ stdout: "", stderr: "" }) },
-      portOptions: { commandRunner: async () => ({ stdout: "", stderr: "" }) }
-    }
-  });
-
-  const result = await manager.start(profile.id);
+test("RuntimeManager does not treat a Compatibility Profile ID as a router Build ID", async () => {
+  const manager = new RuntimeManager();
+  const result = await manager.start("phase3-profile");
   assert.equal(result.ok, false);
-  assert.equal(result.error, "port_conflict");
-  assert.equal(spawnCalled, false);
+  assert.equal(result.error, "not_found");
 });
 
-test("RuntimeManager.start proceeds through injected spawn when the profile port is free", async (t) => {
-  const fixture = await makeDataFixture();
-  process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
-  t.after(() => delete process.env.OBSIDIANLM_DATA_DIR);
-
-  const profile = makeProfile(fixture.buildPath, fixture.modelPath, 18085);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile]), "utf8");
-  let spawnCalled = false;
-  const manager = new RuntimeManager(undefined, {
-    portDetector: async (port) => ({ port, host: "127.0.0.1", inUse: false, ownerPid: null, detectionMethod: "test", warnings: [] }),
-    spawnRuntime: ((() => {
-      spawnCalled = true;
-      return fakeChild(5555);
-    }) as unknown) as typeof import("node:child_process").spawn
-  });
-
-  const result = await manager.start(profile.id);
-  assert.equal(result.ok, true);
-  assert.equal(spawnCalled, true);
-  assert.equal(result.state.status, "running");
-  assert.equal(result.state.pid, 5555);
-});
-
-test("POST /api/profiles/:id/start returns 409 when selected profile port is in use", async (t) => {
+test("POST /api/profiles/:id/start rejects legacy compatibility launch without a validated Build", async (t) => {
   const fixture = await makeDataFixture();
   const { port } = await withTcpServer(t);
   process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
@@ -243,7 +188,7 @@ test("POST /api/profiles/:id/start returns 409 when selected profile port is in 
 
   const response = await app.inject({ method: "POST", url: `/api/profiles/${profile.id}/start`, headers: authHeader() });
   assert.equal(response.statusCode, 409);
-  assert.equal(response.json().error, "port_conflict");
+  assert.equal(response.json().error, "prerequisite");
 });
 
 test("Phase 3 read-only API routes return process, port, and detection payloads", async (t) => {
@@ -274,7 +219,7 @@ test("Runtime stop with stale PID and no in-memory child does not kill anything"
   const manager = new RuntimeManager();
   const result = await manager.stop();
   assert.equal(result.ok, false);
-  assert.match(result.message, /did not kill any process/);
+  assert.match(result.message, /No process was killed/u);
 });
 
 test("service source does not use taskkill or process.kill for unmanaged detections", async () => {

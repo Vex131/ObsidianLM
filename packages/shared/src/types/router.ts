@@ -1,4 +1,4 @@
-import type { CommandSpec, RuntimeStatus, RuntimeWarning } from "./runtime-state.js";
+import type { CommandSpec, RuntimeActionResult, RuntimeStatus, RuntimeWarning } from "./runtime-state.js";
 import type { ConfiguredModelId, LlamaCppBuildId, ResourceReference, RouterAlias } from "./model-configuration.js";
 
 export const ROUTER_ARTIFACT_SCHEMA_VERSION = 1 as const;
@@ -101,6 +101,10 @@ export interface RouterRuntimeState {
   startedAt: string | null;
   commandHash: string | null;
   status: RuntimeStatus;
+  exitedAt?: string | null;
+  exitCode?: number | null;
+  signal?: string | null;
+  message?: string | null;
   generatedArtifact?: GeneratedRouterArtifact;
   health: RouterHealthEvidence;
   catalog?: RouterCatalogSnapshot;
@@ -108,4 +112,11 @@ export interface RouterRuntimeState {
   warnings: RuntimeWarning[];
   errors: string[];
   previousRuntimeUncertainty?: string;
+  /** Legacy profile identifier for UI compatibility only; never router-runtime authority. */
+  compatibilityProfileId?: string | null;
+}
+
+/** Router-runtime result with the legacy RuntimeActionResult kept intact for current callers. */
+export interface RouterRuntimeActionResult extends RuntimeActionResult {
+  routerState: RouterRuntimeState;
 }

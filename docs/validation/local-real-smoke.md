@@ -21,13 +21,17 @@
 4. Select the current official build and inspect its version, help-derived flags, and `--list-devices` output.
 5. Compare detected server, CLI, bench, and perplexity paths with the files on disk.
 6. Confirm accelerator/backend labels reflect executable output rather than folder naming.
-7. Review the static router assessment and each required router flag; do not treat this as functional router validation.
+7. Review the static router assessment and each required router flag; functional Build validation is separate and required before managed launch.
 8. Select a custom build and confirm unknown/new flags remain visible in **Detected flags**.
 9. Confirm Official, Custom, and Unknown origin hints remain conservative and show their evidence.
-10. Confirm profile dependencies and the active current-runtime build marker match saved Profiles and `activeProfileId`.
+10. Confirm configured-model dependencies and the active Build marker match the authoritative domain; any Profile marker is legacy compatibility projection only.
 11. Use **Use in Profiles** and confirm a new unsaved draft opens with Build selected and Model empty.
 12. Confirm inspection did not start a listener, load a model, run bench/perplexity, or materially change GPU VRAM.
-13. Do not claim router startup, `/health`, or `/models` validation; those remain Phase 15 work.
+13. For an eligible Build, start through the managed Runtime controls and record the exact Run 5 argv: registered server executable, `--host 0.0.0.0`, managed `--port`, generated `--models-preset`, `--models-max 1`, and the positive autoload flag proven by Build help. Confirm no `--model` or `--models-dir` is passed.
+14. Confirm the router uses the controlled per-Build cache/environment, preflights the managed port, and never kills or adopts an external/unknown owner.
+15. Confirm startup requires healthy `/health` and strict `/models` reconciliation; initial external or unknown catalog entries block startup.
+16. Confirm `router-runtime-state.json` is current lifecycle authority and `runtime-state.json` remains preserved legacy evidence. Profile start is a temporary Build-selection hint and loads no model; restart reuses the same Build.
+17. Do not claim same-build model switching or cross-Build/model switching (Run 7), GPU child/log attribution (Run 8), or Phase 15 completion.
 
 ## Jobs Page
 

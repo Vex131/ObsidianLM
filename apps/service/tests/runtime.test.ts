@@ -162,5 +162,5 @@ test("RuntimeManager stop does not kill anything without an in-memory child", as
   const result = await manager.stop();
 
   assert.equal(result.ok, false);
-  assert.match(result.message, /did not kill any process/);
+  assert.match(result.message, /No process was killed/u);
 });

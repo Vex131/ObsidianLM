@@ -178,32 +178,17 @@ test("POST /api/profiles/:id/duplicate creates a unique copy without overwriting
   assert.equal(profiles.json().profiles.length, 2);
 });
 
-test("DELETE /api/profiles/:id deletes stopped profiles and rejects active managed profiles", async (t) => {
+test("Profile deletion is not blocked by a Profile-era runtime authority", async (t) => {
   const fixture = await makeFixture();
   process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
   t.after(() => delete process.env.OBSIDIANLM_DATA_DIR);
-
-  const stoppedApp = await createServer();
-  const setup = await stoppedApp.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
+  const app = await createServer();
+  t.after(async () => app.close());
+  const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
   assert.equal(setup.statusCode, 201);
-  await stoppedApp.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture) });
-  t.after(async () => stoppedApp.close());
-  const deleted = await stoppedApp.inject({ method: "DELETE", url: "/api/profiles/daily-profile", headers: authHeader() });
+  await app.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture) });
+  const deleted = await app.inject({ method: "DELETE", url: "/api/profiles/daily-profile", headers: authHeader() });
   assert.equal(deleted.statusCode, 200);
-
-  await stoppedApp.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture) });
-  const manager = new RuntimeManager(undefined, {
-    portDetector: async (port) => ({ port, host: "127.0.0.1", inUse: false, ownerPid: null, detectionMethod: "test", warnings: [] }),
-    spawnRuntime: ((() => fakeChild(9876)) as unknown) as typeof import("node:child_process").spawn
-  });
-  const start = await manager.start("daily-profile");
-  assert.equal(start.ok, true);
-  const activeApp = fastify({ logger: false });
-  t.after(async () => activeApp.close());
-  await registerProfileRoutes(activeApp, manager);
-  const blocked = await activeApp.inject({ method: "DELETE", url: "/api/profiles/daily-profile" });
-  assert.equal(blocked.statusCode, 409);
-  assert.equal(manager.getState().status, "running");
 });
 
 test("POST /api/profiles/import imports arrays and wrapped exports with safe conflict ids", async (t) => {
@@ -295,50 +280,26 @@ test("GET /api/profiles/:id/snippets brackets IPv6 endpoint hosts", async (t) =>
   assert.equal(response.json().endpoint, "http://[::1]:19124/v1");
 });
 
-test("concurrent start and delete cannot remove a profile after start wins", async (t) => {
+test("concurrent Profile-era start does not make a Profile ID runtime authority", async (t) => {
   const fixture = await makeFixture();
   process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
   t.after(() => delete process.env.OBSIDIANLM_DATA_DIR);
-
-  const manager = new RuntimeManager(undefined, {
-    portDetector: async (port) => ({ port, host: "127.0.0.1", inUse: false, ownerPid: null, detectionMethod: "test", warnings: [] }),
-    spawnRuntime: ((() => fakeChild(2468)) as unknown) as typeof import("node:child_process").spawn
-  });
+  const manager = new RuntimeManager();
   const app = fastify({ logger: false });
   t.after(async () => app.close());
   await registerProfileRoutes(app, manager);
   await app.inject({ method: "POST", url: "/api/profiles", payload: profile(fixture) });
-
-  const [start, deleted] = await Promise.all([
-    manager.start("daily-profile"),
-    app.inject({ method: "DELETE", url: "/api/profiles/daily-profile" })
-  ]);
-
-  if (start.ok) {
-    assert.equal(deleted.statusCode, 409);
-    const stored = JSON.parse(await readFile(path.join(fixture.dataDir, "profiles.json"), "utf8"));
-    assert.equal(stored.length, 0);
-  } else {
-    assert.equal(deleted.statusCode, 200);
-    assert.equal(start.message, "Profile not found.");
-  }
+  const result = await manager.start("daily-profile");
+  assert.equal(result.error, "not_found");
+  const deleted = await app.inject({ method: "DELETE", url: "/api/profiles/daily-profile" });
+  assert.equal(deleted.statusCode, 200);
 });
 
-test("RuntimeManager start still uses strict path validation before spawn", async (t) => {
-  const fixture = await makeFixture();
-  process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
-  t.after(() => delete process.env.OBSIDIANLM_DATA_DIR);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture, { buildPath: path.join(fixture.root, "missing.exe") })]), "utf8");
+test("RuntimeManager rejects a legacy Profile ID without attempting to spawn", async () => {
   let spawned = false;
-  const manager = new RuntimeManager(undefined, {
-    spawnRuntime: ((() => {
-      spawned = true;
-      throw new Error("should not spawn");
-    }) as unknown) as typeof import("node:child_process").spawn
-  });
-
+  const manager = new RuntimeManager(undefined, { spawnRuntime: (() => { spawned = true; throw new Error("should not spawn"); }) as any });
   const result = await manager.start("daily-profile");
   assert.equal(result.ok, false);
+  assert.equal(result.error, "not_found");
   assert.equal(spawned, false);
-  assert.ok(result.errors?.some((error) => error.includes("buildPath does not exist")));
 });
