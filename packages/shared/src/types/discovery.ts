@@ -1,4 +1,4 @@
-import type { CommandSpec, LlamaCppArgs, RuntimeProfile } from "./runtime-state.js";
+import type { CommandSpec, LlamaCppArgs, LlamaCppFlagOverride, RuntimeProfile } from "./runtime-state.js";
 
 export interface DiscoveryWarning {
   code: string;
@@ -65,6 +65,34 @@ export interface LlamaBuildDiscoveryResponse {
   detectedAt: string;
 }
 
+export type LlamaBuildCapabilitiesStatus = "ready" | "partial" | "failed";
+
+export interface LlamaBuildDeviceCapability {
+  id: string;
+  label?: string;
+}
+
+export interface LlamaBuildFlagCapability {
+  canonicalName: string;
+  aliases: string[];
+  valuePlaceholder?: string;
+  description?: string;
+  defaultText?: string;
+  choices?: string[];
+  environmentAlias?: string;
+  deprecated?: boolean;
+}
+
+export interface LlamaBuildCapabilitiesManifest {
+  buildId: string;
+  serverPath: string;
+  versionText?: string;
+  status: LlamaBuildCapabilitiesStatus;
+  devices: LlamaBuildDeviceCapability[];
+  flags: LlamaBuildFlagCapability[];
+  warnings: DiscoveryWarning[];
+}
+
 export interface ToolInputDiscoveryResponse {
   files: DiscoveredToolInputFile[];
   warnings: DiscoveryWarning[];
@@ -85,6 +113,7 @@ export interface CreateProfileFromDiscoveryRequest {
   host?: string;
   port?: number;
   llamaArgs?: LlamaCppArgs;
+  flagOverrides?: LlamaCppFlagOverride[];
   extraArgs?: string[];
 }
 

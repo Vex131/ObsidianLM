@@ -12,7 +12,8 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL,
-    trace: "on-first-retry"
+    trace: "on-first-retry",
+    launchOptions: process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : undefined
   },
   globalSetup: "./tests/e2e/global-setup.ts",
   webServer: {

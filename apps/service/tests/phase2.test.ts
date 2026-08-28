@@ -252,7 +252,7 @@ test("profile creation API persists a llama.cpp profile from discovered fake pat
   assert.notEqual(duplicateProfile.json().profile.id, "qwen-local-test-profile");
   assert.equal(duplicateProfile.json().profile.host, "0.0.0.0");
   assert.equal(duplicateProfile.json().profile.port, 8085);
-  assert.equal(duplicateProfile.json().profile.llamaArgs.ctxSize, 8192);
+  assert.deepEqual(duplicateProfile.json().profile.llamaArgs, {});
 });
 
 test("profile creation API rejects paths that were not discovered from configured folders", async (t) => {

@@ -6,6 +6,17 @@ export interface ProfileValidationResponse {
   warnings: string[];
 }
 
+export type ProfileDraftRequest = Partial<LlamaCppProfile>;
+
+export interface ProfileDraftValidationResponse {
+  profile: LlamaCppProfile;
+  validation: ProfileValidationResponse;
+}
+
+export interface ProfileDraftPreviewResponse extends ProfileDraftValidationResponse {
+  command?: CommandSpec;
+}
+
 export interface ProfileListResponse {
   profiles: RuntimeProfile[];
 }
@@ -73,5 +84,6 @@ export interface ProfileEditorDefaults {
   runtimeType: LlamaCppProfile["runtimeType"];
   providerKind: LlamaCppProfile["providerKind"];
   llamaArgs: NonNullable<LlamaCppProfile["llamaArgs"]>;
+  flagOverrides: NonNullable<LlamaCppProfile["flagOverrides"]>;
   extraArgs: string[];
 }

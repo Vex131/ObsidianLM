@@ -63,7 +63,8 @@ export const API_ENDPOINTS = {
     rescanLlamaBuilds: "/api/discovery/llama-builds/rescan",
     toolInputs: "/api/discovery/tool-inputs",
     rescanToolInputs: "/api/discovery/tool-inputs/rescan",
-    createProfile: "/api/discovery/profiles"
+    createProfile: "/api/discovery/profiles",
+    llamaBuildCapabilities: (id: string) => `/api/discovery/llama-builds/${enc(id)}/capabilities`
   },
   runtime: {
     state: "/api/runtime",
@@ -88,7 +89,9 @@ export const API_ENDPOINTS = {
     validate: (id: string) => `/api/profiles/${enc(id)}/validate`,
     command: (id: string) => `/api/profiles/${enc(id)}/command`,
     snippets: (id: string) => `/api/profiles/${enc(id)}/snippets`,
-    start: (id: string) => `/api/profiles/${enc(id)}/start`
+    start: (id: string) => `/api/profiles/${enc(id)}/start`,
+    validateDraft: "/api/profiles/validate-draft",
+    previewCommand: "/api/profiles/preview-command"
   },
   jobs: {
     list: "/api/jobs",

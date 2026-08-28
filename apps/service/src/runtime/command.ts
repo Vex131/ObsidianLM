@@ -58,6 +58,10 @@ export function buildLlamaCppServerCommand(profile: LlamaCppProfile): CommandSpe
     args.push("--webui");
   }
 
+  for (const override of [...(profile.flagOverrides ?? [])].sort((left, right) => left.flag.localeCompare(right.flag) || (left.values ?? []).join("\u0000").localeCompare((right.values ?? []).join("\u0000")))) {
+    args.push(override.flag, ...(override.values ?? []));
+  }
+
   args.push(...(profile.extraArgs ?? []));
 
   const commandHash = createHash("sha256")

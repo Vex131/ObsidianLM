@@ -35,6 +35,12 @@ export interface LlamaCppArgs {
   webui?: boolean;
 }
 
+export interface LlamaCppFlagOverride {
+  flag: string;
+  /** Missing or empty means this is a no-value flag. */
+  values?: string[];
+}
+
 export interface LlamaCppProfile {
   id: string;
   name: string;
@@ -45,6 +51,7 @@ export interface LlamaCppProfile {
   host: string;
   port: number;
   llamaArgs?: LlamaCppArgs;
+  flagOverrides?: LlamaCppFlagOverride[];
   extraArgs?: string[];
 }
 

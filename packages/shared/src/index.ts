@@ -21,6 +21,7 @@ export type {
 export type {
   CommandSpec,
   LlamaCppArgs,
+  LlamaCppFlagOverride,
   LlamaCppProfile,
   RuntimeActionResult,
   RuntimeLogEntry,
@@ -83,6 +84,10 @@ export type {
   DiscoveredToolInputFile,
   DiscoverySettingsUpdate,
   DiscoveryWarning,
+  LlamaBuildCapabilitiesManifest,
+  LlamaBuildCapabilitiesStatus,
+  LlamaBuildDeviceCapability,
+  LlamaBuildFlagCapability,
   LlamaBuildDiscoveryResponse,
   ModelDiscoveryResponse,
   ToolInputDiscoveryResponse
@@ -95,6 +100,9 @@ export type {
   ImportProfilesRequest,
   ImportProfilesResponse,
   ProfileConfigSnippetResponse,
+  ProfileDraftPreviewResponse,
+  ProfileDraftRequest,
+  ProfileDraftValidationResponse,
   ProfileDetailResponse,
   ProfileEditorDefaults,
   ProfileEditorPreset,

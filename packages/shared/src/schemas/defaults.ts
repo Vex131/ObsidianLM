@@ -34,18 +34,7 @@ export const defaultProfileEditorDefaults: ProfileEditorDefaults = {
   port: DEFAULT_LLAMA_CPP_PORT,
   runtimeType: "llama.cpp",
   providerKind: "server",
-  llamaArgs: {
-    ctxSize: 8192,
-    gpuLayers: "all",
-    flashAttention: true,
-    batchSize: 512,
-    ubatchSize: 128,
-    parallel: 1,
-    threads: 8,
-    threadsBatch: 8,
-    contBatching: true,
-    metrics: true,
-    webui: true
-  },
+  llamaArgs: {},
+  flagOverrides: [],
   extraArgs: []
 };

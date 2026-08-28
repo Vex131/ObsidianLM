@@ -404,6 +404,15 @@
       padding-bottom: 26px;
     }
 
+    /* The static reference now shows the progressive entry state. The older
+       expanded examples remain in source for visual vocabulary only. */
+    .editor-scroll > .config-section { display: none; }
+    .capability-sequence { display: grid; gap: 14px; padding: 18px; }
+    .capability-choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .capability-note { color: var(--color-muted); font-size: 12px; line-height: 1.55; }
+    .resolved-outline { display: grid; gap: 9px; padding-top: 14px; border-top: 1px solid var(--color-line); }
+    .resolved-outline-row { display: flex; flex-wrap: wrap; gap: 7px; }
+
     .panel {
       position: relative;
       border: 1px solid var(--color-line-strong);
@@ -1791,6 +1800,27 @@
             </div>
 
             <div class="editor-scroll">
+              <section class="capability-sequence" aria-label="Progressive profile configuration">
+                <div class="config-section-head">
+                  <div class="config-heading"><h2>New profile</h2><span>Establish Model + Build before configuration controls are resolved.</span></div>
+                  <span class="badge amber">Awaiting selection</span>
+                </div>
+                <div class="capability-choice-grid">
+                  <div class="field"><label>Model</label><select class="form-control"><option>Select discovered model</option></select></div>
+                  <div class="field"><label>llama.cpp Build</label><select class="form-control"><option>Select discovered build</option></select></div>
+                </div>
+                <p class="capability-note">No profile is persisted at this stage. Name, tuning controls, and command preview appear only after both selections resolve against the selected executable.</p>
+                <div class="resolved-outline">
+                  <div class="config-section-head">
+                    <div class="config-heading"><h2>Resolved state</h2><span>Only supported and currently relevant sections are rendered.</span></div>
+                    <span class="badge green">Ready</span>
+                  </div>
+                  <div class="resolved-outline-row">
+                    <span class="badge">Profile</span><span class="badge">Context &amp; Cache</span><span class="badge">Compute</span><span class="badge">Performance</span><span class="badge">Server</span><span class="badge">Build-specific</span><span class="badge">Advanced</span>
+                  </div>
+                  <p class="capability-note">Fields begin as Inherited. Detected llama.cpp defaults are informational and are not saved as overrides. Unknown custom-build flags remain available as structured Build-specific options; router-only flags remain reserved for Phase 15.</p>
+                </div>
+              </section>
               <section class="config-section">
                 <div class="config-section-head">
                   <div class="config-heading"><h2>Profile details</h2><span>Name and short description used in the profile library.</span></div>

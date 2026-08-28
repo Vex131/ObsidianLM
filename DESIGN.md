@@ -352,6 +352,8 @@ Recommended layout:
 
 Profiles are the current configuration objects. The page should feel like a precise editor, not a chat prompt form. Planned router migration may rename or version this concept, but must preserve legacy profile compatibility.
 
+The Profiles editor is capability-driven. A new unsaved draft initially shows only discovered Model and llama.cpp Build selectors; applicable controls appear progressively after the selected build is inspected. llama.cpp defaults are inherited, not copied into every profile: an inherited field stores no override and emits no flag. ObsidianLM-managed host and port defaults remain a separate runtime-management contract.
+
 Recommended layout:
 
 - Profile list
@@ -359,6 +361,16 @@ Recommended layout:
 - Validation panel
 - Command preview
 - Save / duplicate / delete actions
+
+Real-build validation checklist:
+
+1. Configure and rescan a real llama.cpp build folder.
+2. Select an official discovered build and confirm version, help flags, and devices appear.
+3. Select a custom discovered build and confirm unknown flags remain visible under Build-specific options.
+4. Select a discovered model and confirm the new draft begins with sparse llama.cpp overrides.
+5. Change one override and confirm preview emits only it plus model, host, and port.
+6. Change builds and confirm incompatible overrides warn without disappearing.
+7. Do not start a runtime unless performing a separate explicit runtime smoke test.
 
 ## 6. Components
 

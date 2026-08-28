@@ -1,7 +1,10 @@
 import { access } from "node:fs/promises";
-import { defaultProfileEditorDefaults, type CommandSpec, type LlamaCppProfile, type RuntimeProfile } from "@obsidianlm/shared";
+import path from "node:path";
+import { defaultProfileEditorDefaults, type CommandSpec, type LlamaCppFlagOverride, type LlamaCppProfile, type RuntimeProfile } from "@obsidianlm/shared";
 import { loadSettings, loadProfiles, saveProfiles } from "../config/storage.js";
 import { detectPort } from "../process/port-detector.js";
+import { getLlamaBuildCapabilities } from "../discovery/llama-build-capabilities.js";
+import { discoverLlamaBuilds } from "../discovery/llama-builds.js";
 import { buildLlamaCppServerCommand } from "./command.js";
 
 export interface ProfileValidationResult {
@@ -110,6 +113,32 @@ function normalizeStringArray(value: unknown): string[] | undefined {
   return value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean);
 }
 
+function normalizeFlagOverrides(value: unknown): LlamaCppFlagOverride[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return value as LlamaCppFlagOverride[];
+}
+
+const legacyLlamaFlags: Array<{ key: keyof NonNullable<LlamaCppProfile["llamaArgs"]>; flag: string; aliases?: string[]; enabled: (value: unknown) => boolean }> = [
+  { key: "ctxSize", flag: "--ctx-size", aliases: ["-c"], enabled: (value) => value !== undefined },
+  { key: "gpuLayers", flag: "--n-gpu-layers", aliases: ["--gpu-layers", "-ngl"], enabled: (value) => value !== undefined },
+  { key: "devices", flag: "--device", aliases: ["-dev"], enabled: (value) => Array.isArray(value) && value.length > 0 },
+  { key: "splitMode", flag: "--split-mode", aliases: ["-sm"], enabled: (value) => value !== undefined },
+  { key: "tensorSplit", flag: "--tensor-split", aliases: ["-ts"], enabled: (value) => value !== undefined },
+  { key: "cacheTypeK", flag: "--cache-type-k", aliases: ["-ctk"], enabled: (value) => value !== undefined },
+  { key: "cacheTypeV", flag: "--cache-type-v", aliases: ["-ctv"], enabled: (value) => value !== undefined },
+  { key: "flashAttention", flag: "--flash-attn", aliases: ["-fa"], enabled: (value) => value === true },
+  { key: "batchSize", flag: "--batch-size", aliases: ["-b"], enabled: (value) => value !== undefined },
+  { key: "ubatchSize", flag: "--ubatch-size", aliases: ["-ub"], enabled: (value) => value !== undefined },
+  { key: "parallel", flag: "--parallel", aliases: ["-np"], enabled: (value) => value !== undefined },
+  { key: "threads", flag: "--threads", aliases: ["-t"], enabled: (value) => value !== undefined },
+  { key: "threadsBatch", flag: "--threads-batch", aliases: ["-tb"], enabled: (value) => value !== undefined },
+  { key: "contBatching", flag: "--cont-batching", enabled: (value) => value === true },
+  { key: "metrics", flag: "--metrics", enabled: (value) => value === true },
+  { key: "webui", flag: "--webui", enabled: (value) => value === true }
+];
+
 function normalizeProfile(input: Partial<LlamaCppProfile>, existingId?: string): LlamaCppProfile {
   return {
     id: existingId ?? (hasString(input.id) ? input.id.trim() : slugify(input.name ?? "Profile")),
@@ -120,10 +149,8 @@ function normalizeProfile(input: Partial<LlamaCppProfile>, existingId?: string):
     modelPath: typeof input.modelPath === "string" ? input.modelPath.trim() : "",
     host: typeof input.host === "string" && input.host.trim() ? input.host.trim() : defaultProfileEditorDefaults.host,
     port: typeof input.port === "number" ? input.port : defaultProfileEditorDefaults.port,
-    llamaArgs: {
-      ...defaultProfileEditorDefaults.llamaArgs,
-      ...(isRecord(input.llamaArgs) ? input.llamaArgs : {})
-    },
+    llamaArgs: isRecord(input.llamaArgs) ? { ...input.llamaArgs } : {},
+    flagOverrides: normalizeFlagOverrides(input.flagOverrides) ?? defaultProfileEditorDefaults.flagOverrides,
     extraArgs: normalizeStringArray(input.extraArgs) ?? defaultProfileEditorDefaults.extraArgs
   };
 }
@@ -211,6 +238,40 @@ export async function validateProfile(profile: unknown, options: ProfileValidati
 
   if (profile.extraArgs !== undefined && (!Array.isArray(profile.extraArgs) || !profile.extraArgs.every((arg) => typeof arg === "string"))) {
     errors.push("extraArgs must be an array of strings.");
+  }
+
+  if (profile.flagOverrides !== undefined) {
+    if (!Array.isArray(profile.flagOverrides)) {
+      errors.push("flagOverrides must be an array when provided.");
+    } else {
+      const seenFlags = new Set<string>();
+      const reservedFlags = new Set(["--model", "-m", "--host", "--port"]);
+      const legacyFlags = new Map(legacyLlamaFlags.flatMap((item) => [item.flag, ...(item.aliases ?? [])].map((flag) => [flag, item.key] as const)));
+      for (const [index, override] of profile.flagOverrides.entries()) {
+        if (!isRecord(override) || !hasString(override.flag) || !/^-{1,2}[A-Za-z0-9][A-Za-z0-9-]*$/u.test(override.flag)) {
+          errors.push(`flagOverrides[${index}].flag must be a flag name.`);
+          continue;
+        }
+        const flag = override.flag.trim();
+        if (seenFlags.has(flag)) {
+          errors.push(`flagOverrides must not contain duplicate flag '${flag}'.`);
+        }
+        seenFlags.add(flag);
+        if (reservedFlags.has(flag)) {
+          errors.push(`flagOverrides must not override required ${flag}.`);
+        }
+        const legacyKey = legacyFlags.get(flag);
+        if (legacyKey && isRecord(profile.llamaArgs) && profile.llamaArgs[legacyKey] !== undefined) {
+          errors.push(`flagOverrides '${flag}' conflicts with llamaArgs.${legacyKey}.`);
+        }
+        if (override.values !== undefined && (!Array.isArray(override.values) || !override.values.every((value) => typeof value === "string" && value.trim().length > 0))) {
+          errors.push(`flagOverrides[${index}].values must be an array of non-empty strings when provided.`);
+        }
+      }
+      if (profile.flagOverrides.length > 0) {
+        warnings.push("Custom flag overrides are passed directly to llama.cpp and may require future build-specific handling.");
+      }
+    }
   }
 
   if (isRecord(profile.llamaArgs)) {
@@ -315,7 +376,13 @@ export async function updateManualProfile(profileId: string, patch: Partial<Llam
   }
 
   const current = profiles[index] as LlamaCppProfile;
-  const profile = normalizeProfile({ ...current, ...patch, id: current.id, runtimeType: "llama.cpp", providerKind: "server" }, current.id);
+  const profile = normalizeProfile({
+    ...current,
+    ...patch,
+    id: current.id,
+    runtimeType: "llama.cpp",
+    providerKind: "server"
+  }, current.id);
   const validation = await validateProfile(profile, { strictPaths: false, existingProfileIds: profiles.map((item) => item.id), currentProfileId: profile.id });
   if (!validation.valid) {
     return { profile, validation };
@@ -326,6 +393,40 @@ export async function updateManualProfile(profileId: string, patch: Partial<Llam
   await saveProfiles(nextProfiles);
   return { profile, validation, command: commandPreview(profile, validation) };
   });
+}
+
+export async function validateProfileDraft(input: Partial<LlamaCppProfile>, preview = false): Promise<ProfileMutationResult> {
+  const profiles = await listProfiles();
+  const profile = normalizeProfile(input);
+  const validation = await validateProfile(profile, {
+    strictPaths: false,
+    existingProfileIds: profiles.map((item) => item.id),
+    currentProfileId: profile.id
+  });
+  const discovery = await discoverLlamaBuilds();
+  const build = discovery.builds.find((item) => path.resolve(item.serverPath) === path.resolve(profile.buildPath));
+  if (!build) {
+    validation.warnings.push("buildPath is not in the current discovered llama.cpp catalog; capability compatibility was not checked.");
+  } else {
+    const capabilities = await getLlamaBuildCapabilities(build);
+    if (capabilities.status === "failed") {
+      validation.warnings.push("The discovered llama.cpp build capability probe failed; compatibility was not checked.");
+    } else {
+      const supportedFlags = new Set(capabilities.flags.flatMap((flag) => [flag.canonicalName, ...flag.aliases]));
+      for (const legacy of legacyLlamaFlags) {
+        const value = profile.llamaArgs?.[legacy.key];
+        if (legacy.enabled(value) && !supportedFlags.has(legacy.flag)) {
+          validation.warnings.push(`llamaArgs.${legacy.key} emits ${legacy.flag}, which this build does not advertise.`);
+        }
+      }
+      for (const override of profile.flagOverrides ?? []) {
+        if (typeof override?.flag === "string" && !supportedFlags.has(override.flag)) {
+          validation.warnings.push(`flagOverrides '${override.flag}' is not advertised by this build.`);
+        }
+      }
+    }
+  }
+  return { profile, validation, command: preview ? commandPreview(profile, validation) : undefined };
 }
 
 export async function duplicateManualProfile(profileId: string, request: { id?: string; name?: string } = {}): Promise<ProfileMutationResult | null> {

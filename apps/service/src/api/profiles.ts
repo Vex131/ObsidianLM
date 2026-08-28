@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import type { ExportProfilesResponse, RuntimeProfile } from "@obsidianlm/shared";
+import type { ExportProfilesResponse, ProfileDraftRequest, ProfileDraftPreviewResponse, ProfileDraftValidationResponse, RuntimeProfile } from "@obsidianlm/shared";
 import { buildLlamaCppServerCommand } from "../runtime/command.js";
 import {
   buildProfileSnippets,
@@ -11,6 +11,7 @@ import {
   isLlamaCppServerProfile,
   listProfiles,
   updateManualProfile,
+  validateProfileDraft,
   validateProfile
 } from "../runtime/profiles.js";
 import type { RuntimeManager } from "../runtime/manager.js";
@@ -54,6 +55,14 @@ export async function registerProfileRoutes(app: FastifyInstance, runtimeManager
       }
       return reply.status(201).send(result);
     })
+  );
+
+  app.post<{ Body: ProfileDraftRequest }>("/api/profiles/validate-draft", async (request, reply): Promise<ProfileDraftValidationResponse | FastifyReply> =>
+    withProfileStorage(reply, async () => validateProfileDraft(request.body ?? {}))
+  );
+
+  app.post<{ Body: ProfileDraftRequest }>("/api/profiles/preview-command", async (request, reply): Promise<ProfileDraftPreviewResponse | FastifyReply> =>
+    withProfileStorage(reply, async () => validateProfileDraft(request.body ?? {}, true))
   );
 
   app.get("/api/profiles/export", async (request, reply) =>

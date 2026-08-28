@@ -1,23 +1,11 @@
 import path from "node:path";
-import type { CreateProfileFromDiscoveryRequest, CreateProfileFromDiscoveryResponse, LlamaCppArgs, LlamaCppProfile } from "@obsidianlm/shared";
+import type { CreateProfileFromDiscoveryRequest, CreateProfileFromDiscoveryResponse, LlamaCppProfile } from "@obsidianlm/shared";
 import { loadProfiles, loadSettings, saveProfiles } from "../config/storage.js";
 import { discoverLlamaBuilds } from "./llama-builds.js";
 import { discoverModels } from "./models.js";
 import { buildLlamaCppServerCommand } from "../runtime/command.js";
 import { validateProfile } from "../runtime/profiles.js";
 import { slugifyProfileId, stableId } from "./helpers.js";
-
-const defaultLlamaArgs: LlamaCppArgs = {
-  ctxSize: 8192,
-  gpuLayers: "all",
-  flashAttention: true,
-  batchSize: 512,
-  ubatchSize: 128,
-  parallel: 1,
-  contBatching: true,
-  metrics: true,
-  webui: true
-};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -63,6 +51,10 @@ export function validateCreateProfileRequest(body: unknown): string[] {
     errors.push("llamaArgs must be an object when provided.");
   }
 
+  if (body.flagOverrides !== undefined && !Array.isArray(body.flagOverrides)) {
+    errors.push("flagOverrides must be an array when provided.");
+  }
+
   if (body.extraArgs !== undefined && (!Array.isArray(body.extraArgs) || !body.extraArgs.every((arg) => typeof arg === "string"))) {
     errors.push("extraArgs must be an array of strings when provided.");
   }
@@ -83,10 +75,8 @@ export async function createProfileFromDiscovery(request: CreateProfileFromDisco
     modelPath: path.resolve(request.modelPath),
     host: request.host?.trim() || "0.0.0.0",
     port: request.port ?? settings.managedLlamaPort,
-    llamaArgs: {
-      ...defaultLlamaArgs,
-      ...(request.llamaArgs ?? {})
-    },
+    llamaArgs: request.llamaArgs ? { ...request.llamaArgs } : {},
+    flagOverrides: request.flagOverrides ? request.flagOverrides.map((override) => ({ ...override, values: override.values ? [...override.values] : undefined })) : [],
     extraArgs: request.extraArgs ?? []
   };
 

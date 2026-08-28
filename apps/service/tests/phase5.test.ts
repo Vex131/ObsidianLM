@@ -99,6 +99,26 @@ test("POST /api/profiles creates a draft profile with generated id and does not 
   assert.equal(runtime.json().state.status, "stopped");
 });
 
+test("draft validation and preview do not persist or mutate runtime", async (t) => {
+  const { app, fixture } = await createFixtureApp(t);
+  const draft = { name: "Preview Only", buildPath: fixture.buildPath, modelPath: fixture.modelPath, flagOverrides: [{ flag: "--future-switch" }] };
+  const profilesPath = path.join(fixture.dataDir, "profiles.json");
+  const before = await readFile(profilesPath, "utf8");
+  const validation = await app.inject({ method: "POST", url: "/api/profiles/validate-draft", headers: authHeader(), payload: draft });
+  assert.equal(validation.statusCode, 200);
+  assert.equal(validation.json().validation.valid, true);
+  assert.ok(validation.json().validation.warnings.some((warning: string) => warning.includes("current discovered llama.cpp catalog")));
+  assert.ok(validation.json().validation.warnings.some((warning: string) => warning.includes("Custom flag overrides")));
+  const preview = await app.inject({ method: "POST", url: "/api/profiles/preview-command", headers: authHeader(), payload: draft });
+  assert.equal(preview.statusCode, 200);
+  assert.deepEqual(preview.json().command.args.slice(-1), ["--future-switch"]);
+  const profiles = await app.inject({ method: "GET", url: "/api/profiles", headers: authHeader() });
+  assert.equal(profiles.json().profiles.length, 0);
+  assert.equal(await readFile(profilesPath, "utf8"), before);
+  const runtime = await app.inject({ method: "GET", url: "/api/runtime", headers: authHeader() });
+  assert.equal(runtime.json().state.status, "stopped");
+});
+
 test("POST /api/profiles rejects duplicate explicit ids", async (t) => {
   const { app, fixture } = await createFixtureApp(t);
   await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture)]), "utf8");
@@ -131,6 +151,15 @@ test("PATCH /api/profiles/:id updates fields, preserves id, and does not restart
   assert.equal(body.profile.name, "Daily Profile Tuned");
   assert.equal(body.profile.llamaArgs.ctxSize, 16384);
   assert.ok(body.validation.warnings.some((warning: string) => warning.includes("tensorSplit")));
+
+  const inherited = await app.inject({
+    method: "PATCH",
+    url: "/api/profiles/daily-profile",
+    headers: authHeader(),
+    payload: { llamaArgs: {} }
+  });
+  assert.equal(inherited.statusCode, 200);
+  assert.deepEqual(inherited.json().profile.llamaArgs, {});
 
   const runtime = await app.inject({ method: "GET", url: "/api/runtime", headers: authHeader() });
   assert.equal(runtime.json().state.status, "stopped");
