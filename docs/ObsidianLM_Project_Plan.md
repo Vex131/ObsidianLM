@@ -71,7 +71,7 @@ Laptop
   └── development/inference clients may access llama.cpp over Tailscale
 ```
 
-Normal current/Phase 15 deployed operation is:
+Planned Phase 15 deployed operation is:
 
 ```text
 Laptop browser
@@ -541,7 +541,7 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 ### Dependencies
 
 - Existing Phases 0-13 foundation.
-- Phase 14 UI work may proceed independently, but final Models/Builds/Runtime configuration UX depends on Phase 15 contracts.
+- Phase 14 UI restructuring is complete; Phase 15 Models/Builds/Runtime evolution depends on the new router contracts.
 - A current official build and representative custom/compatibility Windows builds for capability testing.
 - Real local GGUF configurations, including multimodal and duplicate-artifact cases, kept outside committed defaults/tests.
 
@@ -862,4 +862,4 @@ These remain implementation-time design decisions and are not resolved by this c
 
 ## 22. Next Step
 
-Finish or deliberately re-scope the remaining Phase 14 UI work, then create focused Phase 15 builder runs beginning with architecture/contracts and migration fixtures. Do not combine schema migration, preset generation, runtime switching, process attribution, and the full UI into one implementation run.
+Phase 14 is complete. Begin Phase 15 with the architecture/contracts and migration-foundation work required before router runtime implementation.

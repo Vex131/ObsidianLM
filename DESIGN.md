@@ -11,7 +11,7 @@
 
 ObsidianLM is **not** primarily a chat app and should not look like LM Studio. It is a focused operator console for starting, stopping, validating, monitoring, and switching local AI runtime configuration safely.
 
-**Architecture status:** the current implementation still launches one model-bound profile as one managed `llama-server`. Phase 14 is an in-progress UI restructure, not a completed runtime redesign. The planned Phase 15 architecture makes ObsidianLM responsible for one selected build and its managed router lifecycle, while llama.cpp owns same-build model loading, unloading, autoload, residency limits, and eviction. UI copy must not present that future behavior as implemented.
+**Architecture status:** the current implementation still launches one model-bound profile as one managed `llama-server`. Phase 14 is a complete UI restructure, not a runtime redesign. The planned Phase 15 architecture makes ObsidianLM responsible for one selected build and its managed router lifecycle, while llama.cpp owns same-build model loading, unloading, autoload, residency limits, and eviction. UI copy must not present that future behavior as implemented.
 
 ### Design Direction
 
@@ -294,7 +294,7 @@ Primary sections:
 3. Profiles
 4. Models
 5. Builds
-6. Artifacts
+6. Jobs
 7. Logs
 8. Telemetry
 9. Settings
@@ -304,7 +304,6 @@ Future sections may include:
 
 - Benchmarks
 - Perplexity
-- Jobs
 - Adapters
 - Plugins
 
