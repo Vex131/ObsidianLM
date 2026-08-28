@@ -126,3 +126,60 @@ export type {
   ProfileValidationResponse,
   UpdateProfileRequest
 } from "./types/profile-editor.js";
+export {
+  MODEL_CONFIGURATION_SCHEMA_VERSION,
+  createConfiguredModelId,
+  createLlamaCppBuildId,
+  createModelArtifactId,
+  createRouterAlias,
+  isRouterAlias
+} from "./types/model-configuration.js";
+export type {
+  ConfiguredModel,
+  ConfiguredModelId,
+  ConfigurationValidationStatus,
+  LlamaCppBuildId,
+  ModelArtifact,
+  ModelArtifactId,
+  ProjectorAssociation,
+  ProjectorCandidate,
+  ReferenceStatus,
+  ResourceOwner,
+  ResourceReference,
+  RouterAlias
+} from "./types/model-configuration.js";
+export { LLAMA_CPP_BUILD_SCHEMA_VERSION, isBuildEligibleForManagedInference } from "./types/llama-build.js";
+export type {
+  BuildValidationState,
+  LlamaCppBuild,
+  LlamaCppBuildClassification,
+  LlamaCppBuildFunctionalEvidence,
+  LlamaCppBuildStaticEvidence
+} from "./types/llama-build.js";
+export { ROUTER_ARTIFACT_SCHEMA_VERSION, ROUTER_RUNTIME_STATE_VERSION } from "./types/router.js";
+export type {
+  CatalogReconciliationState,
+  GeneratedArtifactFreshness,
+  GeneratedArtifactValidationState,
+  GeneratedRouterArtifact,
+  RouterCatalogEntry,
+  RouterCatalogOwnership,
+  RouterCatalogSnapshot,
+  RouterHealthEvidence,
+  RouterHealthState,
+  RouterInferenceEvidence,
+  RouterLaunchPreview,
+  RouterModelState,
+  RouterPresetPreview,
+  RouterRuntimeId,
+  RouterRuntimeState
+} from "./types/router.js";
+export { LEGACY_PROFILE_SOURCE_VERSION, PHASE15_DOMAIN_TARGET_VERSION } from "./types/profile-migration.js";
+export type {
+  LegacyProfileMapping,
+  LegacyProfileMigrationInput,
+  LegacyProfileMigrationOutput,
+  MigrationBackupReference,
+  ProfileMigrationRecord,
+  ProfileMigrationStatus
+} from "./types/profile-migration.js";
