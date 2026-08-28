@@ -1,7 +1,9 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { defaultProfileEditorDefaults, type CommandSpec, type LlamaCppFlagOverride, type LlamaCppProfile, type RuntimeProfile } from "@obsidianlm/shared";
-import { loadSettings, loadProfiles, saveProfiles } from "../config/storage.js";
+import { loadSettings } from "../config/storage.js";
+import { createConfiguredModelId, createRouterAlias, type ConfiguredModel } from "@obsidianlm/shared";
+import { findOrRegisterLegacyBuildInSnapshot, findOrRegisterLocalArtifactInSnapshot, loadPhase15Domain, mutatePhase15Domain, type Phase15DomainSnapshot } from "../config/phase15-domain.js";
 import { detectPort } from "../process/port-detector.js";
 import { getLlamaBuildCapabilities } from "../discovery/llama-build-capabilities.js";
 import { discoverLlamaBuilds } from "../discovery/llama-builds.js";
@@ -162,9 +164,23 @@ function commandPreview(profile: RuntimeProfile, validation: ProfileValidationRe
   return buildLlamaCppServerCommand(profile);
 }
 
+function projectProfiles(snapshot: Phase15DomainSnapshot): LlamaCppProfile[] {
+  return snapshot.compatibilityBindings.map((binding) => {
+    const model = snapshot.configuredModels.find((entry) => entry.id === binding.configuredModelId);
+    const artifact = model && snapshot.artifacts.find((entry) => entry.id === model.artifactId);
+    const build = model && snapshot.builds.find((entry) => entry.id === model.buildId);
+    if (!model || !artifact || !build || artifact.resource.owner.scope !== "local" || build.server.owner.scope !== "local") throw new Error("Phase 15 domain compatibility relation is invalid");
+    return { id: binding.legacyProfileId, name: model.displayName, runtimeType: "llama.cpp", providerKind: "server", modelPath: artifact.resource.locator, buildPath: build.server.locator, host: binding.legacyRuntimeEndpoint.host, port: binding.legacyRuntimeEndpoint.port, llamaArgs: structuredClone(model.llamaArgs ?? {}), flagOverrides: structuredClone(model.flagOverrides ?? []), extraArgs: structuredClone(model.extraArgs ?? []) };
+  });
+}
+
+function legacyModel(snapshot: Phase15DomainSnapshot, profile: LlamaCppProfile): ConfiguredModel {
+  const id = createConfiguredModelId();
+  return { schemaVersion: 1, id, displayName: profile.name, routerAlias: createRouterAlias(profile.name, id, snapshot.configuredModels.map((entry) => entry.routerAlias)), artifactId: "artifact_pending" as ConfiguredModel["artifactId"], buildId: "build_pending" as ConfiguredModel["buildId"], enabled: false, referenceStatus: { artifact: "missing", build: "missing" }, validationStatus: "invalid", llamaArgs: structuredClone(profile.llamaArgs), flagOverrides: structuredClone(profile.flagOverrides), extraArgs: structuredClone(profile.extraArgs) };
+}
+
 export async function listProfiles(): Promise<RuntimeProfile[]> {
-  const profiles = await loadProfiles();
-  return Array.isArray(profiles) ? profiles : [];
+  return projectProfiles(await loadPhase15Domain());
 }
 
 export async function getProfile(profileId: string): Promise<RuntimeProfile | null> {
@@ -348,169 +364,107 @@ export async function validateProfile(profile: unknown, options: ProfileValidati
 
 export async function createManualProfile(input: Partial<LlamaCppProfile>): Promise<ProfileMutationResult> {
   return withProfileOperation(async () => {
-  const profiles = await listProfiles();
-  const requestedId = hasString(input.id) ? input.id.trim() : undefined;
-  if (requestedId && profiles.some((profile) => profile.id === requestedId)) {
-    const validation: ProfileValidationResult = { valid: false, errors: [`Profile id '${requestedId}' already exists.`], warnings: [] };
-    return { profile: normalizeProfile(input, requestedId), validation };
-  }
-
-  const id = requestedId ?? ensureUniqueId(slugify(input.name ?? "Profile"), profiles);
-  const profile = normalizeProfile(input, id);
-  const validation = await validateProfile(profile, { strictPaths: false, existingProfileIds: profiles.map((item) => item.id), currentProfileId: profile.id });
-  if (!validation.valid) {
-    return { profile, validation };
-  }
-
-  await saveProfiles([...profiles, profile]);
-  return { profile, validation, command: commandPreview(profile, validation) };
+    const profiles = await listProfiles();
+    const requestedId = hasString(input.id) ? input.id.trim() : undefined;
+    if (requestedId && profiles.some((profile) => profile.id === requestedId)) return { profile: normalizeProfile(input, requestedId), validation: { valid: false, errors: [`Profile id '${requestedId}' already exists.`], warnings: [] } };
+    const profile = normalizeProfile(input, requestedId ?? ensureUniqueId(slugify(input.name ?? "Profile"), profiles));
+    const validation = await validateProfile(profile, { strictPaths: false, existingProfileIds: profiles.map((item) => item.id), currentProfileId: profile.id });
+    if (!validation.valid) return { profile, validation };
+    const [modelExists, buildExists] = await Promise.all([pathExists(profile.modelPath), pathExists(profile.buildPath)]);
+    const committed = await mutatePhase15Domain((snapshot) => {
+      if (snapshot.compatibilityBindings.some((binding) => binding.legacyProfileId === profile.id)) throw new Error(`Profile id '${profile.id}' already exists.`);
+      const artifact = findOrRegisterLocalArtifactInSnapshot(snapshot, profile.modelPath, { kind: "model", referenceStatus: modelExists ? "available" : "missing" });
+      const build = findOrRegisterLegacyBuildInSnapshot(snapshot, profile.buildPath, buildExists ? "available" : "missing");
+      const model = legacyModel(snapshot, profile);
+      model.artifactId = artifact.id; model.buildId = build.id;
+      const available = modelExists && buildExists;
+      model.referenceStatus = { artifact: modelExists ? "available" : "missing", build: buildExists ? "available" : "missing" };
+      model.enabled = available; model.validationStatus = available ? "not_validated" : "invalid";
+      snapshot.configuredModels.push(model);
+      snapshot.compatibilityBindings.push({ legacyProfileId: profile.id, configuredModelId: model.id, legacyRuntimeEndpoint: { host: profile.host, port: profile.port } });
+      return projectProfiles(snapshot).find((entry) => entry.id === profile.id)!;
+    });
+    return { profile: committed.result, validation, command: commandPreview(committed.result, validation) };
   });
 }
 
 export async function updateManualProfile(profileId: string, patch: Partial<LlamaCppProfile>): Promise<ProfileMutationResult | null> {
   return withProfileOperation(async () => {
-  const profiles = await listProfiles();
-  const index = profiles.findIndex((profile) => profile.id === profileId);
-  if (index === -1) {
-    return null;
-  }
-
-  const current = profiles[index] as LlamaCppProfile;
-  const profile = normalizeProfile({
-    ...current,
-    ...patch,
-    id: current.id,
-    runtimeType: "llama.cpp",
-    providerKind: "server"
-  }, current.id);
-  const validation = await validateProfile(profile, { strictPaths: false, existingProfileIds: profiles.map((item) => item.id), currentProfileId: profile.id });
-  if (!validation.valid) {
-    return { profile, validation };
-  }
-
-  const nextProfiles = [...profiles];
-  nextProfiles[index] = profile;
-  await saveProfiles(nextProfiles);
-  return { profile, validation, command: commandPreview(profile, validation) };
+    const profiles = await listProfiles();
+    const current = profiles.find((profile) => profile.id === profileId) as LlamaCppProfile | undefined;
+    if (!current) return null;
+    const profile = normalizeProfile({ ...current, ...patch, id: current.id, runtimeType: "llama.cpp", providerKind: "server" }, current.id);
+    const validation = await validateProfile(profile, { strictPaths: false, existingProfileIds: profiles.map((item) => item.id), currentProfileId: profile.id });
+    if (!validation.valid) return { profile, validation };
+    const [modelExists, buildExists] = await Promise.all([pathExists(profile.modelPath), pathExists(profile.buildPath)]);
+    const committed = await mutatePhase15Domain((snapshot) => {
+      const binding = snapshot.compatibilityBindings.find((entry) => entry.legacyProfileId === profileId);
+      const model = binding && snapshot.configuredModels.find((entry) => entry.id === binding.configuredModelId);
+      if (!binding || !model) throw new Error("Phase 15 domain compatibility relation is invalid");
+      const artifact = findOrRegisterLocalArtifactInSnapshot(snapshot, profile.modelPath, { kind: "model", referenceStatus: modelExists ? "available" : "missing" });
+      const build = findOrRegisterLegacyBuildInSnapshot(snapshot, profile.buildPath, buildExists ? "available" : "missing");
+      model.displayName = profile.name; model.artifactId = artifact.id; model.buildId = build.id;
+      model.llamaArgs = structuredClone(profile.llamaArgs); model.flagOverrides = structuredClone(profile.flagOverrides); model.extraArgs = structuredClone(profile.extraArgs);
+      model.referenceStatus = { artifact: modelExists ? "available" : "missing", build: buildExists ? "available" : "missing" };
+      model.enabled = modelExists && buildExists; model.validationStatus = model.enabled ? "not_validated" : "invalid";
+      binding.legacyRuntimeEndpoint = { host: profile.host, port: profile.port };
+      return projectProfiles(snapshot).find((entry) => entry.id === profileId)!;
+    });
+    return { profile: committed.result, validation, command: commandPreview(committed.result, validation) };
   });
 }
 
 export async function validateProfileDraft(input: Partial<LlamaCppProfile>, preview = false): Promise<ProfileMutationResult> {
   const profiles = await listProfiles();
   const profile = normalizeProfile(input);
-  const validation = await validateProfile(profile, {
-    strictPaths: false,
-    existingProfileIds: profiles.map((item) => item.id),
-    currentProfileId: profile.id
-  });
-  const discovery = await discoverLlamaBuilds();
-  const build = discovery.builds.find((item) => path.resolve(item.serverPath) === path.resolve(profile.buildPath));
-  if (!build) {
-    validation.warnings.push("buildPath is not in the current discovered llama.cpp catalog; capability compatibility was not checked.");
-  } else {
-    const capabilities = await getLlamaBuildCapabilities(build);
-    if (capabilities.status === "failed") {
-      validation.warnings.push("The discovered llama.cpp build capability probe failed; compatibility was not checked.");
-    } else {
-      const supportedFlags = new Set(capabilities.flags.flatMap((flag) => [flag.canonicalName, ...flag.aliases]));
-      for (const legacy of legacyLlamaFlags) {
-        const value = profile.llamaArgs?.[legacy.key];
-        if (legacy.enabled(value) && !supportedFlags.has(legacy.flag)) {
-          validation.warnings.push(`llamaArgs.${legacy.key} emits ${legacy.flag}, which this build does not advertise.`);
-        }
-      }
-      for (const override of profile.flagOverrides ?? []) {
-        if (typeof override?.flag === "string" && !supportedFlags.has(override.flag)) {
-          validation.warnings.push(`flagOverrides '${override.flag}' is not advertised by this build.`);
-        }
-      }
-    }
-  }
+  const validation = await validateProfile(profile, { strictPaths: false, existingProfileIds: profiles.map((item) => item.id), currentProfileId: profile.id });
+  validation.warnings.push("buildPath is not in the current discovered llama.cpp catalog; capability compatibility was not checked.");
   return { profile, validation, command: preview ? commandPreview(profile, validation) : undefined };
 }
 
 export async function duplicateManualProfile(profileId: string, request: { id?: string; name?: string } = {}): Promise<ProfileMutationResult | null> {
   return withProfileOperation(async () => {
-  const profiles = await listProfiles();
-  const source = profiles.find((profile) => profile.id === profileId) as LlamaCppProfile | undefined;
-  if (!source) {
-    return null;
-  }
-
-  const name = hasString(request.name) ? request.name.trim() : `${source.name} Copy`;
-  const id = hasString(request.id) ? request.id.trim() : ensureUniqueId(slugify(name), profiles);
-  if (profiles.some((profile) => profile.id === id)) {
-    const profile = normalizeProfile({ ...source, id, name }, id);
-    return { profile, validation: { valid: false, errors: [`Profile id '${id}' already exists.`], warnings: [] } };
-  }
-
-  const profile = normalizeProfile({ ...source, id, name }, id);
-  const validation = await validateProfile(profile, { strictPaths: false, existingProfileIds: profiles.map((item) => item.id), currentProfileId: profile.id });
-  if (!validation.valid) {
-    return { profile, validation };
-  }
-
-  await saveProfiles([...profiles, profile]);
-  return { profile, validation, command: commandPreview(profile, validation) };
+    const profiles = await listProfiles(); const source = profiles.find((profile) => profile.id === profileId) as LlamaCppProfile | undefined;
+    if (!source) return null;
+    const name = hasString(request.name) ? request.name.trim() : `${source.name} Copy`;
+    const id = hasString(request.id) ? request.id.trim() : ensureUniqueId(slugify(name), profiles);
+    if (profiles.some((profile) => profile.id === id)) return { profile: normalizeProfile({ ...source, id, name }, id), validation: { valid: false, errors: [`Profile id '${id}' already exists.`], warnings: [] } };
+    const profile = normalizeProfile({ ...source, id, name }, id); const validation = await validateProfile(profile, { strictPaths: false, existingProfileIds: profiles.map((item) => item.id), currentProfileId: id });
+    if (!validation.valid) return { profile, validation };
+    const committed = await mutatePhase15Domain((snapshot) => {
+      const binding = snapshot.compatibilityBindings.find((entry) => entry.legacyProfileId === profileId); const sourceModel = binding && snapshot.configuredModels.find((entry) => entry.id === binding.configuredModelId);
+      if (!binding || !sourceModel) throw new Error("Phase 15 domain compatibility relation is invalid");
+      const id2 = createConfiguredModelId(); const model = structuredClone(sourceModel); model.id = id2; model.displayName = name; model.routerAlias = createRouterAlias(name, id2, snapshot.configuredModels.map((entry) => entry.routerAlias));
+      snapshot.configuredModels.push(model); snapshot.compatibilityBindings.push({ legacyProfileId: id, configuredModelId: id2, legacyRuntimeEndpoint: structuredClone(binding.legacyRuntimeEndpoint) });
+      return projectProfiles(snapshot).find((entry) => entry.id === id)!;
+    });
+    return { profile: committed.result, validation, command: commandPreview(committed.result, validation) };
   });
 }
 
 export async function deleteManualProfile(profileId: string, canDelete: () => boolean = () => true): Promise<"deleted" | "not_found" | "blocked"> {
   return withProfileOperation(async () => {
-  const profiles = await listProfiles();
-  const nextProfiles = profiles.filter((profile) => profile.id !== profileId);
-  if (nextProfiles.length === profiles.length) {
-    return "not_found";
-  }
-  if (!canDelete()) {
-    return "blocked";
-  }
-  await saveProfiles(nextProfiles);
-  return "deleted";
+    if (!canDelete()) return "blocked";
+    try { await mutatePhase15Domain((snapshot) => { const index = snapshot.compatibilityBindings.findIndex((binding) => binding.legacyProfileId === profileId); if (index < 0) throw new Error("PROFILE_NOT_FOUND"); const modelId = snapshot.compatibilityBindings[index]!.configuredModelId; snapshot.compatibilityBindings.splice(index, 1); snapshot.configuredModels = snapshot.configuredModels.filter((model) => model.id !== modelId); }); return "deleted"; }
+    catch (error) { if (error instanceof Error && error.message === "PROFILE_NOT_FOUND") return "not_found"; throw error; }
   });
 }
 
 export async function importManualProfiles(payload: unknown, rejectConflicts = false): Promise<ImportProfilesResult> {
   return withProfileOperation(async () => {
-  const profiles = await listProfiles();
-  const importedProfiles = Array.isArray(payload) ? payload : isRecord(payload) && Array.isArray(payload.profiles) ? payload.profiles : [];
-  const result: ImportProfilesResult = { imported: 0, skipped: 0, errors: [], createdProfileIds: [], updatedProfileIds: [] };
-  const nextProfiles = [...profiles];
-
-  for (const [index, candidate] of importedProfiles.entries()) {
-    if (!isRecord(candidate)) {
-      result.skipped += 1;
-      result.errors.push(`Profile at index ${index} is not an object.`);
-      continue;
+    const profiles = await listProfiles(); const candidates = Array.isArray(payload) ? payload : isRecord(payload) && Array.isArray(payload.profiles) ? payload.profiles : [];
+    const result: ImportProfilesResult = { imported: 0, skipped: 0, errors: [], createdProfileIds: [], updatedProfileIds: [] }; const accepted: LlamaCppProfile[] = []; const used = [...profiles];
+    for (const [index, candidate] of candidates.entries()) {
+      if (!isRecord(candidate)) { result.skipped++; result.errors.push(`Profile at index ${index} is not an object.`); continue; }
+      const requested = hasString(candidate.id) ? candidate.id.trim() : slugify(hasString(candidate.name) ? candidate.name : `Imported ${index + 1}`); const conflict = used.some((profile) => profile.id === requested);
+      if (conflict && rejectConflicts) { result.skipped++; result.errors.push(`Profile id '${requested}' conflicts with an existing profile.`); continue; }
+      const profile = normalizeProfile(candidate as Partial<LlamaCppProfile>, conflict ? ensureUniqueId(requested, used) : requested); const validation = await validateProfile(profile, { strictPaths: false, existingProfileIds: used.map((item) => item.id), currentProfileId: profile.id });
+      if (!validation.valid) { result.skipped++; result.errors.push(`Profile '${profile.name}' skipped: ${validation.errors.join(" ")}`); continue; }
+      used.push(profile); accepted.push(profile); result.imported++; result.createdProfileIds.push(profile.id);
     }
-
-    const requestedId = hasString(candidate.id) ? candidate.id.trim() : slugify(hasString(candidate.name) ? candidate.name : `Imported ${index + 1}`);
-    const conflict = nextProfiles.some((profile) => profile.id === requestedId);
-    if (conflict && rejectConflicts) {
-      result.skipped += 1;
-      result.errors.push(`Profile id '${requestedId}' conflicts with an existing profile.`);
-      continue;
-    }
-
-    const id = conflict ? ensureUniqueId(requestedId, nextProfiles) : requestedId;
-    const profile = normalizeProfile(candidate as Partial<LlamaCppProfile>, id);
-    const validation = await validateProfile(profile, { strictPaths: false, existingProfileIds: nextProfiles.map((item) => item.id), currentProfileId: id });
-    if (!validation.valid) {
-      result.skipped += 1;
-      result.errors.push(`Profile '${profile.name}' skipped: ${validation.errors.join(" ")}`);
-      continue;
-    }
-
-    nextProfiles.push(profile);
-    result.imported += 1;
-    result.createdProfileIds.push(profile.id);
-  }
-
-  if (result.imported > 0) {
-    await saveProfiles(nextProfiles);
-  }
-
-  return result;
+    const availability = await Promise.all(accepted.map(async (profile) => ({ profile, model: await pathExists(profile.modelPath), build: await pathExists(profile.buildPath) })));
+    if (accepted.length) await mutatePhase15Domain((snapshot) => { for (const item of availability) { const artifact = findOrRegisterLocalArtifactInSnapshot(snapshot, item.profile.modelPath, { kind: "model", referenceStatus: item.model ? "available" : "missing" }); const build = findOrRegisterLegacyBuildInSnapshot(snapshot, item.profile.buildPath, item.build ? "available" : "missing"); const model = legacyModel(snapshot, item.profile); model.artifactId = artifact.id; model.buildId = build.id; model.referenceStatus = { artifact: item.model ? "available" : "missing", build: item.build ? "available" : "missing" }; model.enabled = item.model && item.build; model.validationStatus = model.enabled ? "not_validated" : "invalid"; snapshot.configuredModels.push(model); snapshot.compatibilityBindings.push({ legacyProfileId: item.profile.id, configuredModelId: model.id, legacyRuntimeEndpoint: { host: item.profile.host, port: item.profile.port } }); } });
+    return result;
   });
 }
 

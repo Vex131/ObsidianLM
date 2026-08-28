@@ -12,6 +12,7 @@ import { registerJobRoutes } from "./api/jobs.js";
 import { registerReadinessRoutes } from "./api/readiness.js";
 import { registerAuthRoutes } from "./api/auth.js";
 import { registerServiceLogRoutes } from "./api/logs.js";
+import { registerPhase15DomainRoutes } from "./api/phase15-domain.js";
 import { registerAdminAuthProtection } from "./auth/protect.js";
 import { ensureStorageFiles } from "./config/storage.js";
 import { migratePhase15Domain } from "./config/phase15-domain.js";
@@ -59,6 +60,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   await registerProfileRoutes(app, runtimeManager);
   await registerRuntimeRoutes(app, runtimeManager);
   await registerDiscoveryRoutes(app);
+  await registerPhase15DomainRoutes(app);
   await registerProcessRoutes(app);
   await registerMonitoringRoutes(app, runtimeManager, options.gpuMonitorOptions);
   await registerJobRoutes(app, jobManager);

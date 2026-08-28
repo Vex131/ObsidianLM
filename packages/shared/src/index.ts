@@ -174,8 +174,9 @@ export type {
   RouterRuntimeId,
   RouterRuntimeState
 } from "./types/router.js";
-export { LEGACY_PROFILE_SOURCE_VERSION, PHASE15_DOMAIN_TARGET_VERSION } from "./types/profile-migration.js";
+export { LEGACY_PROFILE_SOURCE_VERSION, PROFILE_MIGRATION_TARGET_VERSION, PHASE15_DOMAIN_TARGET_VERSION } from "./types/profile-migration.js";
 export type {
+  LegacyProfileCompatibilityBinding,
   LegacyProfileMapping,
   LegacyProfileMigrationInput,
   LegacyProfileMigrationOutput,

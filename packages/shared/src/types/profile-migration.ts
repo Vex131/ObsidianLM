@@ -2,7 +2,19 @@ import type { LlamaCppBuildId, ConfiguredModelId, ModelArtifactId } from "./mode
 import type { LlamaCppProfile } from "./runtime-state.js";
 
 export const LEGACY_PROFILE_SOURCE_VERSION = 1 as const;
+/** Historical target format produced by the profile migration. */
+export const PROFILE_MIGRATION_TARGET_VERSION = 1 as const;
+/** @deprecated Use PROFILE_MIGRATION_TARGET_VERSION. */
 export const PHASE15_DOMAIN_TARGET_VERSION = 1 as const;
+
+export interface LegacyProfileCompatibilityBinding {
+  legacyProfileId: string;
+  configuredModelId: ConfiguredModelId;
+  legacyRuntimeEndpoint: {
+    host: string;
+    port: number;
+  };
+}
 
 export type ProfileMigrationStatus = "not_started" | "in_progress" | "completed" | "failed" | "interrupted" | "already_migrated";
 
@@ -37,7 +49,7 @@ export interface LegacyProfileMapping {
 export interface ProfileMigrationRecord {
   migrationId: string;
   sourceVersion: typeof LEGACY_PROFILE_SOURCE_VERSION;
-  targetVersion: typeof PHASE15_DOMAIN_TARGET_VERSION;
+  targetVersion: typeof PROFILE_MIGRATION_TARGET_VERSION;
   sourceRevision?: string;
   status: ProfileMigrationStatus;
   startedAt?: string;
@@ -58,6 +70,6 @@ export interface ProfileMigrationRecord {
 }
 
 export interface LegacyProfileMigrationOutput {
-  targetVersion: typeof PHASE15_DOMAIN_TARGET_VERSION;
+  targetVersion: typeof PROFILE_MIGRATION_TARGET_VERSION;
   record: ProfileMigrationRecord;
 }

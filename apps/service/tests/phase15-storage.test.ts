@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -32,6 +33,21 @@ async function json(dir: string, name: string): Promise<unknown> {
 
 async function names(dir: string, pattern: RegExp): Promise<string[]> {
   return (await readdir(dir)).filter((name) => pattern.test(name));
+}
+
+function canonicalJson(value: any): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+
+function asV1(snapshot: any): any {
+  const v1 = structuredClone(snapshot);
+  v1.schemaVersion = 1;
+  delete v1.compatibilityBindings;
+  const migration = { ...v1.migration, startedAt: undefined, completedAt: undefined, backup: undefined };
+  v1.revision = createHash("sha256").update(canonicalJson({ ...v1, revision: undefined, migration })).digest("hex");
+  return v1;
 }
 
 test("Phase 15 migrates compactly, preserves evidence and custom fields, and is deterministic", async (t) => {
@@ -89,7 +105,7 @@ test("Phase 15 migrates compactly, preserves evidence and custom fields, and is 
   assert.deepEqual(rebuilt.configuredModels.map((model: any) => [model.id, model.routerAlias]), snapshot.configuredModels.map((model: any) => [model.id, model.routerAlias]));
 });
 
-test("Phase 15 already-migrated sources do not rewrite or create another backup, while changed sources replace the complete snapshot", async (t) => {
+test("Phase 15 v2 ignores changed profiles and does not rewrite or create another backup", async (t) => {
   const f = await fixture(t);
   const source = [profile("one", "One", f.model, f.build)];
   await writeFile(path.join(f.dir, "profiles.json"), JSON.stringify(source));
@@ -100,10 +116,46 @@ test("Phase 15 already-migrated sources do not rewrite or create another backup,
   assert.deepEqual(await readFile(path.join(f.dir, "phase15-domain.json")), targetBefore);
   assert.equal((await names(f.dir, /^profiles\.json\.phase15-.*\.bak$/)).length, backupCount);
   await writeFile(path.join(f.dir, "profiles.json"), JSON.stringify([profile("two", "Two", f.custom, f.build)]));
+  assert.equal(await migratePhase15Domain(f.dir), "already_migrated");
+  assert.deepEqual(await readFile(path.join(f.dir, "phase15-domain.json")), targetBefore);
+  assert.equal((await names(f.dir, /^profiles\.json\.phase15-.*\.bak$/)).length, backupCount);
+});
+
+test("Phase 15 upgrades an exact v1 store atomically and only once", async (t) => {
+  const f = await fixture(t);
+  await writeFile(path.join(f.dir, "profiles.json"), JSON.stringify([
+    profile("one", "One", f.model, f.build, { llamaArgs: { ctxSize: 4096 } }),
+    profile("two", "Two", f.custom, f.otherBuild)
+  ]));
+  await migratePhase15Domain(f.dir);
+  const v2 = await json(f.dir, "phase15-domain.json") as any;
+  const v1 = asV1(v2);
+  const v1Bytes = Buffer.from(`${JSON.stringify(v1, null, 2)}\n`);
+  await writeFile(path.join(f.dir, "phase15-domain.json"), v1Bytes);
+
+  await assert.rejects(
+    () => migratePhase15Domain(f.dir, { rename: async () => { throw new Error("upgrade rename failed"); } }),
+    /upgrade rename failed/u
+  );
+  assert.deepEqual(await readFile(path.join(f.dir, "phase15-domain.json")), v1Bytes);
+
   assert.equal(await migratePhase15Domain(f.dir), "migrated");
-  const replaced = await json(f.dir, "phase15-domain.json") as any;
-  assert.deepEqual(replaced.configuredModels.map((m: any) => m.displayName), ["Two"]);
-  assert.equal(replaced.migration.mappings[0].legacyProfileId, "two");
+  const upgraded = await json(f.dir, "phase15-domain.json") as any;
+  validatePhase15DomainSnapshot(upgraded);
+  assert.equal(upgraded.schemaVersion, 2);
+  assert.deepEqual(upgraded.artifacts, v1.artifacts);
+  assert.deepEqual(upgraded.configuredModels, v1.configuredModels);
+  assert.deepEqual(upgraded.builds, v1.builds);
+  assert.deepEqual(upgraded.migration, v1.migration);
+  assert.deepEqual(upgraded.compatibilityBindings, v1.migration.mappings.map((mapping: any) => ({
+    legacyProfileId: mapping.legacyProfileId,
+    configuredModelId: mapping.configuredModelId,
+    legacyRuntimeEndpoint: mapping.legacyRuntimeEndpoint
+  })));
+  assert.ok((await names(f.dir, /^phase15-domain\.json\.schema-v1-upgrade-.*\.bak$/u)).length >= 1);
+  const upgradedBytes = await readFile(path.join(f.dir, "phase15-domain.json"));
+  assert.equal(await migratePhase15Domain(f.dir), "already_migrated");
+  assert.deepEqual(await readFile(path.join(f.dir, "phase15-domain.json")), upgradedBytes);
 });
 
 test("Phase 15 backs up malformed or unsupported source and never creates a target", async (t) => {
@@ -175,12 +227,10 @@ test("Phase 15 backs up malformed targets, rejects duplicate aliases/cross refer
   assert.throws(() => validatePhase15DomainSnapshot(unsafeMissingModel), /inconsistent reference validation state/);
 });
 
-test("Phase 15 atomic failures retain the previous target, clean temp files, and retry successfully", async (t) => {
+test("Phase 15 initialization atomic failures clean temp files and retry successfully", async (t) => {
   const f = await fixture(t);
   const old = JSON.stringify([profile("one", "One", f.model, f.build)]);
   await writeFile(path.join(f.dir, "profiles.json"), old);
-  await migratePhase15Domain(f.dir);
-  const previousTarget = await readFile(path.join(f.dir, "phase15-domain.json"), "utf8");
   await writeFile(path.join(f.dir, "profiles.json"), JSON.stringify([profile("two", "Two", f.custom, f.build)]));
   const scenarios = ["backup", "stat", "write", "rename"] as const;
   for (const scenario of scenarios) {
@@ -190,7 +240,7 @@ test("Phase 15 atomic failures retain the previous target, clean temp files, and
     if (scenario === "write") deps.writeFile = async (file: string, ...args: any[]) => { if (file.endsWith(".tmp")) throw new Error("write failed"); return writeFile(file, args[0], args[1]); };
     if (scenario === "rename") deps.rename = async () => { throw new Error("rename failed"); };
     await assert.rejects(() => migratePhase15Domain(f.dir, deps));
-    assert.deepEqual(await readFile(path.join(f.dir, "phase15-domain.json"), "utf8"), previousTarget);
+    await assert.rejects(() => readFile(path.join(f.dir, "phase15-domain.json")), { code: "ENOENT" });
     assert.equal((await names(f.dir, /\.tmp$/)).length, 0);
     if (scenario === "backup") continue;
   }

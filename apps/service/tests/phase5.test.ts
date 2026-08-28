@@ -121,7 +121,7 @@ test("draft validation and preview do not persist or mutate runtime", async (t) 
 
 test("POST /api/profiles rejects duplicate explicit ids", async (t) => {
   const { app, fixture } = await createFixtureApp(t);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture)]), "utf8");
+  await app.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture) });
 
   const response = await app.inject({
     method: "POST",
@@ -136,7 +136,7 @@ test("POST /api/profiles rejects duplicate explicit ids", async (t) => {
 
 test("PATCH /api/profiles/:id updates fields, preserves id, and does not restart runtime", async (t) => {
   const { app, fixture } = await createFixtureApp(t);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture)]), "utf8");
+  await app.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture) });
 
   const response = await app.inject({
     method: "PATCH",
@@ -167,7 +167,7 @@ test("PATCH /api/profiles/:id updates fields, preserves id, and does not restart
 
 test("POST /api/profiles/:id/duplicate creates a unique copy without overwriting", async (t) => {
   const { app, fixture } = await createFixtureApp(t);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture)]), "utf8");
+  await app.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture) });
 
   const response = await app.inject({ method: "POST", url: "/api/profiles/daily-profile/duplicate", headers: authHeader() });
   assert.equal(response.statusCode, 201);
@@ -181,17 +181,17 @@ test("POST /api/profiles/:id/duplicate creates a unique copy without overwriting
 test("DELETE /api/profiles/:id deletes stopped profiles and rejects active managed profiles", async (t) => {
   const fixture = await makeFixture();
   process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture)]), "utf8");
   t.after(() => delete process.env.OBSIDIANLM_DATA_DIR);
 
   const stoppedApp = await createServer();
   const setup = await stoppedApp.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
   assert.equal(setup.statusCode, 201);
+  await stoppedApp.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture) });
   t.after(async () => stoppedApp.close());
   const deleted = await stoppedApp.inject({ method: "DELETE", url: "/api/profiles/daily-profile", headers: authHeader() });
   assert.equal(deleted.statusCode, 200);
 
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture)]), "utf8");
+  await stoppedApp.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture) });
   const manager = new RuntimeManager(undefined, {
     portDetector: async (port) => ({ port, host: "127.0.0.1", inUse: false, ownerPid: null, detectionMethod: "test", warnings: [] }),
     spawnRuntime: ((() => fakeChild(9876)) as unknown) as typeof import("node:child_process").spawn
@@ -208,7 +208,7 @@ test("DELETE /api/profiles/:id deletes stopped profiles and rejects active manag
 
 test("POST /api/profiles/import imports arrays and wrapped exports with safe conflict ids", async (t) => {
   const { app, fixture } = await createFixtureApp(t);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture)]), "utf8");
+  await app.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture) });
 
   const direct = await app.inject({ method: "POST", url: "/api/profiles/import", headers: authHeader(), payload: [profile(fixture, { name: "Imported Direct" })] });
   assert.equal(direct.statusCode, 200);
@@ -236,7 +236,7 @@ test("POST /api/profiles/import imports arrays and wrapped exports with safe con
   const noVersion = await app.inject({ method: "POST", url: "/api/profiles/import", headers: authHeader(), payload: { profiles: [legacy] } });
   assert.equal(noVersion.statusCode, 200);
   assert.equal(noVersion.json().imported, 1);
-  const imported = JSON.parse(await readFile(path.join(fixture.dataDir, "profiles.json"), "utf8"));
+  const imported = (await app.inject({ method: "GET", url: "/api/profiles", headers: authHeader() })).json().profiles;
   const preserved = imported.find((item: LlamaCppProfile) => item.id === "legacy-duplicate");
   assert.deepEqual(preserved.llamaArgs, legacy.llamaArgs);
   assert.deepEqual(preserved.flagOverrides, legacy.flagOverrides);
@@ -248,7 +248,7 @@ test("POST /api/profiles/import imports arrays and wrapped exports with safe con
   assert.equal(unsupported.json().error, "unsupported_export_version");
   assert.equal(await readFile(path.join(fixture.dataDir, "profiles.json"), "utf8"), beforeUnsupported);
 
-  const stored = JSON.parse(await readFile(path.join(fixture.dataDir, "profiles.json"), "utf8"));
+  const stored = (await app.inject({ method: "GET", url: "/api/profiles", headers: authHeader() })).json().profiles;
   assert.equal(stored.length, 4);
 });
 
@@ -261,7 +261,7 @@ test("POST /api/profiles/import rejects malformed payloads", async (t) => {
 
 test("GET /api/profiles/export excludes runtime state and logs", async (t) => {
   const { app, fixture } = await createFixtureApp(t);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture)]), "utf8");
+  await app.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture) });
 
   const response = await app.inject({ method: "GET", url: "/api/profiles/export", headers: authHeader() });
   assert.equal(response.statusCode, 200);
@@ -275,7 +275,7 @@ test("GET /api/profiles/export excludes runtime state and logs", async (t) => {
 
 test("GET /api/profiles/:id/snippets returns /v1 endpoint snippets and command preview", async (t) => {
   const { app, fixture } = await createFixtureApp(t);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture, { port: 19123 })]), "utf8");
+  await app.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture, { port: 19123 }) });
 
   const response = await app.inject({ method: "GET", url: "/api/profiles/daily-profile/snippets", headers: authHeader() });
   assert.equal(response.statusCode, 200);
@@ -288,7 +288,7 @@ test("GET /api/profiles/:id/snippets returns /v1 endpoint snippets and command p
 
 test("GET /api/profiles/:id/snippets brackets IPv6 endpoint hosts", async (t) => {
   const { app, fixture } = await createFixtureApp(t);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture, { host: "::1", port: 19124 })]), "utf8");
+  await app.inject({ method: "POST", url: "/api/profiles", headers: authHeader(), payload: profile(fixture, { host: "::1", port: 19124 }) });
 
   const response = await app.inject({ method: "GET", url: "/api/profiles/daily-profile/snippets", headers: authHeader() });
   assert.equal(response.statusCode, 200);
@@ -299,7 +299,6 @@ test("concurrent start and delete cannot remove a profile after start wins", asy
   const fixture = await makeFixture();
   process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
   t.after(() => delete process.env.OBSIDIANLM_DATA_DIR);
-  await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile(fixture)]), "utf8");
 
   const manager = new RuntimeManager(undefined, {
     portDetector: async (port) => ({ port, host: "127.0.0.1", inUse: false, ownerPid: null, detectionMethod: "test", warnings: [] }),
@@ -308,6 +307,7 @@ test("concurrent start and delete cannot remove a profile after start wins", asy
   const app = fastify({ logger: false });
   t.after(async () => app.close());
   await registerProfileRoutes(app, manager);
+  await app.inject({ method: "POST", url: "/api/profiles", payload: profile(fixture) });
 
   const [start, deleted] = await Promise.all([
     manager.start("daily-profile"),
@@ -317,7 +317,7 @@ test("concurrent start and delete cannot remove a profile after start wins", asy
   if (start.ok) {
     assert.equal(deleted.statusCode, 409);
     const stored = JSON.parse(await readFile(path.join(fixture.dataDir, "profiles.json"), "utf8"));
-    assert.equal(stored.length, 1);
+    assert.equal(stored.length, 0);
   } else {
     assert.equal(deleted.statusCode, 200);
     assert.equal(start.message, "Profile not found.");

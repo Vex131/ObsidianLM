@@ -10,7 +10,7 @@ The implemented Phases 1-13 use one model-bound profile per managed `llama-serve
 profile = llama-server build + GGUF model + model arguments + endpoint
 ```
 
-The next runtime architecture is planned, not implemented: ObsidianLM will manage one active llama.cpp build/router lifecycle and generate per-model router presets. Within that active build, llama.cpp's built-in router will manage model loading, unloading, autoload, residency limits, and eviction. ObsidianLM remains the control plane; it will not become a general inference proxy.
+The Phase 15 foundation is implemented through Builder Run 3; router lifecycle and preset integration remain planned. The foundation provides authoritative domain schema v2, strict verified v1-to-v2 migration, persistent Model Artifacts, stable Builds, and explicit Configured Model operations. ObsidianLM remains the control plane; it will not become a general inference proxy.
 
 ```text
 Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
@@ -18,7 +18,7 @@ Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
 OpenCode / Illustria / local clients → llama.cpp :8085/v1
 ```
 
-Same-build model selection will use llama.cpp's request `model` identifier and may cause the router to load another configured model without an ObsidianLM lifecycle action. A model configuration requiring another llama.cpp build will require ObsidianLM to stop the owned router, verify port release, and start the replacement build on the same `:8085` endpoint. See the [Project Plan](docs/ObsidianLM_Project_Plan.md) for migration and safety requirements.
+Same-build model selection and cross-build replacement remain future router work. See the [Project Plan](docs/ObsidianLM_Project_Plan.md) for migration and safety requirements.
 
 ## Package Manager
 
@@ -363,11 +363,17 @@ Follow `docs/validation/local-real-smoke.md` for the manual checklist before rel
 
 Phase 14 is complete. The operator console now has focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Visible navigation contains no placeholder page. Build discovery remains bounded, Jobs remain one-shot tools, runtime SSE stays bearer-authenticated, and process/telemetry surfaces remain read-only for unknown or external processes.
 
-Phase 14 preserves the current runtime model: profiles still launch one model-bound server. Phase 15 router behavior remains unimplemented.
+Phase 14 preserves the current runtime model: `RuntimeManager` and `activeProfileId` remain model-bound. Phase 15's domain/migration/artifact/build foundation is implemented through Builder Run 3; router behavior remains unimplemented.
 
-## Planned Phase 15 Router Evolution
+## Phase 15 Foundation and Planned Router Evolution
 
-Phase 15 will adopt llama.cpp's built-in router/preset capability while preserving ObsidianLM's conservative single-managed-runtime policy:
+The implemented Phase 15 foundation establishes schema-v2 authority and explicit API families `/api/model-artifacts`, `/api/configured-models`, and `/api/builds`. Discovery endpoints remain non-authoritative evidence. Persistent Model Artifacts and stable Builds are distinct from Phase 14 discovery; IDs are stable, dependent deletion is protected, Configured Model CRUD/duplicate/revalidate and projector associations are explicit, and candidates are never auto-selected.
+
+`phase15-domain.json` is authoritative. Its canonical revision changes only when stored authoritative content changes. The strict v1-to-v2 upgrade was verified with backup and atomic replacement; valid v2 ignores `profiles.json` changes. `profiles.json` is retained as legacy migration/recovery material and is never rewritten by Profile API after cutover. A separate `LegacyProfileCompatibilityBinding` preserves legacy IDs and `host`/`port`; Profile API operations project/translate through one domain transaction. `RuntimeManager` remains model-bound and `activeProfileId` is unchanged.
+
+Run 3 does not add router probes, lifecycle, presets, or UI. Static Build evidence/classification is independent of managed eligibility, which remains `not_validated`.
+
+The planned router evolution will adopt llama.cpp's built-in router/preset capability while preserving ObsidianLM's conservative single-managed-runtime policy:
 
 ```text
 ObsidianLM
@@ -377,7 +383,7 @@ one active llama.cpp router on :8085
 generated model presets
 ```
 
-The target default is conceptually `--models-max 1 --models-autoload` to preserve single-large-model residency. Generated INI files will be derived artifacts under the resolved ObsidianLM data directory; authoritative structured configuration will remain in ObsidianLM. Existing `profiles.json` data, imports/exports, custom arguments, and runtime-state references require a backed-up, fail-safe migration and are not changed yet.
+The target default is conceptually `--models-max 1 --models-autoload` to preserve single-large-model residency. Generated INI files will be derived artifacts under the resolved ObsidianLM data directory; authoritative structured configuration remains in ObsidianLM. Existing `profiles.json` data, imports/exports, custom arguments, and runtime-state references use the verified backed-up, fail-safe migration and compatibility projection.
 
 One router uses one `llama-server` executable/build family for its model children. Same-build model selection can be handled by llama.cpp. Cross-build selection must be initiated through ObsidianLM and restarts the managed router on the stable `:8085` endpoint. No transparent request-driven cross-build proxying, multiple permanent routers, automatic build updates, or unknown-process killing is planned for the initial integration.
 
@@ -511,7 +517,7 @@ You can also edit these folders from the dashboard under **Discovery folders**. 
 - Model scans stop below depth 8 and after 1000 `.gguf` files.
 - Tool input scans stop below depth 8 and after 1000 supported text-like files.
 - Build scans check the configured folder and one nested level below it.
-- Creating a profile appends to `data/profiles.json`, validates the profile, and does not start llama.cpp.
+- Creating or editing a profile uses the Profile API projection and translates the write into one domain transaction; it does not rewrite `profiles.json` or start llama.cpp.
 
 Supported model files in Phase 2:
 
@@ -580,9 +586,9 @@ Perplexity (`PPL`) is a language-model evaluation measure where lower is general
 
 ## Configure a llama.cpp Profile (Current Runtime Model)
 
-This section documents implemented pre-router behavior. These profiles remain supported until the planned Phase 15 compatibility migration is designed, implemented, and validated.
+This section documents the still model-bound RuntimeManager behavior. Profiles remain available through the compatibility projection; `profiles.json` is retained for legacy migration/recovery and is not rewritten after cutover.
 
-`data/profiles.json` is intentionally safe to edit manually and defaults to an empty list. Use `data/profiles.example.json` as a template, then replace the example paths with your local files.
+`data/profiles.json` is retained legacy migration/recovery material. Use `data/profiles.example.json` as a template only when preparing legacy input; after cutover, valid v2 domain state is authoritative and ignores `profiles.json` changes.
 
 Example profile shape:
 
@@ -630,7 +636,7 @@ Example profile shape:
 6. Review the profile fields, then click **Create profile**.
 7. Validate or start the new profile from the normal runtime controls.
 
-The created profile uses the selected model path and selected `llama-server` path, then stores the result in `data/profiles.json`.
+The created profile uses the selected model path and selected `llama-server` path, then stores the translated result through the authoritative domain transaction.
 
 ## Use the Better Profile Editor
 
@@ -677,7 +683,7 @@ Open the built UI/API at `http://localhost:8090`.
 
 From the UI:
 
-1. Select a profile from `data/profiles.json`.
+1. Select a profile from the Profiles view (the compatibility projection of authoritative domain state).
 2. Review the generated command preview.
 3. Run validation.
 4. Start the profile.

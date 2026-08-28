@@ -8,7 +8,7 @@ This document separates three things that earlier revisions mixed together:
 
 - **Completed foundation/history:** Phases 0-13 are implemented. Their original single-model runtime architecture was valid for those phases.
 - **Completed UI restructure:** Phase 14 provides focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Builds reports static router CLI evidence only; functional router validation remains Phase 15.
-- **Planned architecture:** Phase 15 introduces llama.cpp's built-in multi-model router while retaining ObsidianLM as the build and managed-router lifecycle manager. Phase 16 later adds Remote Nodes / Controller Mode. Neither phase is implemented yet.
+- **Phase 15 foundation:** Builder Run 3 implements the domain-schema-v2, migration, persistent artifact/build, and Configured Model foundation. Router lifecycle integration remains future work; Phase 16 later adds Remote Nodes / Controller Mode.
 
 The current implementation still stores a model-bound launch profile:
 
@@ -528,11 +528,13 @@ Phase 14 remains a UI restructuring phase. It does not implement the router, mig
 
 ## 17. Phase 15 - llama.cpp Router Integration
 
-**Status:** Planned. No router integration is currently implemented.
+**Status:** Foundation implemented through Builder Run 3. Router integration is not complete.
 
 ### Goal
 
 Evolve the one-profile/one-server runtime into one ObsidianLM-managed llama.cpp router for one selected build, with generated per-model presets and safe cross-build replacement on the stable `:8085` endpoint.
+
+Run 3 does not claim router or Phase 15 completion. It leaves managed eligibility `not_validated`, adds no router probes or lifecycle, and adds no presets or UI. Persistent Model Artifacts and stable Builds are explicit records distinct from Phase 14 discovery; Configured Model CRUD/duplicate/revalidate and projector associations are explicit, and candidates are never auto-selected. The API route families are `/api/model-artifacts`, `/api/configured-models`, and `/api/builds`; discovery remains evidence-only.
 
 ### Forward-compatible ownership constraint
 
@@ -541,14 +543,14 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 ### Dependencies
 
 - Existing Phases 0-13 foundation.
-- Phase 14 UI restructuring is complete; Phase 15 Models/Builds/Runtime evolution depends on the new router contracts.
+- Phase 14 UI restructuring is complete; Run 3 delivers the Phase 15 Models/Builds foundation, while runtime/router evolution depends on the remaining router contracts.
 - A current official build and representative custom/compatibility Windows builds for capability testing.
 - Real local GGUF configurations, including multimodal and duplicate-artifact cases, kept outside committed defaults/tests.
 
 ### Work sequence
 
-1. **Architecture and contracts:** Define versioned model-artifact, configured-model, build, router-runtime, generated-artifact, and migration contracts. Define stable IDs, router alias constraints, router endpoint responsibilities, model-source isolation, and unsupported-build behavior without changing data first.
-2. **Compatibility and migration:** Design fixtures and backup/rollback behavior for existing `profiles.json`, imports/exports, runtime state, duplicate model/build combinations, custom arguments, and missing references.
+1. **Architecture and contracts:** **Implemented through Run 3.** Domain schema v2, canonical revisions, stable IDs, authority boundaries, route families, and explicit artifact/build/configured-model operations are established.
+2. **Compatibility and migration:** **Implemented through Run 3.** Strict v1-to-v2 backup/atomic upgrade and legacy Profile compatibility/recovery behavior are verified. `profiles.json` is not rewritten after cutover.
 3. **Preset generation:** Implement deterministic atomic INI generation per build, Windows path handling, capability-aware validation, and separate launch/preset previews.
 4. **RuntimeManager router support:** Launch one router, validate `/health` separately from `/models` catalog/load state and diagnostic inference, stop safely, recover startup state, and retain stable port ownership rules.
 5. **Build switching:** Add explicit cross-build stop/release/start/validate transitions while same-build selection remains router-native.
@@ -584,7 +586,7 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 
 ### Acceptance criteria
 
-- Existing compatible profiles migrate or import without silent loss, with backups and actionable invalid-reference states.
+- Existing compatible profiles migrate or import without silent loss, with backups and actionable invalid-reference states. The verified strict v1-to-v2 upgrade is backup-protected and atomic; `profiles.json` remains legacy migration/recovery material and is not rewritten by Profile API after cutover.
 - One GGUF can back multiple stable configured-model identities and unique router aliases.
 - Configured models can explicitly enable/disable/select `mmproj` and validate model/projector/build compatibility.
 - ObsidianLM deterministically generates a validated preset containing all enabled configured models for one build.

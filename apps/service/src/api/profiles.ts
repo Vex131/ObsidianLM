@@ -17,8 +17,8 @@ import {
 import type { RuntimeManager } from "../runtime/manager.js";
 
 function storageError(error: unknown): { error: string; message: string } | null {
-  if (error instanceof SyntaxError) {
-    return { error: "invalid_storage_json", message: "data/profiles.json is invalid JSON. Fix the file before editing profiles." };
+  if (error instanceof SyntaxError || error instanceof Error && error.message.startsWith("Phase 15 migration:")) {
+    return { error: "invalid_storage", message: "Phase 15 domain storage is invalid. Repair authoritative storage before editing profiles." };
   }
   return null;
 }

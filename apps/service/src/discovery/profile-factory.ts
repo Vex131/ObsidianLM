@@ -1,10 +1,10 @@
 import path from "node:path";
 import type { CreateProfileFromDiscoveryRequest, CreateProfileFromDiscoveryResponse, LlamaCppProfile } from "@obsidianlm/shared";
-import { loadProfiles, loadSettings, saveProfiles } from "../config/storage.js";
+import { loadSettings } from "../config/storage.js";
 import { discoverLlamaBuilds } from "./llama-builds.js";
 import { discoverModels } from "./models.js";
 import { buildLlamaCppServerCommand } from "../runtime/command.js";
-import { validateProfile } from "../runtime/profiles.js";
+import { createManualProfile, listProfiles, validateProfile } from "../runtime/profiles.js";
 import { slugifyProfileId, stableId } from "./helpers.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -63,7 +63,7 @@ export function validateCreateProfileRequest(body: unknown): string[] {
 }
 
 export async function createProfileFromDiscovery(request: CreateProfileFromDiscoveryRequest): Promise<CreateProfileFromDiscoveryResponse> {
-  const profiles = await loadProfiles();
+  const profiles = await listProfiles();
   const settings = await loadSettings();
   const profileName = request.name.trim();
   const profile: LlamaCppProfile = {
@@ -106,11 +106,11 @@ export async function createProfileFromDiscovery(request: CreateProfileFromDisco
     };
   }
 
-  await saveProfiles([...profiles, profile]);
-
+  const created = await createManualProfile(profile);
+  created.validation.warnings.push(...modelDiscovery.warnings.map((warning) => warning.message), ...buildDiscovery.warnings.map((warning) => warning.message));
   return {
-    profile,
-    command: buildLlamaCppServerCommand(profile),
-    validation
+    profile: created.profile as LlamaCppProfile,
+    command: created.command ?? buildLlamaCppServerCommand(created.profile as LlamaCppProfile),
+    validation: created.validation
   };
 }
