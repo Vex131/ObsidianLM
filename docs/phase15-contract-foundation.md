@@ -1,6 +1,6 @@
 # Phase 15 Contract Foundation
 
-Builder Runs 1-3 add the versioned domain contract, storage, legacy Profile migration, and persistent model/build foundations. Run 3 implements the foundation only: it does not generate presets, launch a router, or change `RuntimeManager`.
+Builder Runs 1-4 add the versioned domain contract, storage, legacy Profile migration, persistent model/build foundations, and bounded functional Build validation. Run 4 validates capability only: it does not generate production presets, launch the managed router, or change `RuntimeManager`.
 
 ## Terms and authority
 
@@ -32,19 +32,21 @@ Resource references include an owner scope. Run 1 uses local ownership but permi
 
 ## Build eligibility
 
-Static Phase 14 evidence and bounded functional router evidence are separate contracts. Classification or visible CLI flags never establish eligibility. Normal managed inference requires successful functional evidence for preset acceptance, `/health`, `/models`, and required router behavior. Run 3 leaves eligibility `not_validated`; a failed build remains visible and may support independent Jobs, but is ineligible for normal managed inference. There is no automatic model-bound fallback.
+Static Phase 14 evidence and bounded functional router evidence are separate contracts. Classification or visible CLI flags never establish eligibility. `POST /api/builds/:id/validate-router` executes the exact registered local server after static preflight, using a temporary loopback port, a disposable one-model probe preset, and a sanitized environment with an empty controlled `LLAMA_CACHE`. The probe calls only `/health` and `/models`; it does not load a model or perform inference. Eligibility requires launch, preset, health, catalog, catalog-boundary, protocol-version, and current executable-fingerprint evidence. Replacing or removing the registered server invalidates functional eligibility. Missing local model prerequisites and Node-owned resources remain `not_validated`; deterministic unsupported behavior is `ineligible`, while inconclusive operational failure is `failed`.
+
+Functional validation certifies the required router controls and control-plane behavior only. It does not certify real autoload, eviction, GPU residency, or `models-max=1` behavior under load. Those remain later runtime and real-machine validation work. An ineligible Build remains registered and may still support independent Jobs; there is no automatic model-bound fallback.
 
 ## Router boundaries
 
-Run 3 adds no router probes, lifecycle management, generated presets, or UI. The foundation route families are `/api/model-artifacts`, `/api/configured-models`, and `/api/builds`; discovery endpoints remain evidence-producing and non-authoritative.
+Run 4 adds a validation-only router probe but no managed-router lifecycle, generated production presets, or UI. The route families remain `/api/model-artifacts`, `/api/configured-models`, and `/api/builds`; discovery endpoints remain evidence-producing and non-authoritative.
 
 - `GET /health` supplies bounded router/server health evidence.
 - `GET /models` supplies the router catalog and model load state.
 - `/v1/*` remains inference compatibility and bounded diagnostic inference, not the router control-plane catalog.
 
-Catalog entries are discriminated by ownership. A managed entry requires an explicitly reconciled Configured Model ID. External or unknown entries cannot carry one; path equality is not proof of management. Normal initial residency policy is represented as `models-max = 1` with autoload enabled, without launch implementation.
+Catalog entries are normalized and deterministically discriminated by ownership. A managed entry requires the exact expected router alias-to-Configured-Model relationship. Identifiable unexpected entries are external; malformed, duplicate, or ambiguous identifiers are unknown/mismatched. External or unknown entries cannot carry a Configured Model ID. Path, filename, metadata, source hints, or cache visibility are never management proof. The controlled one-model probe fails catalog-boundary verification if anything unexpected appears. This parser and isolation environment are reusable by the later managed router.
 
-Router launch previews and generated model-preset previews are separate contracts. Router runtime state is also separate from the current Profile-era `RuntimeState`; current `activeProfileId` and model-bound `RuntimeManager` behavior remain unchanged. Profile APIs now project/translate through the domain after cutover.
+Router launch previews and generated model-preset previews remain future production work. The disposable probe INI is not a `GeneratedRouterArtifact`. Router runtime state is also separate from the current Profile-era `RuntimeState`; current `activeProfileId`, legacy runtime health, and model-bound `RuntimeManager` behavior remain unchanged. Profile APIs continue to project/translate through the domain after cutover.
 
 ## Migration
 

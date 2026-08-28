@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
-import type { DiscoveredLlamaCppBuild, DiscoveryWarning, LlamaBuildCapabilitiesManifest, LlamaBuildDeviceCapability, LlamaBuildFlagCapability, LlamaBuildOrigin, LlamaBuildRouterAssessment, LlamaBuildVersionInfo } from "@obsidianlm/shared";
+import type { DiscoveredLlamaCppBuild, DiscoveredLlamaCppTool, DiscoveryWarning, LlamaBuildCapabilitiesManifest, LlamaBuildDeviceCapability, LlamaBuildFlagCapability, LlamaBuildOrigin, LlamaBuildRouterAssessment, LlamaBuildVersionInfo } from "@obsidianlm/shared";
 
 const probeTimeoutMs = 5_000;
 const maxProbeOutputBytes = 128 * 1024;
@@ -245,4 +245,8 @@ export async function getLlamaBuildCapabilities(build: DiscoveredLlamaCppBuild, 
   capabilityCache.set(fingerprint, manifest);
   if (capabilityCache.size > 32) capabilityCache.delete(capabilityCache.keys().next().value as string);
   return manifest;
+}
+
+export async function getLlamaBuildCapabilitiesForServer(serverPath: string, buildId: string, tools: DiscoveredLlamaCppTool[] = [], runner: LlamaBuildProbeRunner = runLlamaBuildProbe): Promise<LlamaBuildCapabilitiesManifest> {
+  return getLlamaBuildCapabilities({ id: buildId, name: serverPath, folder: serverPath, serverPath, tools, detectedAt: new Date().toISOString() }, runner);
 }

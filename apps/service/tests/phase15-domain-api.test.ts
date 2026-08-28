@@ -8,11 +8,25 @@ import { hashAdminToken } from "../src/auth/admin-token.js";
 import { discoverLlamaBuilds } from "../src/discovery/llama-builds.js";
 import { discoverModels } from "../src/discovery/models.js";
 import { createConfiguredModelInSnapshot, findOrRegisterLegacyBuildInSnapshot, findOrRegisterLocalArtifactInSnapshot, loadPhase15Domain, mutatePhase15Domain, validatePhase15DomainSnapshot } from "../src/config/phase15-domain.js";
-import { createServer } from "../src/server.js";
+import { createServer, type CreateServerOptions } from "../src/server.js";
+import type { LlamaBuildCapabilitiesManifest } from "@obsidianlm/shared";
 
 const token = "phase15-test-token";
 
-async function fixture(t: test.TestContext) {
+const validationManifest = (buildId: string): LlamaBuildCapabilitiesManifest => ({
+  buildId,
+  serverPath: "fixture-server",
+  inspectedAt: "2026-08-28T00:00:00.000Z",
+  origin: { classification: "official", source: "path_hint", evidence: [] },
+  status: "ready",
+  devices: [],
+  backendHints: [],
+  flags: ["--models-preset", "--models-max", "--models-autoload"].map((canonicalName) => ({ canonicalName, aliases: [] })),
+  router: { status: "candidate", evidence: { modelsPreset: true, modelsMax: true, modelsAutoload: true }, missingRequiredFlags: [], compatibilityHints: [] },
+  warnings: []
+});
+
+async function fixture(t: test.TestContext, options: CreateServerOptions = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "obsidianlm-phase15-api-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const models = path.join(dir, "models");
@@ -28,7 +42,7 @@ async function fixture(t: test.TestContext) {
   const oldData = process.env.OBSIDIANLM_DATA_DIR; const oldLogs = process.env.OBSIDIANLM_LOG_DIR;
   process.env.OBSIDIANLM_DATA_DIR = dir; process.env.OBSIDIANLM_LOG_DIR = path.join(dir, "logs");
   t.after(() => { if (oldData === undefined) delete process.env.OBSIDIANLM_DATA_DIR; else process.env.OBSIDIANLM_DATA_DIR = oldData; if (oldLogs === undefined) delete process.env.OBSIDIANLM_LOG_DIR; else process.env.OBSIDIANLM_LOG_DIR = oldLogs; });
-  const app = await createServer(); t.after(() => app.close());
+  const app = await createServer(options); t.after(() => app.close());
   const auth = { authorization: `Bearer ${token}` };
   const modelsFound = await discoverModels(); const buildsFound = await discoverLlamaBuilds();
   return { dir, model, projector, text, server, app, auth, modelId: modelsFound.models.find((m) => m.path === model)!.id, projectorId: modelsFound.models.find((m) => m.path === projector)!.id, textId: modelsFound.models.find((m) => m.path === text)!.id, buildId: buildsFound.builds.find((b) => b.serverPath === server)!.id };
@@ -43,7 +57,7 @@ test("Phase 15 domain APIs are protected and register stable discovery identitie
   assert.equal(repeated.json().artifact.id, artifact.id);
   const build = await f.app.inject({ method: "POST", url: "/api/builds/register", headers: f.auth, payload: { discoveryId: f.buildId } });
   assert.equal(build.statusCode, 201); assert.equal(build.json().build.managedInferenceEligibility, "not_validated");
-  assert.equal((await f.app.inject({ method: "PATCH", url: `/api/builds/${build.json().build.id}`, headers: f.auth, payload: { managedInferenceEligibility: "eligible" } })).statusCode, 400);
+  assert.equal((await f.app.inject({ method: "PATCH", url: `/api/builds/${build.json().build.id}`, headers: f.auth, payload: { managedInferenceEligibility: "eligible", functionalEvidence: {}, validatedAt: "forged", serverFingerprint: "forged", catalogBoundaryVerified: true } })).statusCode, 400);
   assert.equal((await f.app.inject({ method: "POST", url: "/api/model-artifacts/register", headers: f.auth, payload: {} })).statusCode, 400);
   const listed = await f.app.inject({ method: "GET", url: "/api/model-artifacts", headers: f.auth });
   assert.equal(listed.json().artifacts[0].configuredModelIds.length, 0);
@@ -109,6 +123,51 @@ test("reconciliation requires all references and persisted eligibility cannot be
     findOrRegisterLocalArtifactInSnapshot(snapshot, f.projector, { kind: "model" });
   }, f.dir), /kind conflicts/u);
   validatePhase15DomainSnapshot(await loadPhase15Domain(f.dir));
+});
+
+test("router validation API authenticates, validates payloads, and exposes injected outcomes", async (t) => {
+  let probeOutcome: "eligible" | "ineligible" | "failed" = "eligible";
+  let holdProbe: Promise<void> | undefined;
+  let announceProbe: (() => void) | undefined;
+  const options: CreateServerOptions = {
+    functionalRouterValidatorDependencies: {
+      fingerprint: async () => "api-fingerprint",
+      staticProbe: async (build) => validationManifest(build.id),
+      resourceAvailable: async () => true,
+      managedPort: async () => 8085,
+      probe: async ({ routerAlias }) => { announceProbe?.(); await holdProbe; return probeOutcome === "eligible"
+        ? { launchAttempted: true, presetAccepted: true, healthVerified: true, modelsVerified: true, models: [{ id: routerAlias, status: "unloaded" }], classification: "eligible", reason: "fixture", warnings: [], failures: [], cleanup: { childTerminated: true, workspaceRemoved: true } }
+        : { launchAttempted: true, presetAccepted: false, healthVerified: probeOutcome === "ineligible", modelsVerified: false, classification: probeOutcome, reason: probeOutcome === "failed" ? "validation timed out" : "router controls incompatible", warnings: [], failures: probeOutcome === "failed" ? ["probe_timeout"] : [], cleanup: { childTerminated: true, workspaceRemoved: true } }; }
+    }
+  };
+  const f = await fixture(t, options);
+  assert.equal((await f.app.inject({ method: "POST", url: "/api/builds/unknown/validate-router" })).statusCode, 401);
+  assert.equal((await f.app.inject({ method: "POST", url: "/api/builds/unknown/validate-router", headers: f.auth })).statusCode, 404);
+  const malformed = await f.app.inject({ method: "POST", url: "/api/builds/unknown/validate-router", headers: f.auth, payload: { configuredModelId: 42 } });
+  assert.equal(malformed.statusCode, 400);
+
+  const build = (await f.app.inject({ method: "POST", url: "/api/builds/register", headers: f.auth, payload: { discoveryId: f.buildId } })).json().build;
+  const missing = await f.app.inject({ method: "POST", url: `/api/builds/${build.id}/validate-router`, headers: f.auth });
+  assert.equal(missing.statusCode, 409);
+  const artifact = (await f.app.inject({ method: "POST", url: "/api/model-artifacts/register", headers: f.auth, payload: { discoveryId: f.modelId } })).json().artifact;
+  assert.equal((await f.app.inject({ method: "PATCH", url: `/api/model-artifacts/${artifact.id}`, headers: f.auth, payload: { kind: "model" } })).statusCode, 200);
+  const configured = (await f.app.inject({ method: "POST", url: "/api/configured-models", headers: f.auth, payload: { displayName: "API model", artifactId: artifact.id, buildId: build.id, enabled: false } })).json().model;
+  const eligible = await f.app.inject({ method: "POST", url: `/api/builds/${build.id}/validate-router`, headers: f.auth, payload: { configuredModelId: configured.id } });
+  assert.equal(eligible.statusCode, 200);
+  assert.equal(eligible.json().outcome, "eligible");
+  assert.equal(eligible.json().build.functionalEvidence.serverFingerprint, "api-fingerprint");
+  assert.equal(eligible.json().build.functionalEvidence.catalogBoundaryVerified, true);
+  probeOutcome = "ineligible";
+  const ineligible = await f.app.inject({ method: "POST", url: `/api/builds/${build.id}/validate-router`, headers: f.auth, payload: { configuredModelId: configured.id } });
+  assert.equal(ineligible.statusCode, 200); assert.equal(ineligible.json().outcome, "ineligible");
+  probeOutcome = "failed";
+  const failed = await f.app.inject({ method: "POST", url: `/api/builds/${build.id}/validate-router`, headers: f.auth, payload: { configuredModelId: configured.id } });
+  assert.equal(failed.statusCode, 200); assert.equal(failed.json().outcome, "failed");
+  probeOutcome = "eligible"; let release!: () => void; holdProbe = new Promise<void>((resolve) => { release = resolve; }); let started!: () => void; const probeStarted = new Promise<void>((resolve) => { started = resolve; }); announceProbe = started;
+  const first = f.app.inject({ method: "POST", url: `/api/builds/${build.id}/validate-router`, headers: f.auth, payload: { configuredModelId: configured.id } });
+  await probeStarted;
+  const concurrent = await f.app.inject({ method: "POST", url: `/api/builds/${build.id}/validate-router`, headers: f.auth, payload: { configuredModelId: configured.id } });
+  assert.equal(concurrent.statusCode, 409); release(); assert.equal((await first).statusCode, 200);
 });
 
 test("domain mutations serialize and failed atomic rename preserves bytes", async (t) => {

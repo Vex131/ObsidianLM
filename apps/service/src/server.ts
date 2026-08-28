@@ -20,9 +20,11 @@ import { ensureAppDirectories, webDistDir } from "./config/paths.js";
 import type { GpuMonitorOptions } from "./monitoring/gpu-monitor.js";
 import { RuntimeManager } from "./runtime/manager.js";
 import { JobManager } from "./jobs/manager.js";
+import type { FunctionalRouterValidatorDependencies } from "./router/functional-validator.js";
 
 export interface CreateServerOptions {
   gpuMonitorOptions?: GpuMonitorOptions;
+  functionalRouterValidatorDependencies?: FunctionalRouterValidatorDependencies;
 }
 
 export async function createServer(options: CreateServerOptions = {}): Promise<FastifyInstance> {
@@ -60,7 +62,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   await registerProfileRoutes(app, runtimeManager);
   await registerRuntimeRoutes(app, runtimeManager);
   await registerDiscoveryRoutes(app);
-  await registerPhase15DomainRoutes(app);
+  await registerPhase15DomainRoutes(app, options.functionalRouterValidatorDependencies);
   await registerProcessRoutes(app);
   await registerMonitoringRoutes(app, runtimeManager, options.gpuMonitorOptions);
   await registerJobRoutes(app, jobManager);

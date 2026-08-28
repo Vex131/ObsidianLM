@@ -173,7 +173,8 @@ export async function loadLegacyProfiles(dataDir = getDataDir(), dependencies: P
 }
 
 function isReference(value: unknown): boolean {
-  return isRecord(value) && isRecord(value.owner) && value.owner.scope === "local" && typeof value.locator === "string";
+  return isRecord(value) && isRecord(value.owner) && typeof value.locator === "string"
+    && (value.owner.scope === "local" || value.owner.scope === "node" && typeof value.owner.nodeId === "string" && value.owner.nodeId.length > 0);
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -213,12 +214,14 @@ function isGgufMetadataInspection(value: unknown): value is UnknownRecord {
 
 function isStaticEvidence(value: unknown): boolean {
   return isRecord(value) && value.kind === "static" && typeof value.assessedAt === "string" && Array.isArray(value.discoveredTools) && value.discoveredTools.every(isDiscoveredTool)
-    && (value.versionInfo === undefined || isVersionInfo(value.versionInfo)) && isRouterAssessment(value.routerFlags) && isStringArray(value.warnings);
+    && (value.versionInfo === undefined || isVersionInfo(value.versionInfo)) && (value.serverFingerprint === undefined || typeof value.serverFingerprint === "string")
+    && isRouterAssessment(value.routerFlags) && isStringArray(value.warnings);
 }
 
 function isFunctionalEvidence(value: unknown): boolean {
   return isRecord(value) && value.kind === "functional" && ["unknown", "not_validated", "validating", "eligible", "ineligible", "failed"].includes(String(value.state))
-    && typeof value.launchAttempted === "boolean" && [value.presetAccepted, value.healthVerified, value.modelsVerified, value.requiredBehaviorVerified].every((item) => item === undefined || typeof item === "boolean")
+    && value.validationProtocolVersion === 1 && typeof value.serverFingerprint === "string" && typeof value.launchAttempted === "boolean"
+    && [value.presetAccepted, value.healthVerified, value.modelsVerified, value.catalogBoundaryVerified, value.requiredBehaviorVerified].every((item) => item === undefined || typeof item === "boolean")
     && [value.attemptedAt, value.completedAt, value.reason].every((item) => item === undefined || typeof item === "string")
     && isStringArray(value.warnings) && isStringArray(value.failures);
 }
@@ -271,7 +274,7 @@ export function validatePhase15DomainSnapshot(value: unknown): asserts value is 
   if (!artifacts.every((artifact) => isRecord(artifact) && artifact.schemaVersion === MODEL_CONFIGURATION_SCHEMA_VERSION && typeof artifact.id === "string" && isReference(artifact.resource) && artifactKinds.has(String(artifact.kind)) && referenceStatuses.has(String(artifact.referenceStatus))
       && (artifact.metadata === undefined || isGgufMetadataInspection(artifact.metadata) && artifact.metadata.artifactId === artifact.id))
     || !builds.every((build) => isRecord(build) && build.schemaVersion === 1 && typeof build.id === "string" && typeof build.displayName === "string" && isReference(build.resource) && isReference(build.server)
-      && Array.isArray(build.tools) && build.tools.every(isDiscoveredTool) && (build.versionInfo === undefined || isVersionInfo(build.versionInfo)) && (build.staticEvidence === undefined || isStaticEvidence(build.staticEvidence)) && (build.functionalEvidence === undefined || isFunctionalEvidence(build.functionalEvidence))
+      && Array.isArray(build.tools) && build.tools.every(isDiscoveredTool) && (build.versionInfo === undefined || isVersionInfo(build.versionInfo)) && (build.staticEvidence === undefined || isStaticEvidence(build.staticEvidence)) && (build.functionalEvidence === undefined || isFunctionalEvidence(build.functionalEvidence)) && (build.serverFingerprint === undefined || typeof build.serverFingerprint === "string")
       && buildClassifications.has(String(build.classification)) && buildStates.has(String(build.managedInferenceEligibility)) && isStringArray(build.warnings) && isStringArray(build.failures))
     || !models.every((model) => isRecord(model) && model.schemaVersion === MODEL_CONFIGURATION_SCHEMA_VERSION && typeof model.id === "string" && typeof model.displayName === "string"
       && typeof model.routerAlias === "string" && isRouterAlias(model.routerAlias) && typeof model.artifactId === "string" && typeof model.buildId === "string" && typeof model.enabled === "boolean"
@@ -296,7 +299,9 @@ export function validatePhase15DomainSnapshot(value: unknown): asserts value is 
   }
   if (!(builds as UnknownRecord[]).every((build) => build.managedInferenceEligibility !== "eligible" || (isRecord(build.functionalEvidence)
     && build.functionalEvidence.state === "eligible" && build.functionalEvidence.launchAttempted === true && build.functionalEvidence.presetAccepted === true
-    && build.functionalEvidence.healthVerified === true && build.functionalEvidence.modelsVerified === true && build.functionalEvidence.requiredBehaviorVerified === true))) {
+    && build.functionalEvidence.healthVerified === true && build.functionalEvidence.modelsVerified === true && build.functionalEvidence.catalogBoundaryVerified === true
+    && build.functionalEvidence.requiredBehaviorVerified === true && build.functionalEvidence.validationProtocolVersion === 1
+    && typeof build.serverFingerprint === "string" && build.functionalEvidence.serverFingerprint === build.serverFingerprint))) {
     throw errorMessage("phase15-domain.json has unsupported managed inference eligibility evidence");
   }
   if (!(models as UnknownRecord[]).every((model) => {
@@ -549,6 +554,22 @@ export function findOrRegisterLegacyBuildInSnapshot(snapshot: Phase15DomainSnaps
   }
   const build: LlamaCppBuild = { schemaVersion: 1, id: createLlamaCppBuildId(), displayName: path.basename(serverLocator) || serverLocator, resource: resource(path.dirname(serverLocator)), server: resource(serverLocator), tools: [{ kind: "server", fileName: path.basename(serverLocator), path: serverLocator, exists: referenceStatus === "available" }], classification: "unknown", managedInferenceEligibility: "not_validated", warnings: [], failures: [] };
   snapshot.builds.push(build);
+  return clone(build);
+}
+
+export function reconcileBuildFingerprintInSnapshot(snapshot: Phase15DomainSnapshot, buildId: string, fingerprint: string | undefined, reason = "Router validation was invalidated because the registered server executable changed or disappeared."): LlamaCppBuild {
+  const build = snapshot.builds.find((entry) => entry.id === buildId);
+  if (!build) throw errorMessage("build not found");
+  const changed = build.serverFingerprint !== undefined && build.serverFingerprint !== fingerprint;
+  const staleEvidence = build.functionalEvidence !== undefined && build.functionalEvidence.serverFingerprint !== fingerprint;
+  if (changed || staleEvidence || fingerprint === undefined && (build.functionalEvidence !== undefined || build.managedInferenceEligibility === "eligible")) {
+    build.managedInferenceEligibility = "not_validated";
+    delete build.functionalEvidence;
+    delete build.validatedAt;
+    if (!build.warnings.includes(reason)) build.warnings.push(reason);
+  }
+  if (fingerprint === undefined) delete build.serverFingerprint;
+  else build.serverFingerprint = fingerprint;
   return clone(build);
 }
 

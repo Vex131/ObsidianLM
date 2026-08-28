@@ -67,6 +67,7 @@ test("managed inference eligibility requires functional router evidence", () => 
     displayName: "Official build",
     resource: localResource("/fixtures/builds/official"),
     server: localResource("/fixtures/builds/official/llama-server"),
+    serverFingerprint: "fingerprint-current",
     tools: [],
     classification: "official",
     staticEvidence: {
@@ -93,10 +94,13 @@ test("managed inference eligibility requires functional router evidence", () => 
     functionalEvidence: {
       kind: "functional",
       state: "eligible",
+      validationProtocolVersion: 1,
+      serverFingerprint: "fingerprint-current",
       launchAttempted: false,
       presetAccepted: true,
       healthVerified: true,
       modelsVerified: true,
+      catalogBoundaryVerified: true,
       requiredBehaviorVerified: true,
       warnings: [],
       failures: []
@@ -109,10 +113,13 @@ test("managed inference eligibility requires functional router evidence", () => 
     functionalEvidence: {
       kind: "functional",
       state: "eligible",
+      validationProtocolVersion: 1,
+      serverFingerprint: "fingerprint-current",
       launchAttempted: true,
       presetAccepted: true,
       healthVerified: true,
       modelsVerified: true,
+      catalogBoundaryVerified: true,
       requiredBehaviorVerified: true,
       warnings: [],
       failures: []

@@ -16,18 +16,22 @@ export interface LlamaCppBuildStaticEvidence {
   discoveredTools: DiscoveredLlamaCppTool[];
   versionInfo?: LlamaBuildVersionInfo;
   routerFlags: LlamaBuildRouterAssessment;
+  serverFingerprint?: string;
   warnings: string[];
 }
 
 export interface LlamaCppBuildFunctionalEvidence {
   kind: "functional";
   state: BuildValidationState;
+  validationProtocolVersion: 1;
+  serverFingerprint: string;
   attemptedAt?: string;
   completedAt?: string;
   launchAttempted: boolean;
   presetAccepted?: boolean;
   healthVerified?: boolean;
   modelsVerified?: boolean;
+  catalogBoundaryVerified?: boolean;
   requiredBehaviorVerified?: boolean;
   reason?: string;
   warnings: string[];
@@ -46,6 +50,8 @@ export interface LlamaCppBuild {
   classification: LlamaCppBuildClassification;
   staticEvidence?: LlamaCppBuildStaticEvidence;
   functionalEvidence?: LlamaCppBuildFunctionalEvidence;
+  /** Latest observed fingerprint of the registered server executable. */
+  serverFingerprint?: string;
   managedInferenceEligibility: BuildValidationState;
   validatedAt?: string;
   warnings: string[];
@@ -59,5 +65,9 @@ export function isBuildEligibleForManagedInference(build: LlamaCppBuild): boolea
     && build.functionalEvidence.presetAccepted === true
     && build.functionalEvidence.healthVerified === true
     && build.functionalEvidence.modelsVerified === true
-    && build.functionalEvidence.requiredBehaviorVerified === true;
+    && build.functionalEvidence.catalogBoundaryVerified === true
+    && build.functionalEvidence.requiredBehaviorVerified === true
+    && build.functionalEvidence.validationProtocolVersion === 1
+    && build.serverFingerprint !== undefined
+    && build.functionalEvidence.serverFingerprint === build.serverFingerprint;
 }
