@@ -6,6 +6,7 @@ export type {
   JobListResponse,
   JobLogsResponse,
   JobResult,
+  JobSelectionDetails,
   JobRecord,
   JobStatus,
   JobType,
@@ -18,6 +19,7 @@ export type {
   LlamaPerplexityJobResult,
   LlamaPerplexityRequest
 } from "./types/jobs.js";
+export type { ServiceLogFile, ServiceLogsResponse } from "./types/logs.js";
 export type {
   CommandSpec,
   LlamaCppArgs,
@@ -36,7 +38,7 @@ export type {
   RuntimeWarning
 } from "./types/runtime-state.js";
 export type { RuntimeDiagnosticProfile, RuntimeHealthResponse, RuntimeHealthStatus, RuntimeTestChatRequest, RuntimeTestChatResponse } from "./types/runtime-diagnostics.js";
-export type { AppSettings, StartupMode, StaleProcessPolicy } from "./types/settings.js";
+export type { AppSettings, RuntimeSettingsResponse, RuntimeSettingsUpdate, StartupMode, StaleProcessPolicy } from "./types/settings.js";
 export type { AdminTokenRequest, AuthLogoutResponse, AuthSetupResponse, AuthStatusResponse, AuthVerifyResponse } from "./types/auth.js";
 export type { ActiveRuntimeStatus, StatusResponse } from "./types/status.js";
 export type {

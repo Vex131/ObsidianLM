@@ -1,5 +1,5 @@
 import type { CommandSpec, GpuDevice, ProfileValidationResponse, RuntimeProfile } from "@obsidianlm/shared";
-import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type GpuMonitoringStatus, type ProfileListResponse, type RuntimeLogsResponse, type RuntimeState } from "../api";
+import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type GpuMonitoringStatus, type ProfileListResponse, type ReadinessResponse, type RuntimeHealthResponse, type RuntimeLogsResponse, type RuntimeState } from "../api";
 
 export type RuntimeStateResponse = {
   state: RuntimeState;
@@ -17,6 +17,8 @@ export type DashboardData = {
   runtimeLogs: RuntimeLogsResponse["logs"];
   gpuStatus: GpuMonitoringStatus | null;
   profiles: ProfileListResponse["profiles"];
+  readiness: ReadinessResponse | null;
+  runtimeHealth: RuntimeHealthResponse | null;
   usedProfileCommandFallback: boolean;
   hasToken: boolean;
   loadedAt: string | null;
@@ -47,6 +49,8 @@ export const emptyDashboardData: DashboardData = {
   runtimeLogs: [],
   gpuStatus: null,
   profiles: [],
+  readiness: null,
+  runtimeHealth: null,
   usedProfileCommandFallback: false,
   hasToken: false,
   loadedAt: null
@@ -66,11 +70,13 @@ export async function fetchDashboardData(activeProfileIdFallback: string | null 
     return { ...emptyDashboardData };
   }
 
-  const [runtimeResponse, logsResponse, gpuStatus, profilesResponse] = await Promise.all([
+  const [runtimeResponse, logsResponse, gpuStatus, profilesResponse, readiness, runtimeHealth] = await Promise.all([
     protectedFetch<RuntimeStateResponse>(API_ENDPOINTS.runtime.state, token),
     protectedFetch<RuntimeLogsResponse>(API_ENDPOINTS.runtime.logs(24), token),
     protectedFetch<GpuMonitoringStatus>(API_ENDPOINTS.monitoring.gpu, token),
-    protectedFetch<ProfileListResponse>(API_ENDPOINTS.profiles.list, token)
+    protectedFetch<ProfileListResponse>(API_ENDPOINTS.profiles.list, token),
+    protectedFetch<ReadinessResponse>(API_ENDPOINTS.readiness, token),
+    protectedFetch<RuntimeHealthResponse>(API_ENDPOINTS.runtime.health, token)
   ]);
 
   const runtimeCommandResponse = await protectedFetch<RuntimeCommandResponse>(API_ENDPOINTS.runtime.command, token);
@@ -85,6 +91,8 @@ export async function fetchDashboardData(activeProfileIdFallback: string | null 
     runtimeLogs: logsResponse?.logs ?? [],
     gpuStatus,
     profiles: profilesResponse?.profiles ?? [],
+    readiness,
+    runtimeHealth,
     usedProfileCommandFallback: !runtimeCommandResponse && Boolean(fallbackCommandResponse),
     hasToken: true,
     loadedAt: new Date().toISOString()

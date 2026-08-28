@@ -6,7 +6,11 @@
   import ProfilesPage from "./lib/pages/ProfilesPage.svelte";
   import ModelsPage from "./lib/pages/ModelsPage.svelte";
   import BuildsPage from "./lib/pages/BuildsPage.svelte";
-  import PlaceholderPage from "./lib/pages/PlaceholderPage.svelte";
+  import JobsPage from "./lib/pages/JobsPage.svelte";
+  import LogsPage from "./lib/pages/LogsPage.svelte";
+  import TelemetryPage from "./lib/pages/TelemetryPage.svelte";
+  import SettingsPage from "./lib/pages/SettingsPage.svelte";
+  import SystemPage from "./lib/pages/SystemPage.svelte";
   import { defaultShellStatus, type ShellStatusSummary, type ShellStatusTone } from "./lib/layout/shell-status";
   import { API_ENDPOINTS, fetchJson, publicFetchJson, readStoredAdminToken, type RuntimeState, type StatusResponse } from "./lib/api";
 
@@ -21,7 +25,7 @@
     "#profiles": "Profiles",
     "#models": "Models",
     "#builds": "Builds",
-    "#artifacts": "Artifacts",
+    "#jobs": "Jobs",
     "#logs": "Logs",
     "#telemetry": "Telemetry",
     "#settings": "Settings",
@@ -35,7 +39,8 @@
     "/profiles": "#profiles",
     "/models": "#models",
     "/builds": "#builds",
-    "/artifacts": "#artifacts",
+    "/artifacts": "#jobs",
+    "/jobs": "#jobs",
     "/logs": "#logs",
     "/telemetry": "#telemetry",
     "/settings": "#settings",
@@ -49,7 +54,6 @@
   let runtimeWarnings: string[] = [];
   let now = Date.now();
 
-  $: currentPageLabel = pageLabels[activeHash as keyof typeof pageLabels] ?? "Dashboard";
   $: shellStatus = buildShellStatus(status, statusRequestFailed, runtimeState, now);
 
   function parsePortLabel(apiUrl: string | null | undefined): string | null {
@@ -161,7 +165,7 @@
 
   function syncHash() {
     const hash = window.location.hash.split("?")[0];
-    activeHash = hash || pathRoutes[window.location.pathname.replace(/\/+$/, "") || "/"] || "#dashboard";
+    activeHash = hash === "#artifacts" ? "#jobs" : (hash || pathRoutes[window.location.pathname.replace(/\/+$/, "") || "/"] || "#dashboard");
   }
 
   onMount(() => {
@@ -196,7 +200,17 @@
     <ModelsPage />
   {:else if activeHash === "#builds"}
     <BuildsPage />
+  {:else if activeHash === "#jobs"}
+    <JobsPage />
+  {:else if activeHash === "#logs"}
+    <LogsPage />
+  {:else if activeHash === "#telemetry"}
+    <TelemetryPage />
+  {:else if activeHash === "#settings"}
+    <SettingsPage />
+  {:else if activeHash === "#system"}
+    <SystemPage />
   {:else}
-    <PlaceholderPage title={currentPageLabel} />
+    <DashboardPage {shellStatus} {status} {runtimeState} {runtimeWarnings} />
   {/if}
 </AppShell>

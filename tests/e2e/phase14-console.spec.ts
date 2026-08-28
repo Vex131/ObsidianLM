@@ -1,0 +1,82 @@
+import { expect, test, type Page, type Route } from "@playwright/test";
+
+const token = "e2e-admin-token";
+const now = "2026-08-28T12:00:00.000Z";
+const model = { id: "model-1", name: "Tiny model", fileName: "tiny.Q4.gguf", path: "C:/models/tiny.Q4.gguf", folder: "C:/models", extension: ".gguf", sizeBytes: 1024, modifiedAt: now, detectedAt: now, quantizationGuess: "Q4", artifactKindGuess: "model" };
+const build = { id: "build-1", name: "CPU build", folder: "C:/llama", serverPath: "C:/llama/llama-server.exe", tools: [{ kind: "bench", path: "C:/llama/llama-bench.exe", fileName: "llama-bench.exe" }, { kind: "perplexity", path: "C:/llama/llama-perplexity.exe", fileName: "llama-perplexity.exe" }], detectedAt: now };
+const job = { id: "job-1", type: "llama-bench", status: "completed", createdAt: now, startedAt: now, finishedAt: now, command: "llama-bench [redacted]", executable: "llama-bench.exe", args: [], cwd: null, exitCode: 0, signal: null, logPath: "job.log", resultPath: null, errorMessage: null, selection: { tool: "llama-bench.exe", build: "llama", model: "tiny.Q4.gguf" }, result: { type: "llama-bench", parsed: true, rows: [{ test: "pp512", backend: "CPU", threads: "4", gpuLayers: "0", nPrompt: "512", tokensPerSecond: 42, raw: {} }], warnings: [] } };
+const status = { app: "ObsidianLM", version: "0.14.0", runningMode: "development", serviceMode: false, dataDirMode: "project", logDirMode: "project", uiPort: 18090, managedLlamaPort: 8085, warnings: [], detection: { warnings: [], categories: [], ports: [], checkedAt: now }, gpu: { available: true, gpuCount: 1 }, activeRuntime: { status: "running", pid: 1234, profileId: "p1", profileName: "Fast profile", apiUrl: "http://127.0.0.1:8085" } };
+const runtime = { state: { status: "running", pid: 1234, activeProfileId: "p1", startedAt: now }, warnings: [] };
+const settings = { settings: { modelFolders: ["C:/models"], llamaCppFolders: ["C:/llama"], toolInputFolders: ["C:/data"], managedLlamaPort: 8085, uiPort: 18090, startupMode: "service_only", staleProcessPolicy: "auto_stop_previous_managed_only", adminTokenHash: null } };
+const readiness = { ok: true, blockingChecks: [], warnings: [], storageWarnings: [], nextActions: [], counts: {}, checks: [{ id: "models", label: "Models", status: "pass", message: "Models discovered", count: 1 }] };
+
+async function fixture(page: Page, options: { gpu?: boolean; storedToken?: boolean } = {}) {
+  if (options.storedToken !== false) await page.addInitScript(() => localStorage.setItem("obsidianlm.adminToken", "e2e-admin-token"));
+  await page.route("**/api/**", async (route: Route) => {
+    const url = new URL(route.request().url()); const path = url.pathname;
+    if (path === "/api/status") return route.fulfill({ json: status });
+    if (path === "/api/auth/status") return route.fulfill({ json: { configured: true } });
+    if (path === "/api/settings") return route.fulfill({ json: settings });
+    if (path === "/api/readiness") return route.fulfill({ json: readiness });
+    if (path === "/api/runtime" || path === "/api/runtime/health") return route.fulfill({ json: path.endsWith("health") ? { ok: true, status: "healthy" } : runtime });
+    if (path === "/api/runtime/logs") return route.fulfill({ json: { logs: [{ id: 1, sequence: 1, timestamp: now, source: "stdout", stream: "stdout", message: "runtime listening" }], warnings: [] } });
+    if (path === "/api/runtime/command") return route.fulfill({ json: { command: { executable: build.serverPath, args: ["--model", model.path], displayCommand: "llama-server --model tiny.Q4.gguf" } } });
+    if (path === "/api/runtime/logs/stream") return route.fulfill({ status: 200, contentType: "text/event-stream", body: `event: log\ndata: ${JSON.stringify({ id: 2, sequence: 2, timestamp: now, source: "system", stream: "system", message: "SSE runtime log" })}\n\n` });
+    if (path === "/api/profiles") return route.fulfill({ json: { profiles: [{ id: "p1", name: "Fast profile", modelPath: model.path, buildPath: build.serverPath, llamaArgs: { ctxSize: 4096, gpuLayers: 12 } }] } });
+    if (path === "/api/discovery/models") return route.fulfill({ json: { models: [model], warnings: [], scannedFolders: ["C:/models"], detectedAt: now } });
+    if (path === "/api/discovery/llama-builds") return route.fulfill({ json: { builds: [build], warnings: [], scannedFolders: ["C:/llama"], detectedAt: now } });
+    if (path === "/api/discovery/tool-inputs") return route.fulfill({ json: { files: [{ name: "wiki.txt", path: "C:/data/wiki.txt" }], warnings: [], scannedFolders: ["C:/data"] } });
+    if (path === "/api/jobs" && route.request().method() === "GET") return route.fulfill({ json: { jobs: [job] } });
+    if (path.endsWith("/logs") && path.includes("/jobs/")) return route.fulfill({ json: { logs: ["bench started", "42 tokens/s"] } });
+    if (path === "/api/monitoring/gpu") return route.fulfill({ json: options.gpu === false ? { available: false, warnings: [{ message: "nvidia-smi unavailable" }], summary: { gpuCount: 0, usedMemoryMiB: null, totalMemoryMiB: null }, gpus: [], processes: [] } : { available: true, driverVersion: "555", cudaVersion: "12.4", warnings: [], summary: { gpuCount: 1, usedMemoryMiB: 100, totalMemoryMiB: 1000 }, gpus: [{ name: "RTX test", memoryUsedMiB: 100, memoryTotalMiB: 1000, utilizationGpuPercent: 20, temperatureGpuC: 50, powerDrawW: 40, powerLimitW: 200 }], processes: [{ pid: 1234, processName: "llama-server.exe", gpuIndex: 0, usedMemoryMiB: 100, kind: "current_managed_runtime", reasons: ["PID matches the current managed runtime."] }, { pid: 8888, processName: "other.exe", gpuIndex: 0, usedMemoryMiB: 20, kind: "unknown_gpu_process", reasons: ["Not managed by ObsidianLM."] }] } });
+    if (path === "/api/monitoring/ports") return route.fulfill({ json: { port: { port: 8085, inUse: true, ownerPid: 1234, detectionMethod: "fixture", warnings: [] }, conflict: false } });
+    if (path === "/api/processes/llama") return route.fulfill({ json: { processes: [{ pid: 1234, name: "llama-server.exe", startedAt: now, confidence: "medium", reasons: ["Process resembles llama-server."] }, { pid: 9999, name: "llama-server.exe", startedAt: now, confidence: "low", reasons: ["PID does not match managed runtime."] }], warnings: [], detectionMethod: "fixture" } });
+    if (path === "/api/logs/service") return route.fulfill({ json: { logs: [], warnings: [] } });
+    if (route.request().method() === "POST" || route.request().method() === "PATCH") return route.fulfill({ json: { ...job, status: "running", message: "ok" } });
+    return route.fulfill({ json: {} });
+  });
+}
+
+test("Phase 14 navigation has exact pages and no Artifacts route", async ({ page }) => {
+  await fixture(page); await page.goto("/#dashboard");
+  for (const label of ["Dashboard", "Runtime", "Profiles", "Models", "Builds", "Jobs", "Logs", "Telemetry", "Settings", "System"]) {
+    await page.getByRole("link", { name: new RegExp(`^${label}$`) }).click();
+    await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
+    await expect(page.getByText(/placeholder|coming soon|not implemented/i)).not.toBeVisible();
+  }
+  await expect(page.getByRole("link", { name: /^Artifacts$/ })).not.toBeVisible();
+  await page.setViewportSize({ width: 320, height: 720 }); await expect(page.getByRole("link", { name: /^Dashboard$/ })).toBeVisible(); await expect(page.getByRole("link", { name: /^System$/ })).toBeVisible();
+});
+
+test("Jobs runs both tools, sends structured controls, cancels, and renders history", async ({ page }) => {
+  await fixture(page); const pageErrors: string[] = []; page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/#jobs"); await expect(page.getByRole("heading", { name: "Jobs", exact: true })).toBeVisible();
+  await page.getByLabel(/Discovered bench tool/).selectOption("build-1|C:/llama/llama-bench.exe"); await page.getByLabel("Primary model").selectOption(model.path); await page.getByLabel("Threads").fill("4"); await page.getByRole("button", { name: "Run bench" }).click(); await page.waitForTimeout(100); expect(pageErrors).toEqual([]); await expect(page.getByRole("status").last()).toContainText("Job queued");
+  await expect(page.getByText(/pp512 · 42 tok\/s/)).toBeVisible(); await page.getByRole("button", { name: /llama-bench completed/ }).click(); await expect(page.getByText("bench started")).toBeVisible();
+  await page.route("**/api/jobs", (route) => route.request().method() === "GET" ? route.fulfill({ json: { jobs: [{ ...job, id: "job-running", status: "running", finishedAt: null }] } }) : route.fallback());
+  await page.route("**/api/jobs/job-running/cancel", (route) => route.fulfill({ json: { ok: true, message: "Cancellation requested", job: { ...job, id: "job-running", status: "cancelled" } } }));
+  await page.getByRole("button", { name: "Refresh" }).first().click(); await expect(page.getByRole("button", { name: "Cancel current" })).toBeEnabled(); const cancelRequest = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith("/job-running/cancel")); await page.getByRole("button", { name: "Cancel current" }).click(); await cancelRequest;
+  await page.unroute("**/api/jobs"); await page.getByRole("button", { name: "Perplexity" }).click(); await page.getByLabel(/Discovered perplexity tool/).selectOption("build-1|C:/llama/llama-perplexity.exe"); await page.getByLabel("Primary model").selectOption(model.path); await page.getByLabel("Discovered dataset").selectOption("C:/data/wiki.txt"); await expect(page.getByRole("button", { name: "Run perplexity" })).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 720 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("Logs authenticates SSE, filters sources, pauses, and renders jobs/service", async ({ page }) => {
+  await fixture(page); let auth = ""; await page.route("**/api/runtime/logs/stream**", async (route) => { auth = route.request().headers().authorization ?? ""; await route.fulfill({ status: 200, contentType: "text/event-stream", body: `event: log\ndata: ${JSON.stringify({ id: 3, sequence: 3, timestamp: now, source: "stdout", stream: "stdout", message: "SSE visible" })}\n\n` }); });
+  await page.goto("/#logs"); await expect(page.getByText("SSE visible")).toBeVisible(); expect(auth).toBe(`Bearer ${token}`); expect(page.url()).not.toContain(token); await page.getByRole("button", { name: "Pause" }).click(); await expect(page.getByRole("button", { name: "Resume" })).toBeVisible(); await page.getByRole("button", { name: "Jobs" }).click(); await page.getByLabel("Job").selectOption("job-1"); await expect(page.getByText("42 tokens/s")).toBeVisible(); await page.getByRole("button", { name: "Service" }).click(); await expect(page.getByText("service output")).toBeVisible(); await page.getByRole("button", { name: /Clear visible/ }).click();
+});
+
+test("Telemetry shows managed/external processes, meters, port state, and unavailable GPU", async ({ page }) => {
+  await fixture(page); await page.setViewportSize({ width: 320, height: 720 }); await page.goto("/#telemetry"); await expect(page.getByText("RTX test")).toBeVisible(); await expect(page.getByText("Managed", { exact: true })).toBeVisible(); await expect(page.getByText("External", { exact: true })).toBeVisible(); await expect(page.getByText(/Port: 8085 · occupied/)).toBeVisible(); await expect(page.getByText("unknown_gpu_process", { exact: true })).toBeVisible(); await expect(page.getByRole("button", { name: /kill|adopt/i })).toHaveCount(0); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.unrouteAll(); await fixture(page, { gpu: false }); await page.goto("/#telemetry"); await expect(page.getByText("GPU monitoring unavailable")).toBeVisible();
+});
+
+test("Settings stores no rendered secret, locks locally, edits folders, and blocks invalid ports", async ({ page }) => {
+  await fixture(page, { storedToken: false }); await page.goto("/#settings"); await expect(page.getByText("Browser locked")).toBeVisible(); await page.getByLabel("Admin token").fill(token); await page.getByRole("button", { name: "Unlock / Verify" }).click(); await expect(page.getByText(/stored token is never displayed/i)).toBeVisible(); await expect(page.locator("body")).not.toContainText(token);
+  await page.getByRole("textbox", { name: "Model folders 1", exact: true }).fill("C:/new-models"); await page.getByRole("button", { name: "Save discovery folders" }).click(); await expect(page.getByRole("status").last()).toContainText("Discovery folders saved"); await page.getByLabel("Port").fill("70000"); await page.getByRole("button", { name: "Save managed port" }).click(); await expect(page.getByText(/integer from 1 to 65535/)).toBeVisible();
+  await page.route("**/api/settings/runtime", (route) => route.fulfill({ status: 409, json: { message: "Stop the managed runtime before changing its managed port." } })); await page.getByLabel("Port").fill("9090"); await page.getByRole("button", { name: "Save managed port" }).click(); await expect(page.getByText(/Stop the managed runtime/)).toBeVisible(); await page.getByRole("button", { name: /Forget token/ }).click(); await expect(page.getByText("This browser is locked")).toBeVisible(); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("System and Runtime expose readiness, actions, health, command, and safe links", async ({ page }) => {
+  await fixture(page); await page.goto("/#system"); await expect(page.getByText("Ready")).toBeVisible(); await expect(page.getByText("Models discovered")).toBeVisible(); await expect(page.getByRole("heading", { name: "Next actions" })).toBeVisible(); await expect(page.getByRole("button", { name: /Run checks/ })).toBeVisible(); await expect(page.locator("body")).not.toContainText("hash");
+  await page.goto("/#runtime"); await expect(page.getByLabel("Runtime control hero").getByText("Runtime running")).toBeVisible(); await expect(page.getByText("Healthy").first()).toBeVisible(); await expect(page.getByRole("heading", { name: "Launch Command" })).toBeVisible(); await expect(page.getByRole("link", { name: "Open full Logs" })).toBeVisible(); await expect(page.getByText("Clean", { exact: true })).not.toBeVisible(); await expect(page.getByText("Force", { exact: true })).not.toBeVisible(); await expect(page.getByText("Check recovery", { exact: true })).not.toBeVisible(); await page.getByRole("button", { name: "Switch profile" }).click(); await expect(page.getByRole("complementary", { name: "Switch profile drawer" })).toBeVisible();
+});

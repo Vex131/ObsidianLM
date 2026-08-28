@@ -13,15 +13,15 @@
     <div class="status-segment">Port <strong>{shellStatus.portLabel}</strong></div>
   </div>
   <div class="header-actions" aria-label="Header actions">
-    <button type="button" aria-label="Open terminal">
+    <a href="#logs" aria-label="Open logs">
       <Icon name="terminal" size={18} />
-    </button>
-    <button class="notification-button" type="button" aria-label="Notifications">
+    </a>
+    <a class="notification-button" href="#system" aria-label="Open system warnings">
       <Icon name="bell" size={18} />
       {#if shellStatus.warningCount > 0}
         <span>{shellStatus.warningCount}</span>
       {/if}
-    </button>
+    </a>
     <a href="#settings" aria-label="Open settings">
       <Icon name="gear" size={18} />
     </a>
@@ -91,7 +91,6 @@
     font-weight: 800;
   }
 
-  .header-actions button,
   .header-actions a {
     position: relative;
     width: 34px;
@@ -156,7 +155,7 @@
   }
 
   @media (max-width: 640px) {
-    .header-actions button:first-child {
+    .header-actions a:first-child {
       display: none;
     }
   }

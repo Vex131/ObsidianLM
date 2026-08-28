@@ -19,6 +19,14 @@ export interface JobRecord {
   resultPath: string | null;
   result?: JobResult | null;
   errorMessage: string | null;
+  selection?: JobSelectionDetails;
+}
+
+export interface JobSelectionDetails {
+  tool?: string;
+  build?: string;
+  model?: string;
+  dataset?: string;
 }
 
 export type JobResult = LlamaBenchJobResult | LlamaPerplexityJobResult;

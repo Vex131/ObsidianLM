@@ -43,7 +43,7 @@
       label: "Library",
       items: [
         { label: "Builds", hash: "#builds", icon: "database" },
-        { label: "Artifacts", hash: "#artifacts", icon: "artifact" }
+        { label: "Jobs", hash: "#jobs", icon: "artifact" }
       ]
     },
     {
@@ -352,6 +352,64 @@
 
     .operator-card {
       justify-content: center;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .sidebar {
+      width: 100%;
+      min-height: 0;
+      border-right: 0;
+      border-bottom: 1px solid var(--color-line);
+    }
+
+    .brand-row {
+      height: 58px;
+      justify-content: flex-start;
+      padding: 10px 16px;
+    }
+
+    .brand-row::after,
+    .operator-card {
+      display: none;
+    }
+
+    .brand-copy,
+    .nav-label {
+      display: grid;
+    }
+
+    .brand-copy strong {
+      font-size: 17px;
+    }
+
+    .nav-stack {
+      display: flex;
+      gap: 4px;
+      padding: 6px 10px 10px;
+      overflow-x: auto;
+    }
+
+    .nav-section,
+    .nav-items {
+      display: flex;
+      gap: 4px;
+    }
+
+    .nav-section + .nav-section {
+      margin-top: 0;
+    }
+
+    .nav-items a {
+      width: auto;
+      min-width: max-content;
+      height: 34px;
+      gap: 7px;
+      padding: 0 10px;
+    }
+
+    .nav-label {
+      font-size: 12px;
     }
   }
 </style>

@@ -12,3 +12,11 @@ export interface AppSettings {
   toolInputFolders: string[];
   adminTokenHash: string | null;
 }
+
+export interface RuntimeSettingsUpdate {
+  managedLlamaPort: number;
+}
+
+export interface RuntimeSettingsResponse {
+  settings: AppSettings;
+}

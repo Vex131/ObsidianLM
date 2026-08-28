@@ -39,8 +39,11 @@ import type {
   RuntimeTestChatResponse,
   StatusResponse,
   ToolInputDiscoveryResponse,
-  GpuMonitoringStatus,
-  AppSettings
+   GpuMonitoringStatus,
+   AppSettings,
+   RuntimeSettingsResponse,
+   RuntimeSettingsUpdate,
+   ServiceLogsResponse
 } from "@obsidianlm/shared";
 
 export const adminTokenStorageKey = "obsidianlm.adminToken";
@@ -57,7 +60,8 @@ export const API_ENDPOINTS = {
   },
   settings: {
     get: "/api/settings",
-    updateDiscoveryFolders: "/api/settings/discovery-folders"
+    updateDiscoveryFolders: "/api/settings/discovery-folders",
+    updateRuntime: "/api/settings/runtime"
   },
   readiness: "/api/readiness",
   discovery: {
@@ -108,6 +112,9 @@ export const API_ENDPOINTS = {
     llamaPerplexity: "/api/jobs/llama-perplexity",
     cancel: (id: string) => `/api/jobs/${enc(id)}/cancel`,
     logs: (id: string, limit = 80) => `/api/jobs/${enc(id)}/logs?limit=${enc(String(limit))}`
+  },
+  logs: {
+    service: "/api/logs/service"
   },
   monitoring: {
     ports: (port?: number | string) => (port === undefined ? "/api/monitoring/ports" : `/api/monitoring/ports?port=${enc(String(port))}`),
@@ -279,6 +286,11 @@ export type {
   RuntimeState,
   RuntimeTestChatRequest,
   RuntimeTestChatResponse,
-  StatusResponse,
-  ToolInputDiscoveryResponse
+   StatusResponse,
+   ToolInputDiscoveryResponse,
+   RuntimeSettingsUpdate,
+   RuntimeSettingsResponse,
+   ServiceLogsResponse
 };
+
+export type { RuntimeSettingsResponse as SettingsResponse } from "@obsidianlm/shared";

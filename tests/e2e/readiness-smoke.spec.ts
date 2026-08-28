@@ -51,19 +51,20 @@ test.describe("dashboard readiness", () => {
     await expect(page.getByRole("heading", { name: "Recent Events" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Health Checklist" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Resource Snapshot" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Performance Log" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Recent Events" })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Dashboard$/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Runtime$/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Profiles$/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Models$/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Builds$/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /^Artifacts$/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Artifacts$/i })).not.toBeVisible();
+    await expect(page.getByRole("link", { name: /^Jobs$/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Logs$/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Telemetry$/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Settings$/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /^System$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Open terminal/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Notifications/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Open logs/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Open system warnings/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /Open settings/i })).toBeVisible();
     await expect(page.getByLabel("Operator profile")).toBeVisible();
 

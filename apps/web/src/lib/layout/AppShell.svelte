@@ -60,16 +60,18 @@
       min-height: 100vh;
       height: auto;
       grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
     }
 
     .app-main-column {
       grid-column: 1;
+      grid-row: 2;
       height: auto;
       min-height: 100vh;
     }
 
     .app-shell > :global(.sidebar) {
-      display: none;
+      grid-row: 1;
     }
   }
 </style>

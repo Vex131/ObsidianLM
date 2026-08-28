@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import type { JobRecord, JobResult, JobType } from "@obsidianlm/shared";
+import type { JobRecord, JobResult, JobSelectionDetails, JobType } from "@obsidianlm/shared";
 import { getJobLogsDir } from "../config/paths.js";
 import { loadJobs, saveJobs } from "../config/storage.js";
 import { safeBasename } from "../api/sanitize.js";
@@ -14,6 +14,7 @@ export interface JobRunConfig {
   cwd?: string | null;
   resultPath?: string | null;
   resultParser?: (output: string) => JobResult | null;
+  selection?: JobSelectionDetails;
 }
 
 interface ActiveJobContext {
@@ -51,6 +52,10 @@ function sanitizeArg(arg: string): string {
   return looksLikeLocalPath(arg) ? "[redacted-local-path]" : redactLocalPaths(arg);
 }
 
+function sanitizeSelection(selection: JobSelectionDetails | undefined): JobSelectionDetails | undefined {
+  return selection ? Object.fromEntries(Object.entries(selection).map(([key, value]) => [key, safeBasename(value)])) : undefined;
+}
+
 function sanitizeResult(value: unknown): unknown {
   if (typeof value === "string") {
     return redactLocalPaths(value);
@@ -76,7 +81,8 @@ export function sanitizeJobForApi(job: JobRecord): JobRecord {
     logPath: job.logPath ? safeBasename(job.logPath) : null,
     resultPath: job.resultPath ? safeBasename(job.resultPath) : null,
     result: job.result ? sanitizeResult(job.result) as JobRecord["result"] : job.result,
-    errorMessage: job.errorMessage ? redactLocalPaths(job.errorMessage) : null
+    errorMessage: job.errorMessage ? redactLocalPaths(job.errorMessage) : null,
+    selection: sanitizeSelection(job.selection)
   };
 }
 
@@ -151,7 +157,8 @@ export class JobManager {
         logPath,
         resultPath: config.resultPath ?? null,
         result: null,
-        errorMessage: null
+        errorMessage: null,
+        selection: sanitizeSelection(config.selection)
       };
 
       this.jobs = [job, ...this.jobs];
@@ -200,11 +207,13 @@ export class JobManager {
   }
 
   async shutdown(): Promise<void> {
-    if (!this.child || !this.activeJob) {
+    const child = this.child;
+    const activeJob = this.activeJob;
+    if (!child || !activeJob) {
       return;
     }
-    await this.updateJob(this.activeJob.id, { status: "cancelled", errorMessage: "Service shutdown cancelled current managed job." });
-    this.child.kill("SIGTERM");
+    await this.updateJob(activeJob.id, { status: "cancelled", errorMessage: "Service shutdown cancelled current managed job." });
+    child.kill("SIGTERM");
   }
 
   private async runQueuedJob(job: JobRecord, config?: JobRunConfig): Promise<void> {

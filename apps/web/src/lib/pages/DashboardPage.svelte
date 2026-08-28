@@ -132,12 +132,13 @@
     const hasBuild = Boolean(activeProfile?.buildPath);
     const hasModel = Boolean(activeProfile?.modelPath);
     const stale = runtimeStatus === "unknown_previous_runtime";
+    const health = dashboardData.runtimeHealth;
 
     return [
       { label: "Backend API reachable", state: status ? "OK" : "Error", tone: status ? "ok" : "error" },
       { label: "Runtime process detected", state: activeRuntime?.pid ? "OK" : isRunning ? "Warn" : "Idle", tone: activeRuntime?.pid ? "ok" : isRunning ? "warn" : "muted" },
-      { label: "Endpoint responding", state: isRunning && endpoint !== "—" ? "OK" : "Idle", tone: isRunning && endpoint !== "—" ? "ok" : "muted" },
-      { label: "Model file exists", state: hasModel ? "OK" : "Missing", tone: hasModel ? "ok" : "muted" },
+      { label: "Runtime API health", state: health?.ok ? "Healthy" : isRunning ? "Not verified" : "Idle", tone: health?.ok ? "ok" : isRunning ? "warn" : "muted" },
+      { label: "Model configured", state: hasModel ? "Configured" : "Missing", tone: hasModel ? "ok" : "muted" },
       { label: "Build path configured", state: hasBuild ? "OK" : "Missing", tone: hasBuild ? "ok" : "muted" },
       { label: "VRAM headroom low / GPU warnings", state: gpuWarning ? "Warn" : dashboardData.gpuStatus ? "OK" : "—", tone: gpuWarning ? "warn" : dashboardData.gpuStatus ? "ok" : "muted" },
       { label: "Admin token loaded", state: hasToken ? "OK" : "Locked", tone: hasToken ? "ok" : "muted" },
@@ -271,9 +272,10 @@
       <section class="panel quick-actions" aria-label="Quick actions">
         <div class="panel-head compact"><h2 class="section-title">Quick Actions</h2></div>
         <div class="quick-grid">
-          <a class="quick-action" href="#profiles"><div class="quick-icon"><Icon name="zap" size={20} /></div><div class="quick-text"><strong>Switch profile</strong><span>Change active profile</span></div></a>
-          <a class="quick-action" href="#models"><div class="quick-icon"><Icon name="load" size={20} /></div><div class="quick-text"><strong>Load model</strong><span>Select GGUF file</span></div></a>
-          <a class="quick-action" href="#settings"><div class="quick-icon cyan"><Icon name="shield" size={20} /></div><div class="quick-text"><strong>Validate setup</strong><span>Run health checks</span></div></a>
+          <a class="quick-action" href="#profiles"><div class="quick-icon"><Icon name="zap" size={20} /></div><div class="quick-text"><strong>Manage profiles</strong><span>Edit launch configuration</span></div></a>
+          <a class="quick-action" href="#models"><div class="quick-icon"><Icon name="load" size={20} /></div><div class="quick-text"><strong>Browse models</strong><span>Inspect GGUF artifacts</span></div></a>
+          <a class="quick-action" href="#jobs"><div class="quick-icon"><Icon name="terminal" size={20} /></div><div class="quick-text"><strong>Run jobs</strong><span>Bench and perplexity tools</span></div></a>
+          <a class="quick-action" href="#system"><div class="quick-icon cyan"><Icon name="shield" size={20} /></div><div class="quick-text"><strong>Validate setup</strong><span>Review readiness checks</span></div></a>
         </div>
       </section>
 
@@ -304,7 +306,7 @@
       </section>
 
       <section class="panel events-card" aria-label="Recent events">
-        <div class="panel-head compact"><h2 class="section-title">Recent Events</h2><span class="mini-pill"><StatusDot tone={hasToken ? "green" : "muted"} />{hasToken ? "Live tail" : "Token required"}</span></div>
+        <div class="panel-head compact"><h2 class="section-title">Recent Events</h2><a href="#logs">View logs</a></div>
         <div class="event-stream">
           {#if recentLogs.length > 0}
             {#each recentLogs as log}
@@ -334,7 +336,7 @@
       </section>
 
       <section class="panel resource-snapshot" aria-label="Resource snapshot">
-        <div class="panel-head compact"><h2 class="section-title">Resource Snapshot</h2><span class="mini-pill"><StatusDot tone={gpuDevices.length > 0 ? "green" : "muted"} />Multi-device</span></div>
+        <div class="panel-head compact"><h2 class="section-title">Resource Snapshot</h2><a href="#telemetry">View telemetry</a></div>
         <div class="resource-body">
           {#if gpuDevices.length > 0}
             {#each gpuDevices as gpu, index}
@@ -351,39 +353,6 @@
           {:else}
             <div class="device-card unavailable"><div class="device-head"><div class="device-title"><Icon name="gpu" size={18} /><strong>GPU telemetry</strong></div><div class="device-role">Unavailable</div></div><div class="empty-state compact-empty">{hasToken ? "No GPU devices reported by monitoring." : "Admin token required for detailed GPU monitoring."}</div></div>
           {/if}
-          <div class="system-row">
-            <div class="device-card unavailable">
-              <div class="device-head"><div class="device-title"><Icon name="cpu" size={18} /><strong>CPU</strong></div><div class="device-role">Unavailable</div></div>
-              <div class="meter-grid single">
-                <div class="meter"><div class="meter-top"><span>Usage</span><span>—</span></div><div class="meter-bar"><span style="width: 0%"></span></div></div>
-                <div class="meter"><div class="meter-top"><span>Package temp</span><span>—</span></div><div class="meter-bar"><span style="width: 0%"></span></div></div>
-              </div>
-            </div>
-            <div class="device-card unavailable">
-              <div class="device-head"><div class="device-title"><Icon name="database" size={18} /><strong>RAM</strong></div><div class="device-role">System</div></div>
-              <div class="meter-grid single">
-                <div class="meter"><div class="meter-top"><span>Memory</span><span>—</span></div><div class="meter-bar"><span style="width: 0%"></span></div></div>
-                <div class="meter"><div class="meter-top"><span>Commit</span><span>—</span></div><div class="meter-bar"><span style="width: 0%"></span></div></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel performance-log" aria-label="Performance log">
-        <div class="panel-head compact"><h2 class="section-title">Performance Log</h2><span class="mini-pill">Last 5 runs</span></div>
-        <div class="perf-summary">
-          <div class="perf-stat"><span>Prompt proc.</span><strong>—</strong></div>
-          <div class="perf-stat"><span>Decode</span><strong>—</strong></div>
-          <div class="perf-stat"><span>Active slots</span><strong>{isRunning ? "1" : "0"} / {formatNumber(llamaArgs?.parallel) === "—" ? "1" : formatNumber(llamaArgs?.parallel)}</strong></div>
-        </div>
-        <div class="perf-table">
-          <div class="perf-row header"><span>Time</span><span>Task</span><span>PP</span><span>Decode</span></div>
-          <div class="perf-row empty-row"><span>—</span><span>No performance runs recorded yet</span><span>—</span><span>—</span></div>
-          <div class="perf-row empty-row"><span>—</span><span>Awaiting llama-bench history</span><span>—</span><span>—</span></div>
-          <div class="perf-row empty-row"><span>—</span><span>Awaiting decode metrics</span><span>—</span><span>—</span></div>
-          <div class="perf-row empty-row"><span>—</span><span>Awaiting prompt processing metrics</span><span>—</span><span>—</span></div>
-          <div class="perf-row empty-row"><span>—</span><span>Awaiting slot activity metrics</span><span>—</span><span>—</span></div>
         </div>
       </section>
     </div>
@@ -413,6 +382,12 @@
 
   .panel-head.compact {
     padding: 0;
+  }
+
+  .panel-head.compact a {
+    color: #85e9f4;
+    font-size: 12px;
+    font-weight: 750;
   }
 
   .hero {
@@ -630,15 +605,14 @@
   .profile-details,
   .events-card,
   .health-card,
-  .resource-snapshot,
-  .performance-log {
+  .resource-snapshot {
     padding: 15px 16px 16px;
   }
 
   .quick-grid {
     margin-top: 12px;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 9px;
   }
 
@@ -912,16 +886,6 @@
     padding: 11px;
   }
 
-  .meter-grid.single {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .system-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 9px;
-  }
-
   .meter {
     min-width: 0;
   }
@@ -940,79 +904,6 @@
     font-family: var(--font-mono);
     font-size: 11px;
     white-space: nowrap;
-  }
-
-  .perf-summary {
-    margin-top: 12px;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .perf-stat {
-    min-height: 67px;
-    padding: 12px;
-    border: 1px solid rgba(132, 153, 188, 0.13);
-    border-radius: var(--radius-sm);
-    background: rgba(8, 16, 29, 0.54);
-  }
-
-  .perf-stat span {
-    color: #8997ac;
-    font-size: 11px;
-    font-weight: 850;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  .perf-stat strong {
-    display: block;
-    margin-top: 8px;
-    color: #e2ebf8;
-    font-family: var(--font-mono);
-    font-size: 17px;
-    letter-spacing: -0.03em;
-  }
-
-  .perf-table {
-    margin-top: 10px;
-    border: 1px solid rgba(132, 153, 188, 0.12);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-    background: rgba(5, 10, 18, 0.44);
-  }
-
-  .perf-row {
-    display: grid;
-    grid-template-columns: 80px 1fr 86px 86px;
-    gap: 12px;
-    align-items: center;
-    min-height: 35px;
-    padding: 0 11px;
-    border-bottom: 1px solid rgba(132, 153, 188, 0.08);
-    color: #a9b6c9;
-    font-size: 12px;
-  }
-
-  .perf-row:last-child {
-    border-bottom: 0;
-  }
-
-  .perf-row.header {
-    color: #7d8ca2;
-    font-size: 11px;
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    background: rgba(12, 22, 38, 0.55);
-  }
-
-  .perf-row span:not(:nth-child(2)) {
-    font-family: var(--font-mono);
-  }
-
-  .empty-row {
-    color: #78869c;
   }
 
   @media (max-width: 1380px) {
@@ -1061,23 +952,12 @@
 
     .control-grid,
     .quick-grid,
-    .meter-grid,
-    .system-row,
-    .perf-summary {
+    .meter-grid {
       grid-template-columns: minmax(0, 1fr);
     }
 
     .btn.wide {
       grid-column: auto;
-    }
-
-    .perf-row {
-      grid-template-columns: 70px 1fr;
-    }
-
-    .perf-row span:nth-child(3),
-    .perf-row span:nth-child(4) {
-      display: none;
     }
 
     .event-line {

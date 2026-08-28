@@ -834,7 +834,7 @@ Before completing UI work, check:
 
 The dashboard reference in `docs/design/reference/obsidianlm-dashboard.html` supersedes earlier Phase 14 shell dimensions where they conflict. The current priority is to keep the interface aligned with this real operator-console baseline.
 
-Phase 14 is in progress. `DashboardPage.svelte` and `RuntimePage.svelte` implement part of the focused-page direction; the other planned pages and the full acceptance checklist remain future work. Existing reference copy that says `profile`, `managed server`, or one model/build path describes the current runtime contract. Phase 15 implementation should evolve those labels without rewriting the visual system.
+Phase 14 is complete. Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System are focused operator-console pages. Existing reference copy that says `profile`, `managed server`, or one model/build path describes the current runtime contract. Phase 15 implementation should evolve those labels without rewriting the visual system.
 
 ### Approved Reference Screens
 
@@ -890,7 +890,7 @@ CORE
 
 LIBRARY
   Builds
-  Artifacts
+  Jobs
 
 OBSERVABILITY
   Logs
@@ -1122,7 +1122,7 @@ Must include:
 
 Required copy:
 
-> Jobs are one-shot tools. They do not become router model instances or replace the managed llama.cpp router.
+> Jobs are one-shot tools. They do not become runtime model instances or replace the managed llama.cpp runtime.
 
 ### 16.7 Logs
 
@@ -1136,7 +1136,8 @@ Must include:
 - Pause/resume streaming.
 - Copy visible.
 - Clear visible.
-- Source distinctions for service, router lifecycle, router/model-child output, and jobs.
+- Current source distinctions for managed runtime stdout/stderr/system entries, persisted job logs, and bounded service-wrapper files.
+- Router lifecycle, router-child/model output, and remote Node-labelled streams remain Phase 15/16 work.
 
 ### 16.8 Telemetry / Processes
 
@@ -1315,21 +1316,21 @@ Recommended first pass:
 
 ## 19. Phase 14 Acceptance Checklist
 
-- [ ] Sidebar navigation is functional.
-- [ ] Dashboard, Runtime, and Profiles match the approved reference direction.
-- [ ] The app is no longer one long page.
-- [ ] Dashboard summarizes instead of hosting every tool.
-- [ ] Runtime page has state before controls.
-- [ ] Profiles page feels like an editor.
-- [ ] Right inspector is used for dense details.
-- [ ] Commands, paths, ports, validation, warnings, and logs remain visible and copyable.
-- [ ] Nested card usage is reduced.
-- [ ] No fake analytics or decorative charts are added.
-- [ ] No new heavy frontend framework or router dependency is added.
-- [ ] Mobile layout remains usable at 320px width.
-- [ ] Keyboard focus is visible.
-- [ ] `npm run typecheck` passes.
-- [ ] `npm run lint` passes.
-- [ ] `npm run build` passes.
-- [ ] `npm run test` passes.
-- [ ] `npm run test:e2e` passes or any failure is documented accurately.
+- [x] Sidebar navigation is functional.
+- [x] Dashboard, Runtime, and Profiles match the approved reference direction.
+- [x] The app is no longer one long page.
+- [x] Dashboard summarizes instead of hosting every tool.
+- [x] Runtime page has state before controls.
+- [x] Profiles page feels like an editor.
+- [x] Right inspector is used for dense details.
+- [x] Commands, paths, ports, validation, warnings, and logs remain visible and copyable.
+- [x] Nested card usage is reduced.
+- [x] No fake analytics or decorative charts are added.
+- [x] No new heavy frontend framework or router dependency is added.
+- [x] Mobile layout remains usable at 320px width.
+- [x] Keyboard focus is visible.
+- [x] `npm run typecheck` passes.
+- [x] `npm run lint` passes.
+- [x] `npm run build` passes.
+- [x] `npm run test` passes.
+- [x] `npm run test:e2e` passes.

@@ -23,7 +23,6 @@
   let endpointCopyLabel = "Copy";
   let commandCopyLabel = "Copy";
   let drawerOpen = false;
-  let recoveryOpen = false;
   let profileSearch = "";
   let selectedProfileId: string | null = null;
 
@@ -128,13 +127,14 @@
     const warningText = warnings.join(" ").toLowerCase();
     const gpuWarning = warningText.includes("vram") || warningText.includes("gpu") || (dashboardData.gpuStatus?.summary.warningsCount ?? 0) > 0;
     const stale = runtimeStatus === "unknown_previous_runtime";
+    const health = dashboardData.runtimeHealth;
 
     return [
       { label: "Backend API reachable", state: status ? "OK" : "Error", tone: status ? "ok" : "error" },
       { label: "Runtime process detected", state: activeRuntime?.pid ? "OK" : isRunning ? "Warn" : "Idle", tone: activeRuntime?.pid ? "ok" : isRunning ? "warn" : "muted" },
-      { label: "Endpoint responding", state: isRunning && endpoint !== "—" ? "OK" : "Idle", tone: isRunning && endpoint !== "—" ? "ok" : "muted" },
+      { label: "Runtime API health", state: health?.ok ? "Healthy" : isRunning ? "Not verified" : "Idle", tone: health?.ok ? "ok" : isRunning ? "warn" : "muted" },
       { label: "Active profile applied", state: activeProfileId ? "OK" : "Missing", tone: activeProfileId ? "ok" : "muted" },
-      { label: "Model file exists", state: activeProfile?.modelPath ? "OK" : "Missing", tone: activeProfile?.modelPath ? "ok" : "muted" },
+      { label: "Model configured", state: activeProfile?.modelPath ? "Configured" : "Missing", tone: activeProfile?.modelPath ? "ok" : "muted" },
       { label: "Build path configured", state: activeProfile?.buildPath ? "OK" : "Missing", tone: activeProfile?.buildPath ? "ok" : "muted" },
       { label: "VRAM headroom low", state: gpuWarning ? "Warn" : dashboardData.gpuStatus ? "OK" : "—", tone: gpuWarning ? "warn" : dashboardData.gpuStatus ? "ok" : "muted" },
       { label: "No stale process detected", state: stale ? "Warn" : "OK", tone: stale ? "warn" : "ok" }
@@ -314,7 +314,7 @@
       </section>
 
       <section class="panel events-card" aria-label="Recent runtime logs">
-        <div class="panel-head compact"><h2 class="section-title">Recent Runtime Logs</h2><span class="mini-pill">{hasToken ? "Live tail" : "Token required"}</span></div>
+        <div class="panel-head compact"><h2 class="section-title">Recent Runtime Logs</h2><a href="#logs">Open full Logs</a></div>
         <div class="event-stream tall">
           {#if recentLogs.length > 0}
             {#each recentLogs as log}
@@ -342,12 +342,7 @@
             </div>
           {/each}
         </div>
-        <button class="recovery-toggle" type="button" aria-expanded={recoveryOpen} on:click={() => recoveryOpen = !recoveryOpen}><span>Recovery actions</span><Icon name="chevron-up" size={16} /></button>
-        <div class:open={recoveryOpen} class="recovery-panel">
-          <div class="recovery-action"><span>Stale process cleanup. Use only when the server appears stopped but the port is still occupied.</span><button type="button" disabled>Clean</button></div>
-          <div class="recovery-action"><span>Force stop runtime process. Use the existing Stop control first.</span><button type="button" disabled>Force</button></div>
-          <div class="recovery-action"><span>Run preflight validation before starting the selected profile.</span><button type="button" disabled>Check</button></div>
-        </div>
+        <div class="safe-links"><a href="#telemetry">Open Telemetry</a><a href="#logs">Open Logs</a><a href="#system">Validate setup</a></div>
       </section>
 
       <section class="panel command-card" aria-label="Launch command">

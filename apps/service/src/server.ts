@@ -11,6 +11,7 @@ import { registerSettingsRoutes } from "./api/settings.js";
 import { registerJobRoutes } from "./api/jobs.js";
 import { registerReadinessRoutes } from "./api/readiness.js";
 import { registerAuthRoutes } from "./api/auth.js";
+import { registerServiceLogRoutes } from "./api/logs.js";
 import { registerAdminAuthProtection } from "./auth/protect.js";
 import { ensureStorageFiles } from "./config/storage.js";
 import { ensureAppDirectories, webDistDir } from "./config/paths.js";
@@ -51,7 +52,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   await registerStatusRoutes(app, runtimeManager, options.gpuMonitorOptions);
   await registerAuthRoutes(app);
   await registerAdminAuthProtection(app);
-  await registerSettingsRoutes(app);
+  await registerSettingsRoutes(app, runtimeManager);
   await registerReadinessRoutes(app, runtimeManager, options.gpuMonitorOptions);
   await registerProfileRoutes(app, runtimeManager);
   await registerRuntimeRoutes(app, runtimeManager);
@@ -59,6 +60,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   await registerProcessRoutes(app);
   await registerMonitoringRoutes(app, runtimeManager, options.gpuMonitorOptions);
   await registerJobRoutes(app, jobManager);
+  await registerServiceLogRoutes(app);
 
   if (existsSync(webDistDir)) {
     await app.register(fastifyStatic, {

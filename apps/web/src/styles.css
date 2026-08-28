@@ -990,6 +990,20 @@ p {
   min-width: 128px;
 }
 
+.safe-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.safe-links a,
+.runtime-page .panel-head a {
+  color: #85e9f4;
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .profiles-page { height: calc(100vh - var(--topbar-height)); }
 .profiles-actions, .editor-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .profiles-message { margin: 10px 0 0; color: var(--color-muted); font-size: 13px; }

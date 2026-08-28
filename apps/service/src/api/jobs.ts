@@ -9,6 +9,7 @@ import { parseLlamaBenchOutput } from "../tools/llama-bench/result-parser.js";
 import { buildLlamaPerplexityCommand, validateLlamaPerplexityRequestShape } from "../tools/llama-perplexity/command-builder.js";
 import { parseLlamaPerplexityOutput } from "../tools/llama-perplexity/result-parser.js";
 import { normalizePathForCompare } from "../discovery/helpers.js";
+import { safeBasename } from "./sanitize.js";
 
 function findBenchTool(request: LlamaBenchRequest, builds: DiscoveredLlamaCppBuild[]): { tool: DiscoveredLlamaCppTool; build: DiscoveredLlamaCppBuild } | { error: string; statusCode: number } {
   const candidates = builds.flatMap((build) => build.tools.filter((tool) => tool.kind === "bench" && tool.exists).map((tool) => ({ build, tool })));
@@ -76,7 +77,10 @@ function findModel(request: LlamaBenchRequest | LlamaPerplexityRequest, models: 
 
   const requestedModelPath = normalizePathForCompare(request.modelPath);
   const model = models.find((candidate) => normalizePathForCompare(candidate.path) === requestedModelPath && candidate.extension.toLowerCase() === ".gguf");
-  return model ?? { error: "model_not_discovered", statusCode: 400 };
+  if (!model) return { error: "model_not_discovered", statusCode: 400 };
+  return ["mmproj", "adapter", "imatrix", "other"].includes(model.artifactKindGuess ?? "unknown")
+    ? { error: "model_artifact_not_supported", statusCode: 400 }
+    : model;
 }
 
 function findDataset(request: LlamaPerplexityRequest, files: DiscoveredToolInputFile[]): DiscoveredToolInputFile | { error: string; statusCode: number } {
@@ -111,6 +115,8 @@ function errorMessageForCode(code: string): string {
       return "A discovered GGUF modelPath selection is required.";
     case "model_not_discovered":
       return "The requested modelPath is not one of the configured discovered GGUF models.";
+    case "model_artifact_not_supported":
+      return "The selected GGUF artifact is not a runnable language model.";
     case "no_discovered_tool_input":
       return "No configured discovered tool input file is available. Configure tool input folders and rescan before starting a perplexity job.";
     case "dataset_selection_required":
@@ -175,7 +181,8 @@ export async function registerJobRoutes(app: FastifyInstance, jobManager: JobMan
       executable: command.executable,
       args: command.args,
       cwd: command.cwd,
-      resultParser: parseLlamaBenchOutput
+      resultParser: parseLlamaBenchOutput,
+      selection: { tool: safeBasename(bench.tool.path), build: safeBasename(bench.build.folder), model: safeBasename(model.path) }
     });
     if (!result.ok) {
       reply.status(409);
@@ -216,7 +223,8 @@ export async function registerJobRoutes(app: FastifyInstance, jobManager: JobMan
       executable: command.executable,
       args: command.args,
       cwd: command.cwd,
-      resultParser: parseLlamaPerplexityOutput
+      resultParser: parseLlamaPerplexityOutput,
+      selection: { tool: safeBasename(perplexity.tool.path), build: safeBasename(perplexity.build.folder), model: safeBasename(model.path), dataset: safeBasename(dataset.path) }
     });
     if (!result.ok) {
       reply.status(409);

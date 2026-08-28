@@ -7,7 +7,7 @@ ObsidianLM is a lightweight local AI runtime manager. It is the control plane fo
 This document separates three things that earlier revisions mixed together:
 
 - **Completed foundation/history:** Phases 0-13 are implemented. Their original single-model runtime architecture was valid for those phases.
-- **Current work:** Phase 14 is a UI restructuring phase. Dashboard, Runtime, Profiles, Models, and the discovered-toolchain Builds library exist, but the complete Phase 14 page set and acceptance checklist are not yet complete. Builds reports static router CLI evidence only; functional router validation remains Phase 15.
+- **Completed UI restructure:** Phase 14 provides focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Builds reports static router CLI evidence only; functional router validation remains Phase 15.
 - **Planned architecture:** Phase 15 introduces llama.cpp's built-in multi-model router while retaining ObsidianLM as the build and managed-router lifecycle manager. Phase 16 later adds Remote Nodes / Controller Mode. Neither phase is implemented yet.
 
 The current implementation still stores a model-bound launch profile:
@@ -520,9 +520,9 @@ The historical runtime model in Phases 1-13 remains truthful. Router adoption is
 
 ## 16. Phase 14 - Operator Console Restructure
 
-**Status:** In progress / planned, not complete.
+**Status:** Complete.
 
-The approved operator-console visual direction, shell, Dashboard page, and Runtime page are partially present. Remaining pages and the full acceptance checklist in `DESIGN.md` are still planned. Phase 14 should avoid locking future router data contracts into UI components; terminology can transition as Phase 15 contracts stabilize.
+The approved operator-console shell and all ten focused pages are implemented. The `DESIGN.md` acceptance checklist is complete, including responsive navigation, fixture-backed E2E coverage, and current-source Jobs, Logs, Telemetry, Settings, and System behavior.
 
 Phase 14 remains a UI restructuring phase. It does not implement the router, migrate profiles, or change runtime semantics.
 
