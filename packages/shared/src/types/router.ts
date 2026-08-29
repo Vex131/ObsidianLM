@@ -134,6 +134,17 @@ export type RouterSwitchStage =
   | "completed"
   | "failed";
 
+export interface RouterProcessAwarenessContext {
+  runtimeId: RouterRuntimeId | null;
+  routerPid: number | null;
+  activeBuildId: LlamaCppBuildId | null;
+  buildServerLocator: string | null;
+  ownershipEvidence: RouterRuntimeState["ownershipEvidence"];
+  expectedModels: Array<{ configuredModelId: ConfiguredModelId; routerAlias: string }>;
+  previousRouterPid: number | null;
+  previousBuildServerLocator: string | null;
+}
+
 export interface RouterSwitchActionResult extends RouterRuntimeActionResult {
   switchKind: RouterSwitchKind;
   targetConfiguredModelId: ConfiguredModelId;

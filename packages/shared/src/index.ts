@@ -27,6 +27,7 @@ export type {
   LlamaCppProfile,
   RuntimeActionResult,
   RuntimeLogEntry,
+  RuntimeLogOrigin,
   RuntimeLogSource,
   RuntimeLogsResponse,
   RuntimeLogsStreamEvent,
@@ -74,6 +75,8 @@ export type {
   RuntimeDetectionCategory,
   RuntimeDetectionWarning,
   RuntimeDetectionWarningLevel,
+  RuntimeProcessRole,
+  ProcessOwnershipClassification,
   StartupDetectionSummary
 } from "./types/detection.js";
 export type {
@@ -171,6 +174,7 @@ export type {
   RouterLaunchPreview,
   RouterModelState,
   RouterPresetPreview,
+  RouterProcessAwarenessContext,
   RouterRuntimeId,
   RouterRuntimeActionResult,
   RouterRuntimeState,

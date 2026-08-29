@@ -48,7 +48,8 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
     const state = runtimeManager.getState();
     const port = await detectPort(settings.managedLlamaPort, "127.0.0.1");
     const portStatus = classifyPortStatus(port, state.pid);
-    const gpuStatus = await getGpuMonitoringStatus(state.pid, gpuMonitorOptions);
+    const awareness = await runtimeManager.refreshProcessAwareness();
+    const gpuStatus = await getGpuMonitoringStatus(awareness.available === false ? null : awareness.processes, gpuMonitorOptions);
     const runtimeActive = state.status !== "stopped" && state.status !== "unknown_previous_runtime";
     const activeProfile = runtimeManager.getActiveProfile() ?? profiles.find((profile) => profile.id === state.activeProfileId) ?? null;
     const benchCount = builds.builds.reduce((count, build) => count + build.tools.filter((tool) => tool.kind === "bench" && tool.exists).length, 0);

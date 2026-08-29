@@ -22,14 +22,14 @@ export function classifyRuntimeDetection(input: ClassificationInput): StartupDet
   );
 
   if (input.currentManagedPid && input.processes.some((process) => process.pid === input.currentManagedPid)) {
-    categories.add("current_managed_process");
+    categories.add("current_managed_router");
   }
 
   const previousCandidate = activePreviousState ? findPreviousCandidate(input.previousState, input.processes) : null;
   if (activePreviousState && previousCandidate) {
-    categories.add("previous_managed_process_candidate");
+    categories.add("previous_managed_router_candidate");
     warnings.push({
-      category: "previous_managed_process_candidate",
+      category: "previous_managed_router_candidate",
       level: "warning",
       pid: previousCandidate.pid,
       port: input.previousState?.port ?? undefined,
@@ -58,6 +58,15 @@ export function classifyRuntimeDetection(input: ClassificationInput): StartupDet
       continue;
     }
 
+    if (process.role === "managed_router_child") {
+      categories.add("current_managed_router_child");
+      continue;
+    }
+    if (process.role === "previous_managed_router_child_candidate") {
+      categories.add("previous_managed_router_child_candidate");
+      warnings.push({ category: "previous_managed_router_child_candidate", level: "warning", pid: process.pid, message: `Detected previous router child candidate PID ${process.pid}. It was not adopted or stopped automatically.` });
+      continue;
+    }
     categories.add("unmanaged_llama_process");
     warnings.push({
       category: "unmanaged_llama_process",

@@ -65,6 +65,7 @@ function makeProfile(buildPath: string, modelPath: string, port: number): LlamaC
 function llamaProcess(pid: number, commandLine = `C:\\llama.cpp\\llama-server.exe --port 8085`): DetectedProcess {
   return {
     pid,
+    parentPid: null,
     name: process.platform === "win32" ? "llama-server.exe" : "llama-server",
     executablePath: process.platform === "win32" ? "C:\\llama.cpp\\llama-server.exe" : "/usr/local/bin/llama-server",
     commandLine,
@@ -142,12 +143,12 @@ test("classification reports port conflict when owner is not current managed chi
 
 test("classification reports current managed process when PID matches current child", () => {
   const summary = classifyRuntimeDetection({ previousState: defaultRuntimeState, currentManagedPid: 3333, processes: [llamaProcess(3333)], ports: [] });
-  assert.ok(summary.categories.includes("current_managed_process"));
+  assert.ok(summary.categories.includes("current_managed_router"));
 });
 
 test("classification does not treat the current in-memory child as previous stale state", () => {
   const summary = classifyRuntimeDetection({ previousState: runningPreviousState(3333), currentManagedPid: 3333, processes: [llamaProcess(3333)], ports: [] });
-  assert.ok(summary.categories.includes("current_managed_process"));
+  assert.ok(summary.categories.includes("current_managed_router"));
   assert.ok(!summary.categories.includes("previous_managed_stale_state"));
 });
 
@@ -181,7 +182,7 @@ test("POST /api/profiles/:id/start rejects legacy compatibility launch without a
 
   const profile = makeProfile(fixture.buildPath, fixture.modelPath, port);
   await writeFile(path.join(fixture.dataDir, "profiles.json"), JSON.stringify([profile]), "utf8");
-  const app = await createServer();
+  const app = await createServer({ runtimeManagerOptions: { processDetector: async () => ({ processes: [], warnings: [], detectionMethod: "fixture" }) } });
   const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
   assert.equal(setup.statusCode, 201);
   t.after(async () => app.close());
@@ -197,7 +198,7 @@ test("Phase 3 read-only API routes return process, port, and detection payloads"
   await writeFile(path.join(fixture.dataDir, "settings.json"), JSON.stringify({ ...defaultSettings, managedLlamaPort: 18086 }), "utf8");
   t.after(() => delete process.env.OBSIDIANLM_DATA_DIR);
 
-  const app = await createServer();
+  const app = await createServer({ runtimeManagerOptions: { processDetector: async () => ({ processes: [], warnings: [], detectionMethod: "fixture" }) } });
   const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
   assert.equal(setup.statusCode, 201);
   t.after(async () => app.close());

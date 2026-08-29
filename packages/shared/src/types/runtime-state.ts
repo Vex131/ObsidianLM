@@ -65,6 +65,7 @@ export interface CommandSpec {
 }
 
 export type RuntimeLogSource = "stdout" | "stderr" | "system";
+export type RuntimeLogOrigin = "runtime_system" | "router" | "router_child" | "router_child_candidate" | "unknown";
 
 export interface RuntimeLogEntry {
   id: number;
@@ -74,6 +75,11 @@ export interface RuntimeLogEntry {
   /** @deprecated Use source. Kept for current UI compatibility. */
   stream: RuntimeLogSource;
   message: string;
+  origin: RuntimeLogOrigin;
+  pid?: number;
+  childPort?: number;
+  configuredModelId?: string;
+  routerAlias?: string;
 }
 
 export interface RuntimeLogsResponse {

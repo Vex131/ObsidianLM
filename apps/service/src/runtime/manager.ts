@@ -7,15 +7,20 @@ import {
   type CommandSpec,
   type ConfiguredModel,
   type ConfiguredModelId,
+  type DetectedProcess,
   type DetectedPort,
   type LlamaCppBuildId,
   type RouterLaunchPreview,
+  type RouterProcessAwarenessContext,
   type RouterRuntimeActionResult,
   type RouterRuntimeState,
+  type RouterAlias,
   type RouterSwitchActionResult,
   type RouterSwitchKind,
   type RouterSwitchStage,
   type RuntimeProfile,
+  type RuntimeDetectionCategory,
+  type ProcessListResponse,
   type RuntimeState,
   type StartupDetectionSummary
 } from "@obsidianlm/shared";
@@ -23,6 +28,8 @@ import { loadPhase15Domain, type Phase15DomainSnapshot } from "../config/phase15
 import { getDataDir } from "../config/paths.js";
 import { loadRouterRuntimeState, saveRouterRuntimeState } from "../config/storage.js";
 import { detectPort } from "../process/port-detector.js";
+import { detectLlamaServerProcesses } from "../process/process-detector.js";
+import { classifyRouterProcesses } from "../process/process-awareness.js";
 import { reconcileRouterCatalog, type ExpectedRouterModel } from "../router/catalog.js";
 import { createManagedRouterEnvironment } from "../router/environment.js";
 import { analyzeRouterPreset, buildRouterLaunchPreview, generateRouterPreset, RouterPresetError, type RouterPresetAnalysis } from "../router/preset-generator.js";
@@ -52,6 +59,7 @@ export interface RuntimeManagerOptions {
   dataDir?: () => string;
   mkdir?: (directory: string, options: { recursive: true }) => Promise<unknown>;
   environment?: NodeJS.ProcessEnv;
+  processDetector?: () => Promise<ProcessListResponse>;
 }
 
 interface PreparedRouterStart {
@@ -67,6 +75,7 @@ class RuntimeSwitchError extends Error {
 
 const active = (state: RouterRuntimeState) => ["starting", "running", "stopping"].includes(state.status);
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const maxPartialLogLineBytes = 64 * 1024;
 
 export class RuntimeManager {
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -74,6 +83,11 @@ export class RuntimeManager {
   private detectionSummary: StartupDetectionSummary | null = null;
   private command: CommandSpec | null = null;
   private activeExpected: ExpectedRouterModel[] = [];
+  private activeBuildServerLocator: string | null = null;
+  private previousRouterPid: number | null = null;
+  private previousBuildServerLocator: string | null = null;
+  private processAwareness: DetectedProcess[] = [];
+  private readonly partialOutput = { stdout: "", stderr: "" };
   private processError: string | null = null;
   private serialized = Promise.resolve();
 
@@ -82,6 +96,16 @@ export class RuntimeManager {
   async initialize(): Promise<void> {
     this.routerState = await (this.options.loadRouterState ?? loadRouterRuntimeState)();
     const previousPid = this.routerState.pid;
+    this.previousRouterPid = active(this.routerState) ? previousPid : null;
+    if (this.previousRouterPid && this.routerState.activeBuildId) {
+      try {
+        const domain = await (this.options.loadDomain ?? loadPhase15Domain)();
+        const build = domain.builds.find((entry) => entry.id === this.routerState.activeBuildId);
+        this.previousBuildServerLocator = build?.server.owner.scope === "local" ? build.server.locator : null;
+      } catch {
+        this.previousBuildServerLocator = null;
+      }
+    }
     this.detectionSummary = await runStartupDetection(null, { ...this.options.startupDetectorOptions, reconcileStaleState: false });
     if (!active(this.routerState)) return;
 
@@ -133,8 +157,61 @@ export class RuntimeManager {
   getWarnings(): string[] { return [...new Set([...this.routerState.warnings.map((warning) => warning.message), ...(this.detectionSummary?.warnings.map((warning) => warning.message) ?? [])])]; }
   getDetectionSummary(): StartupDetectionSummary | null { return this.detectionSummary ? structuredClone(this.detectionSummary) : null; }
 
+  getProcessAwarenessContext(): RouterProcessAwarenessContext {
+    return {
+      runtimeId: this.routerState.activeRuntimeId,
+      routerPid: this.child?.pid ?? null,
+      activeBuildId: this.routerState.activeBuildId,
+      buildServerLocator: this.activeBuildServerLocator,
+      ownershipEvidence: this.child ? this.routerState.ownershipEvidence : "unproven",
+      expectedModels: this.activeExpected.map((model) => ({ ...model, routerAlias: model.routerAlias as RouterAlias })),
+      previousRouterPid: this.previousRouterPid,
+      previousBuildServerLocator: this.previousBuildServerLocator
+    };
+  }
+
+  async refreshProcessAwareness(): Promise<ProcessListResponse> {
+    try {
+      const detected = await (this.options.processDetector ?? (() => detectLlamaServerProcesses(this.options.startupDetectorOptions?.processOptions)))();
+      if (detected.available === false || detected.warnings.some((warning) => warning.startsWith("Process detection is unavailable"))) {
+        this.processAwareness = [];
+        return { ...detected, processes: [], available: false };
+      }
+      this.processAwareness = classifyRouterProcesses(detected.processes, this.getProcessAwarenessContext());
+      const warnings = [...detected.warnings];
+      for (const process of this.processAwareness) {
+        if (process.role !== "managed_router_child" || !process.configuredModelId) continue;
+        const state = this.routerState.configuredModelStates.find((model) => model.configuredModelId === process.configuredModelId)?.state;
+        if (state === "unloaded") warnings.push(`Proven router child PID ${process.pid} maps to a model reported as unloaded; no process was controlled.`);
+      }
+      return { ...detected, processes: structuredClone(this.processAwareness), warnings, available: true };
+    } catch (error) {
+      this.processAwareness = [];
+      const message = error instanceof Error ? error.message : "Process awareness failed.";
+      return { processes: [], warnings: [`Process awareness is unavailable: ${message}`], detectionMethod: "unavailable", available: false };
+    }
+  }
+
   async refreshDetection(options: Partial<StartupDetectorOptions> = {}): Promise<StartupDetectionSummary> {
     this.detectionSummary = await runStartupDetection(this.child?.pid ?? null, { ...this.options.startupDetectorOptions, ...options, reconcileStaleState: false });
+    const awareness = await this.refreshProcessAwareness();
+    const processCategories = new Set<RuntimeDetectionCategory>(this.detectionSummary.categories.filter((category) => category === "port_conflict" || category === "previous_managed_stale_state"));
+    const processWarnings = this.detectionSummary.warnings.filter((warning) => warning.category === "port_conflict" || warning.category === "previous_managed_stale_state");
+    if (awareness.available === false) processWarnings.push({ category: "no_runtime_detected", level: "warning", message: "Process awareness is unavailable; ownership attribution was not attempted." });
+    for (const process of awareness.processes) {
+      if (process.role === "managed_router") processCategories.add("current_managed_router");
+      else if (process.role === "managed_router_child") processCategories.add("current_managed_router_child");
+      else if (process.role === "previous_managed_router_candidate" || process.role === "previous_managed_router_child_candidate") {
+        const category = process.role;
+        processCategories.add(category);
+        processWarnings.push({ category, level: "warning", pid: process.pid, message: `${process.role === "previous_managed_router_candidate" ? "Previous router" : "Previous router child"} candidate PID ${process.pid} was not adopted or stopped.` });
+      } else {
+        processCategories.add("unmanaged_llama_process");
+        processWarnings.push({ category: "unmanaged_llama_process", level: "warning", pid: process.pid, message: `Unmanaged llama-server-like process detected with PID ${process.pid}. ObsidianLM will not kill or adopt it automatically.` });
+      }
+    }
+    if (!processCategories.size) processCategories.add("no_runtime_detected");
+    this.detectionSummary = { ...this.detectionSummary, categories: [...processCategories], warnings: processWarnings, processes: awareness.processes };
     return this.detectionSummary;
   }
 
@@ -196,6 +273,10 @@ export class RuntimeManager {
       const runtimeId = `router_${randomUUID()}` as const;
       this.command = { ...preview.command, args: [...preview.command.args] };
       this.activeExpected = expected.map((model) => ({ ...model }));
+      this.activeBuildServerLocator = prepared.analysis.executable;
+      this.processAwareness = [];
+      this.partialOutput.stdout = "";
+      this.partialOutput.stderr = "";
       this.processError = null;
       this.routerState = {
         ...structuredClone(defaultRouterRuntimeState),
@@ -225,8 +306,8 @@ export class RuntimeManager {
       this.child = child;
       this.routerState = { ...this.routerState, pid: child.pid ?? null, ownershipEvidence: "current_process_child" };
       await this.persist();
-      child.stdout.on("data", (data: Buffer) => this.captureOutput("stdout", data));
-      child.stderr.on("data", (data: Buffer) => this.captureOutput("stderr", data));
+      child.stdout.on("data", (data: Buffer) => this.captureOutput("stdout", data, child, runtimeId));
+      child.stderr.on("data", (data: Buffer) => this.captureOutput("stderr", data, child, runtimeId));
       child.once("error", (error) => { void this.serialize(() => this.handleProcessError(child, error, runtimeId)); });
       child.once("exit", (code, signal) => { void this.serialize(() => this.handleExit(child, code, signal, runtimeId)); });
 
@@ -241,6 +322,7 @@ export class RuntimeManager {
         message: "Managed router is running."
       };
       await this.persist();
+      await this.refreshProcessAwareness();
       return this.result(true, "Managed router started after /health and /models verification.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to start managed router.";
@@ -394,6 +476,7 @@ export class RuntimeManager {
         if (loaded.length > 1) return this.switchResult(false, "Router reported multiple loaded managed models despite models-max=1. No model was unloaded by ObsidianLM.", switchKind, target.id, sourceBuildId, target.buildId, "failed", "residency_policy_violation");
         this.routerState = { ...this.routerState, compatibilityProfileId, message: `Managed model ${target.id} is loaded.`, warnings: this.routerState.warnings.filter((warning) => !["model_load_failed", "model_load_timeout"].includes(warning.code)) };
         await this.persist();
+        await this.refreshProcessAwareness();
         this.logs.add("system", `Managed model ${target.id} is loaded.`);
         return this.switchResult(true, requested ? "Router model load completed." : "Target model was already loaded.", switchKind, target.id, sourceBuildId, target.buildId, "completed");
       }
@@ -437,7 +520,13 @@ export class RuntimeManager {
     return structuredClone(this.routerState.health);
   }
 
-  async refreshRouterControlPlane(): Promise<NonNullable<RouterRuntimeState["catalog"]>> { return this.serialize(() => this.refreshRouterControlPlaneLocked()); }
+  async refreshRouterControlPlane(): Promise<NonNullable<RouterRuntimeState["catalog"]>> {
+    return this.serialize(async () => {
+      const catalog = await this.refreshRouterControlPlaneLocked();
+      await this.refreshProcessAwareness();
+      return catalog;
+    });
+  }
 
   private async refreshRouterControlPlaneLocked(): Promise<NonNullable<RouterRuntimeState["catalog"]>> {
     if (!this.isOwnedRunning() || !this.routerState.activeBuildId) throw new Error("Managed router is not running in this service session.");
@@ -564,9 +653,16 @@ export class RuntimeManager {
   private async handleExit(child: ChildProcessWithoutNullStreams, code: number | null, signal: NodeJS.Signals | null, runtimeId?: RouterRuntimeState["activeRuntimeId"]): Promise<void> {
     if (this.child !== child || runtimeId !== undefined && this.routerState.activeRuntimeId !== runtimeId) return;
     const stopping = this.routerState.status === "stopping";
+    child.stdout.removeAllListeners("data");
+    child.stderr.removeAllListeners("data");
+    this.flushPartialOutput();
+    this.previousRouterPid = child.pid ?? null;
+    this.previousBuildServerLocator = this.activeBuildServerLocator;
     this.child = null;
     this.command = null;
     this.activeExpected = [];
+    this.activeBuildServerLocator = null;
+    this.processAwareness = [];
     this.routerState = {
       ...this.routerState,
       pid: null,
@@ -586,9 +682,12 @@ export class RuntimeManager {
   }
 
   private async markFailed(message: string): Promise<void> {
+    this.flushPartialOutput();
     this.child = null;
     this.command = null;
     this.activeExpected = [];
+    this.activeBuildServerLocator = null;
+    this.processAwareness = [];
     this.routerState = { ...this.routerState, pid: null, ownershipEvidence: "unproven", status: "failed", health: { endpoint: "/health", state: "failed", checkedAt: this.now().toISOString(), message }, catalog: undefined, configuredModelStates: this.nonLiveModelStates(), message, errors: [...this.routerState.errors, message] };
     await this.persist();
   }
@@ -604,7 +703,48 @@ export class RuntimeManager {
   }
 
   private withWarning(code: string, message: string): RouterRuntimeState["warnings"] { return [...this.routerState.warnings.filter((warning) => warning.code !== code), { code, message }]; }
-  private captureOutput(stream: "stdout" | "stderr", data: Buffer): void { for (const line of data.toString("utf8").split(/\r?\n/u).filter(Boolean)) this.logs.add(stream, line); }
+  private captureOutput(stream: "stdout" | "stderr", data: Buffer, child?: ChildProcessWithoutNullStreams | null, runtimeId?: RouterRuntimeState["activeRuntimeId"]): void {
+    if (child !== undefined && (!child || child !== this.child || runtimeId !== this.routerState.activeRuntimeId)) return;
+    let buffered = this.partialOutput[stream] + data.toString("utf8");
+    let newline = buffered.indexOf("\n");
+    while (newline >= 0) {
+      const line = buffered.slice(0, newline).replace(/\r$/u, "");
+      if (line) this.addRuntimeOutput(stream, this.boundedRuntimeLine(line));
+      buffered = buffered.slice(newline + 1);
+      newline = buffered.indexOf("\n");
+    }
+    if (Buffer.byteLength(buffered, "utf8") > maxPartialLogLineBytes) {
+      this.addRuntimeOutput(stream, `${Buffer.from(buffered).subarray(0, maxPartialLogLineBytes).toString("utf8")} [truncated: unterminated runtime output exceeded 64 KiB]`);
+      buffered = "";
+    }
+    this.partialOutput[stream] = buffered;
+  }
+  private boundedRuntimeLine(line: string): string {
+    if (Buffer.byteLength(line, "utf8") <= maxPartialLogLineBytes) return line;
+    return `${Buffer.from(line).subarray(0, maxPartialLogLineBytes).toString("utf8")} [truncated: runtime output line exceeded 64 KiB]`;
+  }
+  private flushPartialOutput(): void {
+    for (const stream of ["stdout", "stderr"] as const) {
+      const line = this.partialOutput[stream].replace(/\r$/u, "");
+      this.partialOutput[stream] = "";
+      if (line) this.addRuntimeOutput(stream, line);
+    }
+  }
+  private addRuntimeOutput(stream: "stdout" | "stderr", line: string): void {
+    const prefix = /^\[(\d{1,5})\]\s?(.*)$/u.exec(line);
+    const childPort = prefix ? Number(prefix[1]) : null;
+    if (prefix && childPort && childPort <= 65535) {
+      const matches = this.processAwareness.filter((process) => process.role === "managed_router_child" && process.ownership === "proven" && process.childPort === childPort);
+      if (matches.length === 1) {
+        const child = matches[0];
+        this.logs.add(stream, prefix[2], { origin: "router_child", pid: child.pid, childPort, configuredModelId: child.configuredModelId, routerAlias: child.routerAlias });
+        return;
+      }
+      this.logs.add(stream, line, { origin: "router_child_candidate", childPort });
+      return;
+    }
+    this.logs.add(stream, line, { origin: "router", ...(this.child?.pid ? { pid: this.child.pid } : {}) });
+  }
   private portFrom(args: string[]): number { const index = args.findIndex((arg) => arg === "--port"); const port = Number(args[index + 1]); if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Router launch preview has no valid managed port."); return port; }
   private errorCode(error: unknown): string { return error instanceof RouterPresetError ? error.code : "runtime_start_failed"; }
   private now(): Date { return (this.options.now ?? (() => new Date()))(); }

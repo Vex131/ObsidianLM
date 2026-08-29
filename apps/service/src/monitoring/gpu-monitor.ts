@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import type { GpuDevice, GpuMonitoringStatus, GpuProcess, GpuProcessKind, GpuSummary, GpuWarning } from "@obsidianlm/shared";
+import type { DetectedProcess, GpuDevice, GpuMonitoringStatus, GpuProcess, GpuProcessKind, GpuSummary, GpuWarning } from "@obsidianlm/shared";
 
 export interface CommandResult {
   stdout: string;
@@ -29,11 +29,14 @@ const emptySummary: GpuSummary = {
   usedMemoryMiB: null,
   freeMemoryMiB: null,
   currentManagedRuntimeGpuMemoryMiB: null,
+  managedRouterGpuMemoryMiB: null,
+  managedRouterChildrenGpuMemoryMiB: null,
+  managedRuntimeGpuMemoryMiB: null,
   unknownGpuProcessCount: 0,
   warningsCount: 0
 };
 
-export async function getGpuMonitoringStatus(currentManagedPid: number | null, options: GpuMonitorOptions = {}): Promise<GpuMonitoringStatus> {
+export async function getGpuMonitoringStatus(processAwareness: DetectedProcess[] | number | null, options: GpuMonitorOptions = {}): Promise<GpuMonitoringStatus> {
   const checkedAt = new Date().toISOString();
   const warnings: GpuWarning[] = [];
   const runner = options.commandRunner ?? runNvidiaSmi;
@@ -68,7 +71,11 @@ export async function getGpuMonitoringStatus(currentManagedPid: number | null, o
     warnings.push({ level: "warning", code: "gpu_process_owner_unknown", message: `GPU process query failed; VRAM may be used by processes ObsidianLM cannot list. ${safeErrorMessage(error)}` });
   }
 
-  const processes = classifyGpuProcesses(rawProcesses, gpus, currentManagedPid);
+  const detectedProcesses = Array.isArray(processAwareness) ? processAwareness : undefined;
+  if (!detectedProcesses) {
+    warnings.push({ level: "warning", code: "process_awareness_unavailable", message: "Process awareness is unavailable; GPU rows are shown without managed-process attribution." });
+  }
+  const processes = classifyGpuProcesses(rawProcesses, gpus, detectedProcesses);
   for (const gpu of gpus) {
     gpu.processes = processes.filter((process) => process.gpuIndex === gpu.index || (process.gpuIndex === null && process.gpuUuid && process.gpuUuid === gpu.uuid));
   }
@@ -144,14 +151,30 @@ export function parseComputeProcessCsv(stdout: string, warnings: GpuWarning[] = 
   });
 }
 
-export function classifyGpuProcesses(rawProcesses: ParsedGpuProcess[], gpus: GpuDevice[], currentManagedPid: number | null): GpuProcess[] {
-  return rawProcesses.map((rawProcess) => {
+export function classifyGpuProcesses(rawProcesses: ParsedGpuProcess[], gpus: GpuDevice[], processAwareness?: DetectedProcess[] | number | null): GpuProcess[] {
+  const detectedProcesses = Array.isArray(processAwareness) ? processAwareness : null;
+  const legacyManagedPid = typeof processAwareness === "number" ? processAwareness : null;
+  const deduplicatedProcesses = rawProcesses.filter((process, index, processes) =>
+    processes.findIndex((candidate) => candidate.gpuUuid === process.gpuUuid && candidate.pid === process.pid && candidate.usedMemoryMiB === process.usedMemoryMiB) === index
+  );
+
+  return deduplicatedProcesses.map((rawProcess) => {
     const gpu = rawProcess.gpuUuid ? gpus.find((device) => device.uuid === rawProcess.gpuUuid) : null;
     const llamaLike = /(^|[\\/])llama-server(\.exe)?$/iu.test(rawProcess.processName) || /^llama-server(\.exe)?$/iu.test(rawProcess.processName);
+    const detectedProcess = detectedProcesses?.find((process) => process.pid === rawProcess.pid);
     let kind: GpuProcessKind = "unknown_gpu_process";
     const reasons: string[] = [];
 
-    if (currentManagedPid && rawProcess.pid === currentManagedPid) {
+    if (detectedProcess?.role === "managed_router" && detectedProcess.ownership === "proven") {
+      kind = "managed_router";
+      reasons.push("Process has a proven managed router role.");
+    } else if (detectedProcess?.role === "managed_router_child" && detectedProcess.ownership === "proven") {
+      kind = "managed_router_child";
+      reasons.push("Process has a proven managed router child role.");
+    } else if (detectedProcess?.role === "managed_router_child" && detectedProcess.ownership === "candidate") {
+      kind = "possible_managed_router_child";
+      reasons.push("Process has a candidate managed router child role.");
+    } else if (legacyManagedPid && rawProcess.pid === legacyManagedPid) {
       kind = "current_managed_runtime";
       reasons.push("PID matches the current ObsidianLM-managed runtime.");
     } else if (llamaLike) {
@@ -161,6 +184,7 @@ export function classifyGpuProcesses(rawProcesses: ParsedGpuProcess[], gpus: Gpu
       reasons.push("GPU process is using VRAM and is not known to be managed by ObsidianLM.");
     }
 
+    const isRouterChild = kind === "managed_router_child" || kind === "possible_managed_router_child";
     return {
       pid: rawProcess.pid,
       processName: rawProcess.processName,
@@ -168,10 +192,15 @@ export function classifyGpuProcesses(rawProcesses: ParsedGpuProcess[], gpus: Gpu
       gpuUuid: rawProcess.gpuUuid,
       usedMemoryMiB: rawProcess.usedMemoryMiB,
       kind,
-      matchedRuntimeType: kind === "current_managed_runtime" || kind === "possible_llama_runtime" ? "llama.cpp" : null,
-      reasons
+      matchedRuntimeType: kind === "managed_router" || kind === "current_managed_runtime" || kind === "possible_llama_runtime" || isRouterChild ? "llama.cpp" as const : null,
+      reasons,
+      ...(isRouterChild ? {
+        parentPid: detectedProcess?.parentPid ?? null,
+        ...(detectedProcess?.configuredModelId ? { configuredModelId: detectedProcess.configuredModelId } : {}),
+        ...(detectedProcess?.routerAlias ? { routerAlias: detectedProcess.routerAlias } : {})
+      } : {})
     };
-  });
+  }).sort((left, right) => (left.gpuIndex ?? Number.MAX_SAFE_INTEGER) - (right.gpuIndex ?? Number.MAX_SAFE_INTEGER) || left.pid - right.pid);
 }
 
 function runNvidiaSmi(command: string, args: string[]): Promise<CommandResult> {
@@ -243,12 +272,18 @@ function sanitizeProcessName(value: string): string {
 }
 
 function summarizeGpus(gpus: GpuDevice[], processes: GpuProcess[], warningsCount: number): GpuSummary {
+  const managedRouterGpuMemoryMiB = sumNullable(processes.filter((process) => process.kind === "managed_router").map((process) => process.usedMemoryMiB));
+  const managedRouterChildrenGpuMemoryMiB = sumNullable(processes.filter((process) => process.kind === "managed_router_child").map((process) => process.usedMemoryMiB));
+  const managedRuntimeGpuMemoryMiB = sumNullable(processes.filter((process) => process.kind === "managed_router" || process.kind === "managed_router_child" || process.kind === "current_managed_runtime").map((process) => process.usedMemoryMiB));
   return {
     gpuCount: gpus.length,
     totalMemoryMiB: sumNullable(gpus.map((gpu) => gpu.memoryTotalMiB)),
     usedMemoryMiB: sumNullable(gpus.map((gpu) => gpu.memoryUsedMiB)),
     freeMemoryMiB: sumNullable(gpus.map((gpu) => gpu.memoryFreeMiB)),
-    currentManagedRuntimeGpuMemoryMiB: sumNullable(processes.filter((process) => process.kind === "current_managed_runtime").map((process) => process.usedMemoryMiB)),
+    currentManagedRuntimeGpuMemoryMiB: managedRuntimeGpuMemoryMiB,
+    managedRouterGpuMemoryMiB,
+    managedRouterChildrenGpuMemoryMiB,
+    managedRuntimeGpuMemoryMiB,
     unknownGpuProcessCount: processes.filter((process) => process.kind === "unknown_gpu_process").length,
     warningsCount
   };

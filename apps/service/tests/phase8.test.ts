@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -50,7 +50,7 @@ async function makeFixture(t: TestContext) {
   return { root, dataDir, logsDir, runtimeLogsDir: path.join(logsDir, "runtimes") };
 }
 
-function logEntry(id: number, message = `line-${id}`, source: RuntimeLogEntry["source"] = "stdout"): RuntimeLogEntry {
+function logEntry(id: number, message = `line-${id}`, source: RuntimeLogEntry["source"] = "stdout"): Omit<RuntimeLogEntry, "origin"> {
   return {
     id,
     sequence: id,
@@ -61,7 +61,7 @@ function logEntry(id: number, message = `line-${id}`, source: RuntimeLogEntry["s
   };
 }
 
-async function writeJsonl(filePath: string, entries: RuntimeLogEntry[]): Promise<void> {
+async function writeJsonl(filePath: string, entries: object[]): Promise<void> {
   await writeFile(filePath, `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`, "utf8");
 }
 
@@ -94,6 +94,36 @@ test("RuntimeLogBuffer reads recent structured entries from the runtime log file
   assert.deepEqual(recent.map((entry) => entry.message), ["second", "third"]);
   assert.deepEqual(recent.map((entry) => entry.source), ["stderr", "system"]);
   assert.equal(recent[0]?.stream, "stderr");
+  assert.deepEqual(recent.map((entry) => entry.origin), ["unknown", "unknown"]);
+});
+
+test("RuntimeLogBuffer persists and restores additive child attribution metadata", async (t) => {
+  await makeFixture(t);
+  const logs = new RuntimeLogBuffer();
+  await logs.startLogFile("router_metadata");
+  logs.add("stdout", "child line", { origin: "router_child", pid: 200, childPort: 39015, configuredModelId: "model_a", routerAlias: "alias-a" });
+
+  const deadline = Date.now() + 1000;
+  let recent = await logs.getRecent(1);
+  while (recent[0]?.origin !== "router_child" && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    recent = await logs.getRecent(1);
+  }
+
+  assert.deepEqual(recent[0], logs.getRecentFromMemory(1)[0]);
+  assert.equal(recent[0].configuredModelId, "model_a");
+  assert.equal(recent[0].childPort, 39015);
+});
+
+test("RuntimeLogBuffer drains queued writes before rotating runtime files", async (t) => {
+  await makeFixture(t);
+  const logs = new RuntimeLogBuffer();
+  const sourceFile = await logs.startLogFile("source_runtime");
+  logs.add("stdout", "source-only line");
+  const targetFile = await logs.startLogFile("target_runtime");
+
+  assert.match(await readFile(sourceFile, "utf8"), /source-only line/u);
+  await assert.rejects(() => readFile(targetFile, "utf8"), { code: "ENOENT" });
 });
 
 test("RuntimeLogBuffer applies default and maximum recent-log limits", async (t) => {

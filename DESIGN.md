@@ -11,7 +11,7 @@
 
 ObsidianLM is **not** primarily a chat app and should not look like LM Studio. It is a focused operator console for starting, stopping, validating, monitoring, and switching local AI runtime configuration safely.
 
-**Architecture status:** the current implementation uses one selected Build and one managed llama.cpp router. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence. Run 7 implements same-Build model loading through llama.cpp's management API without a router restart, plus explicit preflight/stop/release/start/load cross-Build replacement on the stable endpoint. Profile compatibility actions load only stopped or same-Build targets and never hide a cross-Build restart. GPU child/log attribution remains Run 8; Profiles/Models/Builds and Runtime/Dashboard UI work remains Runs 9–10. Do not claim Phase 15 complete.
+**Architecture status:** the current implementation uses one selected Build and one managed llama.cpp router. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence. Run 7 implements same-Build model loading through llama.cpp's management API without a router restart, plus explicit preflight/stop/release/start/load cross-Build replacement on the stable endpoint. Run 8 adds conservative router-child process, GPU, and forwarded-log attribution without child lifecycle authority. Profile compatibility actions load only stopped or same-Build targets and never hide a cross-Build restart. Profiles/Models/Builds and Runtime/Dashboard UI work remains Runs 9–10. Do not claim Phase 15 complete.
 
 ### Design Direction
 
@@ -1138,7 +1138,7 @@ Must include:
 - Copy visible.
 - Clear visible.
 - Current source distinctions for managed runtime stdout/stderr/system entries, persisted job logs, and bounded service-wrapper files.
-- Router lifecycle is current Phase 15 work; GPU child/log attribution remains Run 8, and remote Node-labelled streams remain Phase 16 work.
+- Router lifecycle and router/child origin metadata are current Phase 15 backend contracts; their UI integration remains Runs 9–10, and remote Node-labelled streams remain Phase 16 work.
 
 ### 16.8 Telemetry / Processes
 
@@ -1150,7 +1150,7 @@ Must include:
 - GPU devices.
 - GPU processes.
 - llama.cpp-like process detection.
-- Managed router and proven router-child classification when implemented.
+- Managed router, proven router-child, previous-candidate, unmanaged, and unknown classifications from Run 8.
 - Port status.
 - Clear read-only safety copy for external processes.
 - Unknown processes remain warning-only; managing one router never grants ownership of every `llama-server.exe`.

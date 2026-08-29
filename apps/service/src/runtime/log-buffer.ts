@@ -1,6 +1,6 @@
 import { appendFile, mkdir, open, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { RuntimeLogEntry, RuntimeLogSource } from "@obsidianlm/shared";
+import type { RuntimeLogEntry, RuntimeLogOrigin, RuntimeLogSource } from "@obsidianlm/shared";
 import { getRuntimeLogsDir } from "../config/paths.js";
 
 type LogListener = (entry: RuntimeLogEntry) => void;
@@ -8,6 +8,8 @@ type LogListener = (entry: RuntimeLogEntry) => void;
 const defaultRecentLimit = 300;
 const maxRecentLimit = 2000;
 const maxTailBytes = 1024 * 1024;
+type RuntimeLogMetadata = Partial<Pick<RuntimeLogEntry, "origin" | "pid" | "childPort" | "configuredModelId" | "routerAlias">>;
+const validOrigins: RuntimeLogOrigin[] = ["runtime_system", "router", "router_child", "router_child_candidate", "unknown"];
 
 function normalizeLimit(limit: number | undefined, fallback = defaultRecentLimit): number {
   if (typeof limit !== "number" || !Number.isFinite(limit)) {
@@ -32,7 +34,12 @@ function parseStructuredLogLine(line: string): RuntimeLogEntry | null {
       timestamp: parsed.timestamp,
       source,
       stream: source,
-      message: String(parsed.message)
+      message: String(parsed.message),
+      origin: parsed.origin && validOrigins.includes(parsed.origin) ? parsed.origin : "unknown",
+      ...(Number.isInteger(parsed.pid) && parsed.pid! > 0 ? { pid: parsed.pid } : {}),
+      ...(Number.isInteger(parsed.childPort) && parsed.childPort! > 0 && parsed.childPort! <= 65535 ? { childPort: parsed.childPort } : {}),
+      ...(typeof parsed.configuredModelId === "string" ? { configuredModelId: parsed.configuredModelId } : {}),
+      ...(typeof parsed.routerAlias === "string" ? { routerAlias: parsed.routerAlias } : {})
     };
   } catch {
     return null;
@@ -52,7 +59,8 @@ function parseLegacyLogLine(line: string, index: number): RuntimeLogEntry | null
     timestamp: match.groups.timestamp,
     source,
     stream: source,
-    message: match.groups.message
+    message: match.groups.message,
+    origin: "unknown"
   };
 }
 
@@ -66,6 +74,7 @@ export class RuntimeLogBuffer {
   constructor(private readonly maxEntries = maxRecentLimit) {}
 
   async startLogFile(profileId: string): Promise<string> {
+    await this.writeChain;
     const runtimeLogsDir = getRuntimeLogsDir();
     await mkdir(runtimeLogsDir, { recursive: true });
     const safeProfileId = profileId.replace(/[^a-zA-Z0-9_.-]/gu, "_");
@@ -107,14 +116,19 @@ export class RuntimeLogBuffer {
     };
   }
 
-  add(source: RuntimeLogSource, message: string): RuntimeLogEntry {
+  add(source: RuntimeLogSource, message: string, metadata: RuntimeLogMetadata = {}): RuntimeLogEntry {
     const entry: RuntimeLogEntry = {
       id: this.nextSequence,
       sequence: this.nextSequence,
       timestamp: new Date().toISOString(),
       source,
       stream: source,
-      message
+      message,
+      origin: metadata.origin ?? (source === "system" ? "runtime_system" : "router"),
+      ...(metadata.pid ? { pid: metadata.pid } : {}),
+      ...(metadata.childPort ? { childPort: metadata.childPort } : {}),
+      ...(metadata.configuredModelId ? { configuredModelId: metadata.configuredModelId } : {}),
+      ...(metadata.routerAlias ? { routerAlias: metadata.routerAlias } : {})
     };
     this.nextSequence += 1;
 
@@ -127,7 +141,8 @@ export class RuntimeLogBuffer {
       listener(entry);
     }
 
-    this.writeChain = this.writeChain.then(() => this.writeEntry(entry)).catch(() => undefined);
+    const destination = this.activeLogFile;
+    this.writeChain = this.writeChain.then(() => this.writeEntry(entry, destination)).catch(() => undefined);
     return entry;
   }
 
@@ -184,12 +199,12 @@ export class RuntimeLogBuffer {
     }
   }
 
-  private async writeEntry(entry: RuntimeLogEntry): Promise<void> {
-    if (!this.activeLogFile) {
+  private async writeEntry(entry: RuntimeLogEntry, destination: string | null): Promise<void> {
+    if (!destination) {
       return;
     }
 
     const line = `${JSON.stringify(entry)}\n`;
-    await appendFile(this.activeLogFile, line, "utf8");
+    await appendFile(destination, line, "utf8");
   }
 }

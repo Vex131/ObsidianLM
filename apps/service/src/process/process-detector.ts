@@ -19,6 +19,7 @@ export interface ProcessDetectorOptions {
 
 interface WindowsProcessRow {
   ProcessId?: number;
+  ParentProcessId?: number | string | null;
   Name?: string;
   ExecutablePath?: string | null;
   CommandLine?: string | null;
@@ -56,35 +57,37 @@ async function detectWindowsProcesses(commandRunner: ProcessCommandRunner, detec
       "-ExecutionPolicy",
       "Bypass",
       "-Command",
-      "Get-CimInstance Win32_Process | Select-Object ProcessId,Name,ExecutablePath,CommandLine,CreationDate | ConvertTo-Json -Compress"
+      "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine,CreationDate | ConvertTo-Json -Compress"
     ]);
     const parsed = stdout.trim() ? (JSON.parse(stdout) as WindowsProcessRow | WindowsProcessRow[]) : [];
     const rows = Array.isArray(parsed) ? parsed : [parsed];
     return {
       processes: rows.map((row) => toDetectedProcess(row, detectedAt)).filter((process): process is DetectedProcess => process !== null),
       warnings: [],
-      detectionMethod
+      detectionMethod,
+      available: true
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Process detection failed.";
     return {
       processes: [],
       warnings: [`Process detection is unavailable: ${message}`],
-      detectionMethod
+      detectionMethod,
+      available: false
     };
   }
 }
 
 async function detectPosixProcesses(commandRunner: ProcessCommandRunner, detectedAt: string): Promise<ProcessListResponse> {
-  const detectionMethod = "ps -axo pid=,comm=,args=";
+  const detectionMethod = "ps -axo pid=,ppid=,comm=,args=";
   try {
-    const { stdout } = await commandRunner("ps", ["-axo", "pid=,comm=,args="]);
+    const { stdout } = await commandRunner("ps", ["-axo", "pid=,ppid=,comm=,args="]);
     const processes = stdout
       .split(/\r?\n/u)
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        const match = /^(\d+)\s+(\S+)\s+(.*)$/u.exec(line);
+        const match = /^(\d+)\s+(\S+)\s+(\S+)(?:\s+(.*))?$/u.exec(line);
         if (!match) {
           return null;
         }
@@ -92,9 +95,10 @@ async function detectPosixProcesses(commandRunner: ProcessCommandRunner, detecte
         return toDetectedProcess(
           {
             ProcessId: Number(match[1]),
-            Name: match[2],
+            ParentProcessId: match[2],
+            Name: match[3],
             ExecutablePath: null,
-            CommandLine: match[3],
+            CommandLine: match[4] || null,
             CreationDate: null
           },
           detectedAt
@@ -102,13 +106,14 @@ async function detectPosixProcesses(commandRunner: ProcessCommandRunner, detecte
       })
       .filter((process): process is DetectedProcess => process !== null);
 
-    return { processes, warnings: [], detectionMethod };
+    return { processes, warnings: [], detectionMethod, available: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Process detection failed.";
     return {
       processes: [],
       warnings: [`Process detection is unavailable on this platform: ${message}`],
-      detectionMethod
+      detectionMethod,
+      available: false
     };
   }
 }
@@ -138,6 +143,7 @@ function toDetectedProcess(row: WindowsProcessRow, detectedAt: string): Detected
 
   return {
     pid,
+    parentPid: normalizeParentPid(row.ParentProcessId),
     name,
     executablePath,
     commandLine,
@@ -148,6 +154,11 @@ function toDetectedProcess(row: WindowsProcessRow, detectedAt: string): Detected
     confidence: commandLine || executablePath ? "medium" : "low",
     reasons
   };
+}
+
+function normalizeParentPid(value: number | string | null | undefined): number | null {
+  const parentPid = Number(value);
+  return Number.isInteger(parentPid) && parentPid > 0 ? parentPid : null;
 }
 
 function normalizeWindowsDate(value: string | null): string | null {

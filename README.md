@@ -10,7 +10,7 @@ The implemented Phases 1-13 used one model-bound profile per managed `llama-serv
 profile = llama-server build + GGUF model + model arguments + endpoint
 ```
 
-The Phase 15 foundation, production router lifecycle, and model/Build switching are implemented through Builder Run 7. `RuntimeManager` selects one validated Build, generates/uses its derived preset, launches one managed router, and persists current lifecycle authority in `router-runtime-state.json`. ObsidianLM remains the control plane; it is not a general inference proxy.
+The Phase 15 foundation, production router lifecycle, model/Build switching, and process/GPU/log awareness are implemented through Builder Run 8. `RuntimeManager` selects one validated Build, generates/uses its derived preset, launches one managed router, and persists current lifecycle authority in `router-runtime-state.json`. ObsidianLM remains the control plane; it is not a general inference proxy.
 
 ```text
 Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
@@ -18,7 +18,7 @@ Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
 OpenCode / Illustria / local clients → llama.cpp :8085/v1
 ```
 
-Profile start now starts the mapped Build and loads its mapped model when stopped, or switches models in place when the same Build is running. It never hides a cross-Build restart. Direct same-Build selection uses the router management API and preserves the router PID/runtime ID; explicit cross-Build selection performs preflight, stop, port release, target start, and target load on the same endpoint. GPU child/log attribution remains Run 8; UI work remains Runs 9–10. See the [Project Plan](docs/ObsidianLM_Project_Plan.md) for migration and safety requirements.
+Profile start now starts the mapped Build and loads its mapped model when stopped, or switches models in place when the same Build is running. It never hides a cross-Build restart. Direct same-Build selection uses the router management API and preserves the router PID/runtime ID; explicit cross-Build selection performs preflight, stop, port release, target start, and target load on the same endpoint. Run 8 classifies a router child as managed only from current in-memory router ownership, direct parent evidence, and the exact active Build executable path. It attributes GPU memory and child-prefixed logs only after that proof; previous and unknown processes remain read-only candidates. UI work remains Runs 9–10.
 
 ## Package Manager
 
@@ -176,7 +176,7 @@ Implemented:
 - Query GPU status through `nvidia-smi` without changing GPU settings.
 - Show GPU name, driver/CUDA version when available, VRAM used/free/total, utilization, temperature, and power draw/limit.
 - Show GPU compute processes with PID, process name, GPU, reported VRAM, and classification.
-- Mark the current ObsidianLM-managed runtime when its PID appears in the GPU process list.
+- Mark the managed router and proven managed router children when their PIDs appear in the GPU process list. Managed-runtime VRAM is the sum of router-parent and proven-child rows; unproven llama-server rows are excluded.
 - Classify other `llama-server`-like GPU processes as possible llama.cpp runtimes without adopting or stopping them.
 - Report unknown GPU processes as warnings/info only.
 - Expose GPU status in the dashboard and through `GET /api/monitoring/gpu`; include a compact GPU summary in `GET /api/status`.
@@ -249,6 +249,8 @@ Implemented:
 - Runtime log APIs: `GET /api/runtime/logs?limit=300` for recent entries and `GET /api/runtime/logs/stream?limit=100` for SSE live updates.
 
 Live runtime logs are only for the active or most recent llama.cpp process started and tracked by ObsidianLM. ObsidianLM does not tail, adopt, or stream logs from manual/unmanaged `llama-server` processes.
+
+Phase 15 Run 8 adds `runtime_system`, `router`, `router_child`, and candidate/unknown origin metadata without changing stdout/stderr/system stream fields or the SSE `log` event. Child-port prefixes map to a Configured Model only when they reconcile to one proven live router child. Unknown or Build-sensitive formats remain visible as raw router/candidate logs.
 
 ## Phase 9 Status
 

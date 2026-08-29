@@ -17,5 +17,8 @@ export async function registerMonitoringRoutes(app: FastifyInstance, runtimeMana
     return classifyPortStatus(port, currentPid);
   });
 
-  app.get("/api/monitoring/gpu", async () => getGpuMonitoringStatus(runtimeManager.getState().pid, gpuMonitorOptions));
+  app.get("/api/monitoring/gpu", async () => {
+    const awareness = await runtimeManager.refreshProcessAwareness();
+    return getGpuMonitoringStatus(awareness.available === false ? null : awareness.processes, gpuMonitorOptions);
+  });
 }

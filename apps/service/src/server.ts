@@ -66,7 +66,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   await registerRuntimeRoutes(app, runtimeManager);
   await registerDiscoveryRoutes(app);
   await registerPhase15DomainRoutes(app, options.functionalRouterValidatorDependencies, options.routerPresetDependencies);
-  await registerProcessRoutes(app);
+  await registerProcessRoutes(app, runtimeManager);
   await registerMonitoringRoutes(app, runtimeManager, options.gpuMonitorOptions);
   await registerJobRoutes(app, jobManager);
   await registerServiceLogRoutes(app);

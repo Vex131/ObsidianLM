@@ -1,4 +1,6 @@
-export type GpuProcessKind = "current_managed_runtime" | "possible_llama_runtime" | "unknown_gpu_process";
+import type { ConfiguredModelId, RouterAlias } from "./model-configuration.js";
+
+export type GpuProcessKind = "managed_router" | "managed_router_child" | "possible_managed_router_child" | "current_managed_runtime" | "possible_llama_runtime" | "unknown_gpu_process";
 
 export interface GpuMemoryInfo {
   totalMiB: number | null;
@@ -21,7 +23,7 @@ export interface GpuTemperatureInfo {
 
 export interface GpuWarning {
   level: "info" | "warning" | "danger";
-  code: "nvidia_smi_missing" | "nvidia_smi_failed" | "unsupported_output" | "no_nvidia_gpus_detected" | "gpu_process_owner_unknown" | "parse_warning";
+  code: "nvidia_smi_missing" | "nvidia_smi_failed" | "unsupported_output" | "no_nvidia_gpus_detected" | "gpu_process_owner_unknown" | "process_awareness_unavailable" | "managed_child_mapping_uncertain" | "managed_runtime_gpu_partial" | "parse_warning";
   message: string;
 }
 
@@ -34,6 +36,9 @@ export interface GpuProcess {
   kind: GpuProcessKind;
   matchedRuntimeType: "llama.cpp" | null;
   reasons: string[];
+  parentPid?: number | null;
+  configuredModelId?: ConfiguredModelId;
+  routerAlias?: RouterAlias;
 }
 
 export interface GpuDevice {
@@ -59,6 +64,9 @@ export interface GpuSummary {
   usedMemoryMiB: number | null;
   freeMemoryMiB: number | null;
   currentManagedRuntimeGpuMemoryMiB: number | null;
+  managedRouterGpuMemoryMiB: number | null;
+  managedRouterChildrenGpuMemoryMiB: number | null;
+  managedRuntimeGpuMemoryMiB: number | null;
   unknownGpuProcessCount: number;
   warningsCount: number;
 }

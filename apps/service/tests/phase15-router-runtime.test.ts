@@ -29,6 +29,7 @@ function harness(t: test.TestContext, catalog: unknown[] = [{ id: "managed-model
   const saved: RouterRuntimeState[] = [];
   const child = new FakeChild();
   let currentCatalog = catalog; let catalogSequence: unknown[][] | null = null; let currentDomain = structuredClone(domain); let spawned = false; let nextPid = 4321;
+  let processDetector = async () => ({ processes: [], warnings: [], detectionMethod: "fixture" });
   const loadRequests: string[] = []; const events: string[] = [];
   child.on("kill", (signal) => { if (signal === "SIGTERM") events.push("source SIGTERM"); });
   child.on("exit", () => { events.push("source exit"); });
@@ -50,10 +51,11 @@ function harness(t: test.TestContext, catalog: unknown[] = [{ id: "managed-model
     sleep: async () => undefined,
     startupDeadlineMs: 100,
     stopTimeoutMs: 100,
-    environment: { LLAMA_CACHE: "inherited", LLAMA_MODEL: "secret", PATH: "safe" }
+    environment: { LLAMA_CACHE: "inherited", LLAMA_MODEL: "secret", PATH: "safe" },
+    processDetector: () => processDetector()
   });
   t.after(async () => { if (child.exitCode === null) child.kill("SIGTERM"); });
-  return { manager, child, saved, command, launch: () => launch, loadRequests, events, setCatalog: (value: unknown[]) => { currentCatalog = value; }, setCatalogSequence: (value: unknown[][]) => { catalogSequence = value; }, setDomain: (value: any) => { currentDomain = value; }, setNextPid: (value: number) => { nextPid = value; } };
+  return { manager, child, saved, command, launch: () => launch, loadRequests, events, setCatalog: (value: unknown[]) => { currentCatalog = value; }, setCatalogSequence: (value: unknown[][]) => { catalogSequence = value; }, setDomain: (value: any) => { currentDomain = value; }, setNextPid: (value: number) => { nextPid = value; }, failProcessDetection: () => { processDetector = async () => { throw new Error("fixture process scan failed"); }; } };
 }
 
 test("router runtime storage defaults and malformed backup preserve legacy runtime-state", async (t) => {
@@ -218,6 +220,16 @@ function crossBuildFixture(h: ReturnType<typeof harness>) {
   (h.manager as any).options.buildLaunchPreview = async () => ({ kind: "router_launch", command: { ...h.command, args: [...h.command.args, "--target-build"], commandHash: "target-command" }, artifact: targetArtifact, policy: { modelsMax: 1, modelsAutoload: true } });
   return targetId;
 }
+
+test("model and Build switching remain successful when process awareness fails", async (t) => {
+  const same = harness(t); assert.equal((await same.manager.start(buildId)).ok, true); same.failProcessDetection();
+  same.setCatalogSequence([[{ id: "managed-model", status: "unloaded" }], [{ id: "managed-model", status: "loaded" }]]);
+  assert.equal((await same.manager.switchModel(modelId)).ok, true);
+
+  const cross = harness(t); assert.equal((await cross.manager.start(buildId)).ok, true); const target = crossBuildFixture(cross); cross.failProcessDetection(); cross.setNextPid(9876);
+  cross.setCatalogSequence([[{ id: "target-model", status: "unloaded" }], [{ id: "target-model", status: "unloaded" }], [{ id: "target-model", status: "loaded" }]]);
+  assert.equal((await cross.manager.switchBuild(target)).ok, true);
+});
 
 test("cross-Build failures preserve or stop the source without spawning an unsafe target", async (t) => {
   const preflight = harness(t); assert.equal((await preflight.manager.start(buildId)).ok, true); const sourcePid = preflight.manager.getRouterState().pid; const targetId = crossBuildFixture(preflight);

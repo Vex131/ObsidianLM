@@ -3,8 +3,11 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { defaultSettings, type GpuMonitoringStatus } from "@obsidianlm/shared";
+import fastify from "fastify";
+import { defaultSettings, type DetectedProcess, type GpuMonitoringStatus, type RouterAlias } from "@obsidianlm/shared";
 import { createServer } from "../src/server.js";
+import { registerMonitoringRoutes } from "../src/api/monitoring.js";
+import type { RuntimeManager } from "../src/runtime/manager.js";
 import {
   classifyGpuProcesses,
   getGpuMonitoringStatus,
@@ -31,7 +34,7 @@ async function makeDataFixture() {
 async function createFixtureApp(t: TestContext, commandRunner: GpuCommandRunner) {
   const fixture = await makeDataFixture();
   process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
-  const app = await createServer({ gpuMonitorOptions: { commandRunner } });
+  const app = await createServer({ gpuMonitorOptions: { commandRunner }, runtimeManagerOptions: { processDetector: async () => ({ processes: [], warnings: [], detectionMethod: "fixture" }) } });
   const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
   assert.equal(setup.statusCode, 201);
   t.after(async () => {
@@ -48,6 +51,25 @@ function runnerWithOutputs(outputs: string[]): GpuCommandRunner {
 
 function errorWithCode(code: string, message: string) {
   return Object.assign(new Error(message), { code });
+}
+
+function detectedProcess(pid: number, role: DetectedProcess["role"], ownership: DetectedProcess["ownership"], extra: Partial<DetectedProcess> = {}): DetectedProcess {
+  return {
+    pid,
+    parentPid: null,
+    name: "llama-server",
+    executablePath: null,
+    commandLine: null,
+    startedAt: null,
+    detectedAt: "2026-01-01T00:00:00.000Z",
+    matchedRuntimeType: "llama.cpp",
+    kind: "llama_server",
+    confidence: "high",
+    reasons: [],
+    role,
+    ownership,
+    ...extra
+  };
 }
 
 const representativeGpuCsv = [
@@ -120,6 +142,86 @@ test("GPU process classification distinguishes current managed, possible llama, 
   assert.equal(processes[2].kind, "unknown_gpu_process");
   assert.equal(processes[2].matchedRuntimeType, null);
   assert.equal(processes[2].usedMemoryMiB, 512);
+});
+
+test("GPU process classification uses proven router roles, child metadata, and excludes previous candidates", () => {
+  const gpus = parseGpuCsv(representativeGpuCsv);
+  const rawProcesses = parseComputeProcessCsv([
+    "10, router.exe, GPU-111, 100",
+    "20, llama-server.exe, GPU-222, 8000",
+    "30, llama-server.exe, GPU-222, 200",
+    "40, llama-server.exe, GPU-111, 300"
+  ].join("\n"));
+  const processes = classifyGpuProcesses(rawProcesses, gpus, [
+    detectedProcess(10, "managed_router", "proven"),
+    detectedProcess(20, "managed_router_child", "proven", { parentPid: 10, configuredModelId: "model_a", routerAlias: "alias-a" as RouterAlias }),
+    detectedProcess(30, "managed_router_child", "candidate"),
+    detectedProcess(40, "previous_managed_router_child_candidate", "candidate")
+  ]);
+
+  assert.deepEqual(processes.map((process) => process.kind), ["managed_router", "possible_llama_runtime", "managed_router_child", "possible_managed_router_child"]);
+  assert.equal(processes[2].parentPid, 10);
+  assert.equal(processes[2].configuredModelId, "model_a");
+  assert.equal(processes[2].routerAlias, "alias-a");
+  assert.equal(processes[1].kind, "possible_llama_runtime");
+});
+
+test("GPU monitor summarizes router memory, deduplicates rows, and retains PID rows on separate GPUs", async () => {
+  const status = await getGpuMonitoringStatus([
+    detectedProcess(10, "managed_router", "proven"),
+    detectedProcess(20, "managed_router_child", "proven", { parentPid: 10 })
+  ], {
+    commandRunner: runnerWithOutputs([representativeGpuCsv, [
+      "20, llama-server.exe, GPU-222, 8000",
+      "10, router.exe, GPU-111, 100",
+      "20, llama-server.exe, GPU-222, 8000",
+      "20, llama-server.exe, GPU-111, 50",
+      "30, llama-server.exe, GPU-111, 400"
+    ].join("\n")])
+  });
+
+  assert.deepEqual(status.processes.map((process) => [process.gpuIndex, process.pid]), [[0, 10], [0, 20], [0, 30], [1, 20]]);
+  assert.equal(status.processes.length, 4);
+  assert.equal(status.processes[2].kind, "possible_llama_runtime");
+  assert.equal(status.summary.managedRouterGpuMemoryMiB, 100);
+  assert.equal(status.summary.managedRouterChildrenGpuMemoryMiB, 8050);
+  assert.equal(status.summary.managedRuntimeGpuMemoryMiB, 8150);
+  assert.equal(status.summary.currentManagedRuntimeGpuMemoryMiB, 8150);
+});
+
+test("GPU monitor warns and avoids managed attribution without process awareness", async () => {
+  const status = await getGpuMonitoringStatus(null, {
+    commandRunner: runnerWithOutputs([representativeGpuCsv, "10, llama-server.exe, GPU-111, 100"])
+  });
+
+  assert.equal(status.processes[0].kind, "possible_llama_runtime");
+  assert.ok(status.warnings.some((warning) => warning.code === "process_awareness_unavailable"));
+});
+
+test("GPU API reuses proven process awareness for child attribution", async (t) => {
+  const awareness = [detectedProcess(10, "managed_router", "proven"), detectedProcess(20, "managed_router_child", "proven", { parentPid: 10, configuredModelId: "model_a" })];
+  const manager = { refreshProcessAwareness: async () => ({ processes: awareness, warnings: [], detectionMethod: "fixture" }) } as unknown as RuntimeManager;
+  const app = fastify({ logger: false });
+  await registerMonitoringRoutes(app, manager, { commandRunner: runnerWithOutputs([representativeGpuCsv, "10, router.exe, GPU-111, 100\n20, llama-server.exe, GPU-222, 8000"]) });
+  t.after(async () => app.close());
+
+  const response = await app.inject({ method: "GET", url: "/api/monitoring/gpu" });
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as GpuMonitoringStatus;
+  assert.deepEqual(body.processes.map((process) => process.kind), ["managed_router", "managed_router_child"]);
+  assert.equal(body.processes[1].configuredModelId, "model_a");
+  assert.equal(body.summary.currentManagedRuntimeGpuMemoryMiB, 8100);
+});
+
+test("GPU API reports unavailable ownership when process detection returns warnings instead of throwing", async (t) => {
+  const manager = { refreshProcessAwareness: async () => ({ processes: [], warnings: ["Process detection is unavailable: fixture"], detectionMethod: "fixture", available: false }) } as unknown as RuntimeManager;
+  const app = fastify({ logger: false });
+  await registerMonitoringRoutes(app, manager, { commandRunner: runnerWithOutputs([representativeGpuCsv, "20, llama-server.exe, GPU-222, 8000"]) });
+  t.after(async () => app.close());
+
+  const body = (await app.inject({ method: "GET", url: "/api/monitoring/gpu" })).json() as GpuMonitoringStatus;
+  assert.equal(body.processes[0].kind, "possible_llama_runtime");
+  assert.ok(body.warnings.some((warning) => warning.code === "process_awareness_unavailable"));
 });
 
 test("GPU monitor reports missing nvidia-smi without throwing", async () => {

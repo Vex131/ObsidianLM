@@ -14,7 +14,8 @@ export async function registerStatusRoutes(app: FastifyInstance, runtimeManager:
     const detection = sanitizeDetectionForApi(await runtimeManager.refreshDetection({ reconcileStaleState: false }));
     const state = runtimeManager.getState();
     const routerState = runtimeManager.getRouterState();
-    const gpuStatus = await getGpuMonitoringStatus(state.pid, gpuMonitorOptions);
+    const awareness = await runtimeManager.refreshProcessAwareness();
+    const gpuStatus = await getGpuMonitoringStatus(awareness.available === false ? null : awareness.processes, gpuMonitorOptions);
     const activeProfile = runtimeManager.getActiveProfile() ?? (state.activeProfileId ? await getProfile(state.activeProfileId) : null);
     const hasActiveRuntime = ["starting", "running", "stopping"].includes(state.status);
 

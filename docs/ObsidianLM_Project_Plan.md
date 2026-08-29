@@ -404,7 +404,7 @@ port conflict
 
 Parent/child linkage, saved state, command evidence, and platform capabilities must be evaluated conservatively. Managing a router never implies ownership of every `llama-server.exe`. If ownership cannot be proved, warn rather than kill. Previous-process adoption and automatic cleanup remain future safety work, not assumptions.
 
-GPU monitoring must not assume the router parent owns the model VRAM. The loaded child may perform inference and hold most VRAM. Future monitoring should associate only proven router children with the managed runtime. Unknown GPU processes remain read-only warnings; GPU process killing is not introduced.
+GPU monitoring does not assume the router parent owns the model VRAM. Run 8 associates only proven current router children with the managed runtime and reports router, child, and combined memory totals. Unknown and previous-candidate GPU processes remain read-only and do not contribute to the current managed total; GPU process killing is not introduced.
 
 Logging must keep these sources understandable:
 
@@ -415,7 +415,7 @@ router/model-child output
 one-shot job logs
 ```
 
-Current upstream router source combines each child's stdout/stderr and forwards it through the router log with a child port prefix. Phase 15 must validate this behavior on selected Windows builds and preserve useful source/model context in ObsidianLM's runtime logs without tailing or adopting unmanaged processes.
+Current upstream router source combines each child's stdout/stderr and forwards it through the router log with a child port prefix. Run 8 preserves stream compatibility and adds router/system/child origin metadata only when a prefix reconciles to a proven live child port. Unknown formats remain visible without model attribution. The Build-sensitive format still requires selected-Windows-Build certification in Run 11; ObsidianLM does not tail child files or adopt unmanaged processes.
 
 ## 12. Discovery Evolution
 
@@ -520,13 +520,13 @@ Phase 14 remains a UI restructuring phase. It does not implement the router, mig
 
 ## 17. Phase 15 - llama.cpp Router Integration
 
-**Status:** Foundation, Build/router lifecycle, and model/Build switching implemented through Builder Run 7. Phase 15 is not complete.
+**Status:** Foundation, Build/router lifecycle, model/Build switching, and process/GPU/log awareness implemented through Builder Run 8. Phase 15 is not complete.
 
 ### Goal
 
 Evolve the one-profile/one-server runtime into one ObsidianLM-managed llama.cpp router for one selected build, with generated per-model presets and safe cross-build replacement on the stable `:8085` endpoint.
 
-Run 5 added deterministic exact-executable, capability-aware production presets, atomic derived-artifact generation, freshness evaluation, and separate read-only preset/launch previews. Run 6 added production launch through a Build/router `RuntimeManager`, controlled cache/environment, managed port preflight/ownership, and strict `/health`/`/models` reconciliation. Run 7 adds explicit same-Build model loading and safe cross-Build replacement. It does not claim Phase 15 completion.
+Run 5 added deterministic exact-executable, capability-aware production presets, atomic derived-artifact generation, freshness evaluation, and separate read-only preset/launch previews. Run 6 added production launch through a Build/router `RuntimeManager`, controlled cache/environment, managed port preflight/ownership, and strict `/health`/`/models` reconciliation. Run 7 added explicit same-Build model loading and safe cross-Build replacement. Run 8 adds live parent-PID and exact-Build child classification, proven-child GPU attribution, combined managed-runtime VRAM, and router-forwarded child-log metadata. It does not claim Phase 15 completion.
 
 ### Forward-compatible ownership constraint
 
@@ -547,7 +547,7 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 4. **Preset generation:** **Implemented in Run 5.** Deterministic atomic production INI generation per Build, Windows path handling, capability-aware validation, and separate launch/preset previews.
 5. **RuntimeManager router support:** **Implemented in Run 6.** Launch one router, validate `/health` and strictly reconcile `/models`, stop safely, recover startup state, and retain managed port ownership rules.
 6. **Model and Build switching:** **Implemented in Run 7.** Same-Build selection uses `POST /models/load` and bounded `/models` observation without restarting the router or issuing normal unload requests. Explicit cross-Build selection preflights the target before stopping the source, verifies exit and port release, revalidates and starts the target on the stable endpoint, then loads the requested model. There is no automatic rollback.
-7. **Process/GPU/log awareness:** Run 8. Classify proven router children, attribute GPU use conservatively, preserve useful router/child logs, and warn on uncertain ownership.
+7. **Process/GPU/log awareness:** **Implemented in Run 8.** Current children require direct ancestry and exact active-Build executable evidence; alias/port metadata maps only proven children through the launch-time alias map. GPU and forwarded-log attribution reuse that proof. Previous/unknown processes remain read-only and no child control authority was added.
 8. **Profiles/Models/Builds UI:** Run 9. Expose artifact versus configuration, available/loaded model status, Build requirements, and explicit switching actions.
 9. **Runtime/Dashboard integration:** Run 10. Integrate router and model observations into Runtime and Dashboard views without creating a data-plane proxy.
 10. **Real-machine certification and closure:** Run 11. Validate official, custom, and compatibility builds; same-build autoload/eviction; cross-build restart; multimodal/text-only configurations; service restart; failure recovery; and direct client access.
