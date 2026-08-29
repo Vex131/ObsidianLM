@@ -1,194 +1,47 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { defaultProfileEditorDefaults, type GgufMetadataInspection, type LlamaBuildCapabilitiesManifest, type LlamaBuildFlagCapability, type LlamaCppArgs, type LlamaCppProfile, type ProfileDraftPreviewResponse, type ProfileDraftValidationResponse, type ProfileValidationResponse, type RuntimeState } from "@obsidianlm/shared";
+  import type { ConfiguredModelDetails, ConfiguredModelListResponse, LlamaBuildCapabilitiesManifest, LlamaBuildFlagCapability, LlamaCppBuildListResponse, LlamaCppBuildDetails, LlamaCppFlagOverride, ModelArtifactListItem, ModelArtifactListResponse, RouterRuntimeResponse } from "@obsidianlm/shared";
   import PageHeader from "../components/PageHeader.svelte";
-  import CommandPreview from "../components/CommandPreview.svelte";
-  import { API_ENDPOINTS, fetchJson, type AppSettings, type LlamaBuildDiscoveryResponse, type ModelDiscoveryResponse, type ProfileListResponse, type ProfileMutationResponse } from "../api";
-  import { capabilityFor, curatedFields, draftChangeSummary, genericFlags, profileFields, suggestedName, unknownOverrides, unsupportedArgs, type CuratedSection } from "../profiles/registry";
+  import ConfiguredModelRuntimeAction from "../components/ConfiguredModelRuntimeAction.svelte";
+  import { API_ENDPOINTS, fetchJson } from "../api";
+  import { curatedFields } from "../profiles/registry";
 
-  type Draft = LlamaCppProfile;
-  type RuntimeStateResponse = { state: RuntimeState; warnings: string[] };
-  const sections: CuratedSection[] = ["PROFILE", "CONTEXT & CACHE", "COMPUTE", "PERFORMANCE", "SERVER"];
-  let managedPort = defaultProfileEditorDefaults.port;
-  const blankDraft = (): Draft => ({ id: "", name: "", buildPath: "", modelPath: "", ...structuredClone(defaultProfileEditorDefaults), port: managedPort });
-  const numericArgs = new Set<keyof LlamaCppArgs>(["ctxSize", "batchSize", "ubatchSize", "parallel", "threads", "threadsBatch"]);
-  let profiles: Draft[] = [];
-  let models: ModelDiscoveryResponse["models"] = [];
-  let builds: LlamaBuildDiscoveryResponse["builds"] = [];
-  let modelWarnings: string[] = [];
-  let buildWarnings: string[] = [];
-  let scannedFolders: string[] = [];
-  let activeProfileId: string | null = null;
-  let draft = blankDraft();
-  let savedDraft: Draft | null = null;
-  let selectedId: string | null = null;
-  let search = "";
-  let manifest: LlamaBuildCapabilitiesManifest | null = null;
-  let capabilityState: "idle" | "resolving" | "ready" | "partial" | "failed" = "idle";
-  let message = "";
-  let validation: ProfileValidationResponse | null = null;
-  let preview: ProfileDraftPreviewResponse | null = null;
-  let rawExtra = "";
-  let fileInput: HTMLInputElement;
-  let previewTimer: number | undefined;
-  let scheduledPreview = "";
-  let probeRequest = 0;
-  let inspectionRequest = 0;
-  let handoffProcessed = false;
-  let handoffModelId: string | null = null;
-
-  $: selectedBuild = builds.find((build) => build.serverPath === draft.buildPath);
-  $: selectedModel = models.find((model) => model.path === draft.modelPath);
-  $: selectableModels = models.filter((model) => model.id === handoffModelId || model.artifactKindGuess === "model" || (model.artifactKindGuess ?? "unknown") === "unknown");
-  $: completeSelection = Boolean(draft.buildPath && draft.modelPath);
-  $: activeFlags = manifest?.flags ?? [];
-  $: selectableDevices = (manifest?.devices ?? []).filter((device) => !/^cpu$/i.test(device.id) && !/^cpu$/i.test(device.label ?? ""));
-  $: filteredProfiles = profiles.filter((profile) => `${profile.name} ${profile.modelPath} ${profile.buildPath}`.toLowerCase().includes(search.toLowerCase().trim()));
-  $: legacyOverrides = unknownOverrides(draft.flagOverrides ?? [], activeFlags);
-  $: unsupportedLegacyArgs = unsupportedArgs(draft, activeFlags);
-  $: changeSummary = draftChangeSummary(savedDraft, serializableDraft());
-  $: previewSignature = completeSelection ? JSON.stringify(serializableDraft()) : "";
-  $: if (previewSignature && previewSignature !== scheduledPreview) schedulePreview(previewSignature);
-
-  async function load() {
-    try {
-      const [profileResponse, modelResponse, buildResponse, runtimeResponse, settings] = await Promise.all([
-        fetchJson<ProfileListResponse>(API_ENDPOINTS.profiles.list), fetchJson<ModelDiscoveryResponse>(API_ENDPOINTS.discovery.models),
-        fetchJson<LlamaBuildDiscoveryResponse>(API_ENDPOINTS.discovery.llamaBuilds), fetchJson<RuntimeStateResponse>(API_ENDPOINTS.runtime.state), fetchJson<AppSettings>(API_ENDPOINTS.settings.get)
-      ]);
-      profiles = profileResponse.profiles;
-      models = modelResponse.models;
-      builds = buildResponse.builds;
-      modelWarnings = modelResponse.warnings.map((warning) => warning.message);
-      buildWarnings = buildResponse.warnings.map((warning) => warning.message);
-      scannedFolders = [...modelResponse.scannedFolders, ...buildResponse.scannedFolders];
-      activeProfileId = runtimeResponse.state.activeProfileId;
-      managedPort = settings.managedLlamaPort;
-       if (!selectedId && !draft.modelPath && !draft.buildPath) draft = blankDraft();
-       if (await processHandoff()) return;
-       if (profiles[0] && !selectedId) void selectProfile(profiles[0]);
-    } catch (error) { message = error instanceof Error ? error.message : "Could not load profile library"; }
-  }
-
-  async function processHandoff(): Promise<boolean> {
-    if (handoffProcessed) return Boolean(selectedId || draft.modelPath || draft.buildPath);
-    handoffProcessed = true;
-    const query = window.location.hash.includes("?") ? window.location.hash.slice(window.location.hash.indexOf("?") + 1) : "";
-    const params = new URLSearchParams(query);
-    const profileId = params.get("profile");
-    const modelId = params.get("model");
-    const buildId = params.get("build");
-    if (profileId) {
-      const profile = profiles.find((item) => item.id === profileId);
-      if (profile) { await selectProfile(profile); return true; }
-      message = "Requested profile is no longer available.";
-      return false;
-    }
-    if (modelId) {
-      const model = models.find((item) => item.id === modelId);
-      let allowed = model && (model.artifactKindGuess === "model" || (model.artifactKindGuess ?? "unknown") === "unknown");
-      if (model && !allowed) {
-        try {
-          const inspection = await fetchJson<GgufMetadataInspection>(API_ENDPOINTS.discovery.modelMetadata(model.id));
-          allowed = inspection.status !== "invalid" && inspection.status !== "unsupported" && inspection.artifactKindSource === "metadata" && inspection.artifactKind === "model";
-        } catch { allowed = false; }
-      }
-      if (model && allowed) { handoffModelId = model.id; newProfile(); await selectModel(model.path); message = "Model selected from the artifact library. Choose a build to continue."; return true; }
-      message = "Requested model is unavailable or is not a primary model.";
-      return false;
-    }
-    if (buildId) {
-      const build = builds.find((item) => item.id === buildId);
-      if (build) { newProfile(); await selectBuild(build.serverPath); message = "Build selected from the toolchain library. Choose a model to continue."; return true; }
-      message = "Requested build is no longer available. Rescan discovery and choose another build.";
-    }
-    return false;
-  }
-
-  function newProfile() { probeRequest += 1; inspectionRequest += 1; selectedId = null; draft = blankDraft(); savedDraft = null; rawExtra = ""; manifest = null; capabilityState = "idle"; validation = null; preview = null; scheduledPreview = ""; message = "Select a model and build. Rescan discovery if either is missing."; }
-  async function selectProfile(profile: Draft) { probeRequest += 1; inspectionRequest += 1; selectedId = profile.id; draft = structuredClone(profile); savedDraft = structuredClone(profile); rawExtra = draft.extraArgs?.join("\n") ?? ""; manifest = null; validation = null; preview = null; await probe(); }
-  function updateDraft(patch: Partial<Draft>) { draft = { ...draft, ...patch }; }
-  function updateArg(key: keyof LlamaCppArgs, value: string | boolean | undefined) {
-    const normalized = value === "" || value === undefined ? undefined : numericArgs.has(key) ? Number(value) : key === "gpuLayers" && value !== "all" ? Number(value) : value;
-    draft = { ...draft, llamaArgs: { ...draft.llamaArgs, [key]: normalized } };
-  }
-  function toggleDevice(id: string, checked: boolean) {
-    const devices = new Set(draft.llamaArgs?.devices ?? []); checked ? devices.add(id) : devices.delete(id);
-    draft = { ...draft, llamaArgs: { ...draft.llamaArgs, devices: devices.size ? [...devices] : undefined } };
-  }
-  function flagValue(flag: LlamaBuildFlagCapability): string {
-    const override = draft.flagOverrides?.find((item) => item.flag === flag.canonicalName);
-    return override ? override.values?.join(" ") ?? "true" : "";
-  }
-  function setOverride(flag: LlamaBuildFlagCapability, value: string) {
-    const rest = (draft.flagOverrides ?? []).filter((item) => item.flag !== flag.canonicalName);
-    updateDraft({ flagOverrides: value === "" ? rest : [...rest, { flag: flag.canonicalName, ...(flag.valuePlaceholder ? { values: [value] } : {}) }] });
-  }
-  async function probe(buildPath = draft.buildPath, modelPath = draft.modelPath) {
-    const build = builds.find((item) => item.serverPath === buildPath);
-    if (!build || !modelPath) return;
-    const request = ++probeRequest;
-    capabilityState = "resolving"; manifest = null;
-    try { const next = await fetchJson<LlamaBuildCapabilitiesManifest>(API_ENDPOINTS.discovery.llamaBuildCapabilities(build.id)); if (request === probeRequest && draft.buildPath === buildPath && draft.modelPath === modelPath) { manifest = next; capabilityState = next.status; } }
-    catch { if (request === probeRequest) { capabilityState = "failed"; message = "Capability probe failed. Existing compatibility settings remain preserved."; } }
-  }
-  async function selectModel(path: string) { updateDraft({ modelPath: path, name: selectedId ? draft.name : suggestedName(path) }); await probe(draft.buildPath, path); }
-  async function selectBuild(path: string) { updateDraft({ buildPath: path }); await probe(path, draft.modelPath); }
-  function schedulePreview(signature: string) { scheduledPreview = signature; window.clearTimeout(previewTimer); previewTimer = window.setTimeout(() => void inspectDraft(), 350); }
-  async function inspectDraft() {
-    if (!completeSelection) return;
-    const payload = serializableDraft();
-    const signature = JSON.stringify(payload);
-    const request = ++inspectionRequest;
-    try {
-      const [validated, nextPreview] = await Promise.all([
-        fetchJson<ProfileDraftValidationResponse>(API_ENDPOINTS.profiles.validateDraft, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-        fetchJson<ProfileDraftPreviewResponse>(API_ENDPOINTS.profiles.previewCommand, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
-      ]);
-      if (request === inspectionRequest && JSON.stringify(serializableDraft()) === signature) { validation = validated.validation; preview = nextPreview; }
-    } catch (error) { if (request === inspectionRequest) { validation = null; preview = null; message = error instanceof Error ? error.message : "Draft inspection failed"; } }
-  }
-  function serializableDraft(): Draft { return { ...draft, extraArgs: rawExtra.split(/\r?\n/).map((line) => line.trim()).filter(Boolean), flagOverrides: draft.flagOverrides?.filter((item) => item.flag) }; }
-  async function save() {
-    const payload = serializableDraft(); const { id: _id, ...createPayload } = payload;
-    try {
-      const response = selectedId ? await fetchJson<ProfileMutationResponse>(API_ENDPOINTS.profiles.update(selectedId), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }) : await fetchJson<ProfileMutationResponse>(API_ENDPOINTS.profiles.create, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(createPayload) });
-      profiles = selectedId ? profiles.map((item) => item.id === response.profile.id ? response.profile : item) : [...profiles, response.profile]; await selectProfile(response.profile); message = "Profile saved.";
-    } catch (error) { message = error instanceof Error ? error.message : "Could not save profile"; }
-  }
-  async function action(kind: "duplicate" | "delete" | "start") {
-    if (!selectedId || (kind === "delete" && !window.confirm(`Delete ${draft.name}? This cannot be undone.`))) return;
-    try {
-      if (kind === "delete") { await fetchJson(API_ENDPOINTS.profiles.delete(selectedId), { method: "DELETE" }); profiles = profiles.filter((item) => item.id !== selectedId); newProfile(); }
-      else if (kind === "start") { await fetchJson(API_ENDPOINTS.profiles.start(selectedId), { method: "POST" }); message = "Profile start requested."; }
-      else { const result = await fetchJson<ProfileMutationResponse>(API_ENDPOINTS.profiles.duplicate(selectedId), { method: "POST" }); profiles = [...profiles, result.profile]; await selectProfile(result.profile); }
-    } catch (error) { message = error instanceof Error ? error.message : `Could not ${kind} profile`; }
-  }
-  async function rescan() { try { await Promise.all([fetchJson(API_ENDPOINTS.discovery.rescanModels, { method: "POST" }), fetchJson(API_ENDPOINTS.discovery.rescanLlamaBuilds, { method: "POST" })]); await load(); message = "Discovery rescanned."; } catch { message = "Discovery rescan failed."; } }
-  async function exportProfiles() { const data = await fetchJson<{ profiles: Draft[] }>(API_ENDPOINTS.profiles.export); const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); link.download = "obsidianlm-profiles.json"; link.click(); URL.revokeObjectURL(link.href); }
-  async function importProfiles(event: Event) { const file = (event.currentTarget as HTMLInputElement).files?.[0]; if (!file) return; try { await fetchJson(API_ENDPOINTS.profiles.import, { method: "POST", headers: { "Content-Type": "application/json" }, body: await file.text() }); await load(); message = "Profiles imported."; } catch { message = "Import failed: choose an ObsidianLM profile export."; } }
-  function fieldVisible(key: keyof LlamaCppArgs): boolean { return (key !== "devices" || selectableDevices.length > 0) && (key !== "tensorSplit" || (draft.llamaArgs?.devices?.length ?? 0) >= 2 && Boolean(draft.llamaArgs?.splitMode)); }
-  function sectionVisible(section: CuratedSection): boolean { return curatedFields.some((field) => field.section === section && capabilityFor(field, activeFlags) && fieldVisible(field.key)); }
-  onMount(() => { void load(); return () => window.clearTimeout(previewTimer); });
+  type Draft = { displayName:string; routerAlias:string; artifactId:string; buildId:string; enabled:boolean; projectorId:string; extraArgs:string; llamaArgs:Record<string, string | number | boolean | string[] | undefined>; flagOverrides:LlamaCppFlagOverride[] };
+  const blank = (): Draft => ({ displayName:"", routerAlias:"", artifactId:"", buildId:"", enabled:true, projectorId:"", extraArgs:"", llamaArgs:{}, flagOverrides:[] });
+  let models: ConfiguredModelDetails[] = [], artifacts: ModelArtifactListItem[] = [], builds: LlamaCppBuildDetails[] = [], runtime: RouterRuntimeResponse | null = null;
+  let legacyImport: HTMLInputElement;
+  let selected: ConfiguredModelDetails | null = null, draft = blank(), message = "", loading = true, manifest: LlamaBuildCapabilitiesManifest | null = null, search = "", missingLink = "", capabilityRequest = 0;
+  $: dirty = selected ? JSON.stringify(payload()) !== JSON.stringify({ displayName:selected.displayName, routerAlias:selected.routerAlias, artifactId:selected.artifactId, buildId:selected.buildId, enabled:selected.enabled, llamaArgs:selected.llamaArgs ?? {}, flagOverrides:selected.flagOverrides ?? [], extraArgs:selected.extraArgs ?? [], projector:selected.projectorAssociation ?? null, projectorCandidates:selected.projectorCandidates ?? [] }) : Boolean(draft.displayName || draft.artifactId || draft.buildId);
+  $: primaryArtifacts = artifacts.filter((artifact) => artifact.kind === "model" || artifact.kind === "unknown");
+  $: projectors = artifacts.filter((artifact) => artifact.kind === "mmproj" || artifact.kind === "unknown");
+  $: filteredModels=models.filter((model)=>`${model.displayName} ${model.routerAlias} ${model.artifact?.resource.locator??""} ${model.build?.displayName??""}`.toLowerCase().includes(search.toLowerCase()));
+  $: selectedRouterState=selected ? runtime?.routerState.configuredModelStates.find((x)=>x.configuredModelId===selected!.id)?.state : undefined;
+  $: capabilityFlags=manifest?.flags ?? [];
+  $: buildSpecificFlags=capabilityFlags.filter((flag)=>!flag.deprecated&&!/^--models-|^--(?:model|host|port)$/u.test(flag.canonicalName)&&!curatedFields.some((field)=>[flag.canonicalName,...flag.aliases].some((name)=>field.aliases.includes(name))));
+  $: unsupportedSavedArgs=curatedFields.filter((field)=>draft.llamaArgs[field.key]!==undefined&&!capabilityFlags.some((flag)=>[flag.canonicalName,...flag.aliases].some((name)=>field.aliases.includes(name))));
+  $: unknownSavedOverrides=draft.flagOverrides.filter((override)=>!capabilityFlags.some((flag)=>[flag.canonicalName,...flag.aliases].includes(override.flag)));
+  function alias(value: string) { return value.toLowerCase().replace(/[^a-z0-9._-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,64) || "model"; }
+  function deviceText(value: Draft["llamaArgs"][string]) { return Array.isArray(value) ? value.join(", ") : ""; }
+  function payload() { return { displayName:draft.displayName, routerAlias:draft.routerAlias || alias(draft.displayName), artifactId:draft.artifactId, buildId:draft.buildId, enabled:draft.enabled, llamaArgs:draft.llamaArgs, flagOverrides:draft.flagOverrides, extraArgs:draft.extraArgs.split(/\r?\n/).map((x) => x.trim()).filter(Boolean), ...(draft.projectorId ? { projector:{ artifactId:draft.projectorId, selection:"explicit" as const, validationStatus:"not_validated" as const } } : selected ? { projector:null } : {}), projectorCandidates:selected?.projectorCandidates ?? [] }; }
+  async function load() { loading=true; try { const [m,a,b] = await Promise.all([fetchJson<ConfiguredModelListResponse>(API_ENDPOINTS.configuredModels.list), fetchJson<ModelArtifactListResponse>(API_ENDPOINTS.modelArtifacts.list), fetchJson<LlamaCppBuildListResponse>(API_ENDPOINTS.builds.list)]); models=m.configuredModels; artifacts=a.artifacts; builds=b.builds; runtime=await fetchJson<RouterRuntimeResponse>(API_ENDPOINTS.runtime.state).catch(()=>null); resolveLink(); } catch(e) { message=e instanceof Error?e.message:"Could not load configured models."; } finally { loading=false; } }
+  function resolveLink() { const p=new URLSearchParams(location.hash.split("?")[1] ?? ""); const id=p.get("configuredModel") ?? p.get("profile"); const artifact=p.get("artifact") ?? p.get("model"); const build=p.get("build"); const found=models.find((m)=>m.id===id || m.compatibilityProfileIds?.includes(id ?? "")); missingLink=""; if(found) select(found); else if(artifact || build) { selected=null; draft=blank(); draft.artifactId=artifacts.find((a)=>a.id===artifact || a.discoveryId===artifact)?.id ?? ""; draft.buildId=builds.find((b)=>b.id===build || b.discoveryId===build)?.id ?? ""; if((artifact&&!draft.artifactId)||(build&&!draft.buildId))missingLink="Requested legacy selection is missing; choose a registered replacement."; } else if(id) missingLink="Requested configured model is missing."; }
+  async function select(model: ConfiguredModelDetails) { selected=model; draft={ displayName:model.displayName, routerAlias:model.routerAlias, artifactId:model.artifactId, buildId:model.buildId, enabled:model.enabled, projectorId:model.projectorAssociation?.artifactId ?? "", extraArgs:(model.extraArgs??[]).join("\n"), llamaArgs:{...(model.llamaArgs??{})}, flagOverrides:structuredClone(model.flagOverrides??[]) }; await capabilities(model.buildId); }
+  async function capabilities(id:string) { const request=++capabilityRequest; manifest=null; if(!id)return; try { const next=await fetchJson<LlamaBuildCapabilitiesManifest>(API_ENDPOINTS.builds.capabilities(id)); if(request===capabilityRequest && draft.buildId===id) manifest=next; } catch { if(request===capabilityRequest && draft.buildId===id) message="Build capability inspection unavailable; preserved settings remain unchanged."; } }
+  function newModel() { selected=null; draft=blank(); manifest=null; }
+  async function save() { try { const response=selected ? await fetchJson<{model:ConfiguredModelDetails}>(API_ENDPOINTS.configuredModels.update(selected.id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload())}) : await fetchJson<{model:ConfiguredModelDetails}>(API_ENDPOINTS.configuredModels.create,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload())}); await load(); await select(models.find((m)=>m.id===response.model.id) ?? response.model); message="Configured model saved."; } catch(e) { message=e instanceof Error?e.message:"Could not save configured model."; } }
+  async function act(kind:"duplicate"|"delete"|"revalidate") { if(!selected || (kind==="delete"&&!confirm(`Delete ${selected.displayName}?`)))return; try { if(kind==="delete") { await fetchJson(API_ENDPOINTS.configuredModels.delete(selected.id),{method:"DELETE"}); newModel(); } else { const result=await fetchJson<{model:ConfiguredModelDetails}>(kind==="duplicate"?API_ENDPOINTS.configuredModels.duplicate(selected.id):API_ENDPOINTS.configuredModels.revalidate(selected.id),{method:"POST"}); await select(result.model); } await load(); } catch(e) { message=e instanceof Error?e.message:`Could not ${kind} configured model.`; } }
+  async function importLegacy(event: Event) { const file=(event.currentTarget as HTMLInputElement).files?.[0]; if(!file)return; try { await fetchJson(API_ENDPOINTS.profiles.import,{method:"POST",headers:{"Content-Type":"application/json"},body:await file.text()}); message="Legacy profiles imported; review the resulting compatibility bindings."; await load(); } catch(e) { message=e instanceof Error?e.message:"Legacy profile import failed."; } }
+  function updateArg(key:string,value:string|number|boolean|string[]) { draft.llamaArgs={...draft.llamaArgs,[key]:value === "" ? undefined:value}; }
+  function flagValue(flag:LlamaBuildFlagCapability) { const value=draft.flagOverrides.find((item)=>item.flag===flag.canonicalName); return value?.values?.join(" ") ?? (value ? "true" : ""); }
+  function setFlag(flag:LlamaBuildFlagCapability,value:string) { draft.flagOverrides=[...draft.flagOverrides.filter((item)=>item.flag!==flag.canonicalName),...(value?[{flag:flag.canonicalName,...(flag.valuePlaceholder?{values:[value]}:{})}]:[])]; }
+  onMount(()=>{void load();});
 </script>
 
-<main class="page-surface profiles-page" aria-label="Profiles">
-  <PageHeader title="Profiles" subtitle="Compose a launch profile from discovered models and the exact capabilities of each llama.cpp build." />
-  <div class="profiles-actions"><button class="btn primary" type="button" on:click={newProfile}>New profile</button><button class="btn" type="button" on:click={rescan}>Rescan discovery</button><button class="btn" type="button" on:click={exportProfiles}>Export</button><button class="btn" type="button" on:click={() => fileInput.click()}>Import</button><input bind:this={fileInput} class="sr-only" type="file" accept="application/json" on:change={importProfiles} /></div>
-  {#if message}<p class="profiles-message" role="status">{message}</p>{/if}
-  <div class="profiles-grid">
-    <aside class="panel profiles-library" aria-label="Profile library"><div class="panel-head"><h2 class="section-title">Library</h2><span class="mini-pill">{profiles.length}</span></div><label class="library-search">Search profiles<input aria-label="Search profiles" bind:value={search} placeholder="Name, model, build" /></label><div class="profiles-list">{#each filteredProfiles as profile}<button class:active={profile.id === selectedId} class="profile-entry" type="button" on:click={() => selectProfile(profile)}><span><strong>{profile.name}</strong>{#if profile.id === activeProfileId}<b class="mini-pill">Active</b>{/if}</span><small>{profile.llamaArgs?.ctxSize ? `${profile.llamaArgs.ctxSize} ctx` : "Context default"}{#if profile.llamaArgs?.flashAttention === false} · <i title="Saved explicit off is preserved">!</i>{/if}</small><span>{profile.modelPath.split(/[\\/]/).pop()} · {profile.buildPath.split(/[\\/]/).pop()}</span></button>{:else}<p class="empty-state">No saved profiles match. {scannedFolders.length ? "Check configured folders or rescan discovery." : "Configure model and build folders, then rescan."}</p>{/each}</div></aside>
-    <section class="panel profiles-editor" aria-label="Profile editor"><div class="panel-head"><h2 class="section-title">{selectedId ? "Edit profile" : "New local draft"}</h2>{#if completeSelection}<span class="mini-pill">{capabilityState}</span>{/if}</div><div class="profile-form">
-      <label>Model<select aria-label="Model" value={draft.modelPath} on:change={(event) => selectModel(event.currentTarget.value)}><option value="">Select a discovered model</option>{#each selectableModels as model}<option value={model.path}>{model.name}</option>{/each}</select>{#if selectedModel}<small>{selectedModel.quantizationGuess ?? "Quantization unknown"} · {Math.round(selectedModel.sizeBytes / 1024 / 1024)} MiB</small>{/if}</label>
-      <label>Build<select aria-label="Build" value={draft.buildPath} on:change={(event) => selectBuild(event.currentTarget.value)}><option value="">Select a llama.cpp build</option>{#each builds as build}<option value={build.serverPath}>{build.name}</option>{/each}</select>{#if selectedBuild}<small>{selectedBuild.serverPath}</small>{/if}</label>
-      {#if !completeSelection}<p class="discovery-guide">Choose both sources before options appear. {modelWarnings.concat(buildWarnings).join(" ") || "Rescan discovery after moving a model or build."}</p>{:else if capabilityState === "resolving"}<p class="discovery-guide">Resolving build capabilities…</p>{:else}
-        {#if capabilityState !== "failed"}<section class="profile-section"><h3>PROFILE</h3>{#each profileFields as field}<label>{field.label}<input aria-label="Profile name" bind:value={draft.name} /></label>{/each}</section>{:else if selectedId}<section class="profile-section"><h3>PROFILE</h3>{#each profileFields as field}<label>{field.label}<input aria-label="Profile name" bind:value={draft.name} /></label>{/each}</section>{:else}<p class="warning">Structured options are unavailable until this build can be probed.</p>{/if}
-        {#if capabilityState !== "failed"}{#each sections.filter((section) => section !== "PROFILE" && section !== "SERVER" && sectionVisible(section)) as section}<section class="profile-section"><h3>{section}</h3><div class="field-grid">{#each curatedFields.filter((field) => field.section === section) as field}{#if capabilityFor(field, activeFlags) && fieldVisible(field.key)}<label>{field.label}{#if field.key === "devices"}<span class="device-list">{#each selectableDevices as device}<label><input type="checkbox" checked={draft.llamaArgs?.devices?.includes(device.id)} on:change={(event) => toggleDevice(device.id, event.currentTarget.checked)} />{device.label ?? device.id}</label>{/each}</span>{:else if field.kind === "boolean"}<select value={draft.llamaArgs?.[field.key] === true ? "true" : ""} on:change={(event) => updateArg(field.key, event.currentTarget.value === "" ? undefined : true)}><option value="">Inherited</option><option value="true">Enabled</option></select>{#if draft.llamaArgs?.[field.key] === false}<small class="warning">Saved explicit off is preserved; this build cannot safely edit it.</small>{/if}{:else}<input value={draft.llamaArgs?.[field.key] ?? ""} placeholder="Inherited" on:input={(event) => updateArg(field.key, event.currentTarget.value)} />{/if}{#if capabilityFor(field, activeFlags)?.description}<small>{capabilityFor(field, activeFlags)?.description}</small>{/if}{#if capabilityFor(field, activeFlags)?.defaultText}<small>Default: {capabilityFor(field, activeFlags)?.defaultText}</small>{/if}</label>{/if}{/each}</div></section>{/each}
-          <section class="profile-section"><h3>SERVER</h3><div class="field-grid"><label>Host<input aria-label="Host" bind:value={draft.host} /><small>ObsidianLM-managed default: {defaultProfileEditorDefaults.host}</small></label><label>Port<input aria-label="Port" type="number" bind:value={draft.port} /><small>ObsidianLM-managed default: {managedPort}</small></label>{#each curatedFields.filter((field) => field.section === "SERVER") as field}{#if capabilityFor(field, activeFlags)}<label>{field.label}<select value={draft.llamaArgs?.[field.key] === true ? "true" : ""} on:change={(event) => updateArg(field.key, event.currentTarget.value === "" ? undefined : true)}><option value="">Inherited</option><option value="true">Enabled</option></select></label>{/if}{/each}</div></section>
-          {#if genericFlags(activeFlags).length}<details><summary>Build-specific options</summary><div class="build-specific">{#each genericFlags(activeFlags) as flag}<label>{flag.canonicalName}{#if flag.choices?.length}<select value={flagValue(flag)} on:change={(event) => setOverride(flag, event.currentTarget.value)}><option value="">Inherited</option>{#each flag.choices as choice}<option value={choice}>{choice}</option>{/each}</select>{:else if !flag.valuePlaceholder}<select value={flagValue(flag)} on:change={(event) => setOverride(flag, event.currentTarget.value)}><option value="">Inherited</option><option value="true">Enabled</option></select>{:else}<input value={flagValue(flag)} placeholder={flag.valuePlaceholder} on:input={(event) => setOverride(flag, event.currentTarget.value)} />{/if}{#if flag.description}<small>{flag.description}</small>{/if}{#if flag.defaultText}<small>Default: {flag.defaultText}</small>{/if}</label>{/each}</div></details>{/if}{/if}
-        <details open={capabilityState === "failed" || legacyOverrides.length > 0 || unsupportedLegacyArgs.length > 0}><summary>Compatibility &amp; advanced</summary>{#if legacyOverrides.length || unsupportedLegacyArgs.length || activeFlags.filter((flag) => flag.deprecated).length}<p class="warning">Unsupported and deprecated values are preserved exactly; changing builds does not remove them.</p>{/if}{#each legacyOverrides as override}<p class="compatibility-row"><code>{override.flag}</code><span>{override.values?.join(" ") ?? "(no value)"}</span></p>{/each}{#each unsupportedLegacyArgs as name}<p class="compatibility-row"><span>{name}</span><span>Saved value is unsupported by this build</span></p>{/each}{#each activeFlags.filter((flag) => flag.deprecated) as flag}<p class="compatibility-row"><code>{flag.canonicalName}</code><span>Deprecated {flagValue(flag) || flag.description || "build flag"}</span></p>{/each}<label>Raw extra arguments<textarea aria-label="Raw extra arguments" bind:value={rawExtra} placeholder="One complete argument per line"></textarea><small>One argument per line; spaces are preserved. These bypass capability mapping.</small></label></details>
-        <div class="editor-actions"><button class="btn primary" type="button" on:click={save}>Save profile</button><button class="btn" type="button" on:click={inspectDraft}>Validate</button>{#if selectedId}<button class="btn" type="button" on:click={() => action("duplicate")}>Duplicate</button><button class="btn danger" type="button" on:click={() => action("delete")}>Delete</button><button class="btn" type="button" on:click={() => action("start")}>Start</button>{/if}</div>
-      {/if}</div></section>
-    <aside class="panel profiles-inspector" aria-label="Draft inspector"><div class="panel-head"><h2 class="section-title">Inspector</h2><span class="mini-pill">{validation?.valid ? "Valid" : completeSelection ? "Checking" : "Awaiting selection"}</span></div>{#if completeSelection}<div class="inspector-body"><h3>Draft changes</h3><p>{changeSummary.join(" · ")}</p>{#if manifest?.warnings?.length}<p class="warning">{manifest.warnings.map((warning) => warning.message).join(" ")}</p>{/if}<h3>Validation</h3>{#each validation?.errors ?? [] as error}<p class="error">{error}</p>{/each}{#each validation?.warnings ?? [] as warning}<p class="warning">{warning}</p>{/each}{#if validation?.valid}<p class="ok">Draft validation passed.</p>{/if}<h3>Command preview</h3><CommandPreview command={preview?.command?.displayCommand ?? ""} emptyLabel="Waiting for draft preview" /></div>{:else}<p class="empty-state">Select a model and build to validate this local draft and preview the generated command.</p>{/if}</aside>
-  </div>
+<main class="page-surface profiles-page" aria-label="Configured Models"><PageHeader title="Profiles" subtitle="Configured Models are the authoritative router catalog." />
+  <div class="profiles-actions"><button class="btn primary" on:click={newModel}>New configuration</button><button class="btn" on:click={()=>legacyImport.click()}>Import legacy Profiles…</button><input class="sr-only" bind:this={legacyImport} type="file" accept="application/json" on:change={importLegacy}/><span role="status">{message}{dirty?" Unsaved draft.":""}</span></div>
+  {#if missingLink}<p class="warning">{missingLink}</p>{/if}<div class="profiles-grid"><aside class="panel"><div class="panel-head"><h2 class="section-title">Configured Models</h2><span class="mini-pill">{models.length}</span></div><label class="search">Search<input bind:value={search} placeholder="Name, alias, artifact, build"/></label>{#each filteredModels as model}<button class:active={selected?.id===model.id} class="entry" on:click={()=>select(model)}><strong>{model.displayName}</strong><small>{model.routerAlias} · {model.build?.displayName??"Missing Build"} · {model.projector?"vision":"text"} · {model.enabled?"enabled":"disabled"}</small><small class:warning={model.validation.status==="invalid"||model.validation.references.artifact!=="available"||model.validation.references.build!=="available"}>validation {model.validation.status}; router {runtime?.routerState.configuredModelStates.find((x)=>x.configuredModelId===model.id)?.state??"unavailable"}</small></button>{:else}<p class="empty-state">{loading?"Loading…":"No configured models. Create one from registered artifacts and builds."}</p>{/each}</aside>
+    <section class="panel"><div class="panel-head"><h2 class="section-title">{selected?"Edit configured model":"New configured model"}</h2></div><div class="form"><label>Name<input bind:value={draft.displayName} on:input={()=>{if(!selected)draft.routerAlias=alias(draft.displayName);}} /></label><label>Router alias<input bind:value={draft.routerAlias} /><small>Stable alias; change only when clients are updated.</small></label><label><input type="checkbox" bind:checked={draft.enabled}/> Enabled</label><label>Model artifact<select bind:value={draft.artifactId}><option value="">Select registered artifact</option>{#each primaryArtifacts as artifact}<option value={artifact.id}>{artifact.metadata?.displayName ?? artifact.resource.locator} ({artifact.referenceStatus})</option>{/each}</select></label><label>Build<select bind:value={draft.buildId} on:change={()=>capabilities(draft.buildId)}><option value="">Select registered build</option>{#each builds as build}<option value={build.id}>{build.displayName} · {build.managedInferenceEligibility}</option>{/each}</select></label><label>Projector (explicit)<select bind:value={draft.projectorId}><option value="">None</option>{#each projectors as artifact}<option value={artifact.id}>{artifact.metadata?.displayName ?? artifact.resource.locator}</option>{/each}</select></label>
+      <p class="warning">Changing Build can invalidate structured options; unsupported values remain preserved.</p><details><summary>Capability-aware options</summary>{#each curatedFields.filter((field)=>field.section!=="SERVER" && capabilityFlags.some((flag)=>[flag.canonicalName,...flag.aliases].some((name)=>field.aliases.includes(name)))) as field}<label>{field.label}{#if field.key==="devices"}<input value={deviceText(draft.llamaArgs[field.key])} placeholder="GPU ids, comma separated" on:input={(e)=>updateArg(field.key,e.currentTarget.value?e.currentTarget.value.split(",").map(x=>x.trim()):"")}/>{:else if field.kind==="boolean"}<select value={draft.llamaArgs[field.key]===true?"true":""} on:change={(e)=>updateArg(field.key,e.currentTarget.value===""?"":true)}><option value="">Inherited</option><option value="true">Enabled</option></select>{:else}<input type={["ctxSize","gpuLayers","batchSize","ubatchSize","parallel","threads","threadsBatch"].includes(field.key)?"number":"text"} value={draft.llamaArgs[field.key] ?? ""} placeholder="Inherited" on:input={(e)=>updateArg(field.key,e.currentTarget.value===""?"":Number(e.currentTarget.value)||e.currentTarget.value)} />{/if}</label>{/each}</details><details><summary>Build-specific flags</summary>{#each buildSpecificFlags as flag}<label><code>{flag.canonicalName}</code>{#if flag.valuePlaceholder}<input value={flagValue(flag)} placeholder={flag.valuePlaceholder} on:input={(event)=>setFlag(flag,event.currentTarget.value)}/>{:else}<select value={flagValue(flag)} on:change={(event)=>setFlag(flag,event.currentTarget.value)}><option value="">Inherited</option><option value="true">Enabled</option></select>{/if}{#if flag.description}<small>{flag.description}</small>{/if}</label>{:else}<p>No additional supported flags reported.</p>{/each}</details><details open={unsupportedSavedArgs.length>0||unknownSavedOverrides.length>0}><summary>Compatibility & advanced</summary><p class="warning">Preserved advanced arguments. Unsupported or unsafe values can make this configuration ineligible for generated router presets.</p>{#each unsupportedSavedArgs as field}<p><strong>{field.label}:</strong> {String(draft.llamaArgs[field.key])} · preserved legacy value unsupported by this Build</p>{/each}{#each unknownSavedOverrides as override}<p><code>{override.flag}</code> {override.values?.join(" ")??"enabled"} · preserved unknown override</p>{/each}{#if draft.llamaArgs.metrics!==undefined||draft.llamaArgs.webui!==undefined}<p>Metrics/Web UI: preserved legacy router-level value; not emitted as a per-model preset option.</p>{/if}<label>Extra arguments<textarea bind:value={draft.extraArgs} placeholder="One complete argument per line"></textarea></label></details><div class="actions"><button class="btn primary" on:click={save} disabled={!draft.displayName||!draft.artifactId||!draft.buildId}>Save</button>{#if selected}<button class="btn" on:click={()=>act("duplicate")}>Duplicate</button><button class="btn" on:click={()=>act("revalidate")}>Revalidate</button><button class="btn danger" on:click={()=>act("delete")}>Delete</button>{/if}</div></div></section>
+    <aside class="panel inspector"><div class="panel-head"><h2 class="section-title">Phase 15 inspector</h2></div>{#if selected}<h3>Configuration</h3><p>{selected.routerAlias} · {selected.enabled?"enabled":"disabled"}</p><h3>Artifact</h3><p>{selected.artifact?.resource.locator??"Missing artifact"}</p><h3>Build requirement</h3><p>{selected.build?.displayName??"Missing build"} · <a href={`#builds?build=${encodeURIComponent(selected.buildId)}`}>Open Builds</a></p><h3>Vision</h3><p>{selected.projector?`Explicit projector: ${selected.projector.resource.locator}`:"Text only"}</p>{#if selected.projectorCandidates?.length}<p>Suggested projector: {selected.projectorCandidates.map(x=>x.artifactId).join(", ")}</p>{/if}<h3>Validation</h3><p>{selected.validation.status}; artifact {selected.validation.references.artifact}; build {selected.validation.references.build}</p><h3>Router</h3><p>{selectedRouterState??"Runtime unavailable"}</p><h3>Preset impact</h3><p>Alias and Build changes require a generated, reconciled router preset.</p><h3>Warnings</h3>{#each selected.warnings??[] as warning}<p class="warning">{warning}</p>{:else}<p>None reported.</p>{/each}<ConfiguredModelRuntimeAction model={selected} {runtime} onComplete={load} />{:else}<p class="empty-state">Select a configured model. No host, port, direct command, or export controls are available here.</p>{/if}</aside></div>
 </main>
+<style>.profiles-actions{display:flex;gap:.75rem;align-items:center;margin-bottom:.75rem}.profiles-actions span,.entry small{color:var(--color-muted)}.profiles-grid{display:grid;grid-template-columns:16rem minmax(0,1fr) 20rem;gap:1rem}.entry,.search{display:grid;width:100%;gap:.25rem;text-align:left;background:transparent;color:inherit;border:0;border-top:1px solid var(--color-line);padding:.65rem}.search input{min-width:0}.entry.active,.entry:hover{background:var(--color-panel-strong)}.form,.inspector{display:grid;gap:.65rem;padding:1rem}.form label{display:grid;gap:.25rem}.form textarea{min-height:6rem}.inspector h3,.inspector p{margin:0}.actions{display:flex;flex-wrap:wrap;gap:.5rem}@media(max-width:900px){.profiles-grid{grid-template-columns:1fr}.profiles-page{min-width:0;overflow-x:hidden}}@media(max-width:320px){.profiles-actions{align-items:flex-start;flex-direction:column}}</style>

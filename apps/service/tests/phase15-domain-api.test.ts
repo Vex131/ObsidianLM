@@ -57,6 +57,8 @@ test("Phase 15 domain APIs are protected and register stable discovery identitie
   assert.equal(repeated.json().artifact.id, artifact.id);
   const build = await f.app.inject({ method: "POST", url: "/api/builds/register", headers: f.auth, payload: { discoveryId: f.buildId } });
   assert.equal(build.statusCode, 201); assert.equal(build.json().build.managedInferenceEligibility, "not_validated");
+  const capabilities = await f.app.inject({ method: "GET", url: `/api/builds/${build.json().build.id}/capabilities`, headers: f.auth });
+  assert.equal(capabilities.statusCode, 200); assert.equal(capabilities.json().buildId, build.json().build.id); assert.equal(capabilities.json().serverPath, f.server); assert.equal(capabilities.json().status, "failed");
   assert.equal((await f.app.inject({ method: "PATCH", url: `/api/builds/${build.json().build.id}`, headers: f.auth, payload: { managedInferenceEligibility: "eligible", functionalEvidence: {}, validatedAt: "forged", serverFingerprint: "forged", catalogBoundaryVerified: true } })).statusCode, 400);
   assert.equal((await f.app.inject({ method: "POST", url: "/api/model-artifacts/register", headers: f.auth, payload: {} })).statusCode, 400);
   const listed = await f.app.inject({ method: "GET", url: "/api/model-artifacts", headers: f.auth });
@@ -70,8 +72,11 @@ test("configured model API validates references, aliases, projector choice, and 
   const b = (await f.app.inject({ method: "POST", url: "/api/builds/register", headers: f.auth, payload: { discoveryId: f.buildId } })).json().build;
   const created = await f.app.inject({ method: "POST", url: "/api/configured-models", headers: f.auth, payload: { displayName: "Vision", artifactId: a.id, buildId: b.id, enabled: false, llamaArgs: { ctxSize: 2048 } } });
   assert.equal(created.statusCode, 201); const model = created.json().model; assert.equal(model.validationStatus, "not_validated"); assert.equal(model.routerAlias, "vision");
+  await mutatePhase15Domain((snapshot) => snapshot.compatibilityBindings.push({ legacyProfileId: "legacy-vision", configuredModelId: model.id, legacyRuntimeEndpoint: { host: "127.0.0.1", port: 8085 } }), f.dir);
   const detail = (await f.app.inject({ method: "GET", url: `/api/configured-models/${model.id}`, headers: f.auth })).json().model;
-  assert.equal(detail.artifact.id, a.id); assert.equal(detail.build.id, b.id); assert.equal(detail.validation.structural, true);
+  assert.equal(detail.artifact.id, a.id); assert.equal(detail.build.id, b.id); assert.equal(detail.validation.structural, true); assert.deepEqual(detail.compatibilityProfileIds, ["legacy-vision"]);
+  const artifactList = (await f.app.inject({ method: "GET", url: "/api/model-artifacts", headers: f.auth })).json(); assert.deepEqual(artifactList.artifacts.find((entry: any) => entry.id === a.id).configuredModelIds, [model.id]);
+  const buildList = (await f.app.inject({ method: "GET", url: "/api/builds", headers: f.auth })).json(); assert.deepEqual(buildList.builds.find((entry: any) => entry.id === b.id).configuredModelIds, [model.id]);
   const renamed = await f.app.inject({ method: "PATCH", url: `/api/configured-models/${model.id}`, headers: f.auth, payload: { displayName: "Renamed" } }); assert.equal(renamed.json().model.routerAlias, "vision");
   assert.equal((await f.app.inject({ method: "PATCH", url: `/api/configured-models/${model.id}`, headers: f.auth, payload: { routerAlias: "vision" } })).statusCode, 200);
   assert.equal((await f.app.inject({ method: "POST", url: "/api/configured-models", headers: f.auth, payload: { displayName: "Other", routerAlias: "vision", artifactId: text.id, buildId: b.id, enabled: false } })).statusCode, 409);

@@ -85,6 +85,10 @@ export const API_ENDPOINTS = {
     testChat: "/api/runtime/test-chat",
     stop: "/api/runtime/stop",
     restart: "/api/runtime/restart",
+    start: "/api/runtime/start",
+    switchModel: "/api/runtime/switch-model",
+    switchBuild: "/api/runtime/switch-build",
+    catalog: "/api/runtime/catalog",
     logs: (limit = 300) => `/api/runtime/logs?limit=${enc(String(limit))}`,
     logStream: (limit = 100) => `/api/runtime/logs/stream?limit=${enc(String(limit))}`
   },
@@ -112,6 +116,36 @@ export const API_ENDPOINTS = {
     llamaPerplexity: "/api/jobs/llama-perplexity",
     cancel: (id: string) => `/api/jobs/${enc(id)}/cancel`,
     logs: (id: string, limit = 80) => `/api/jobs/${enc(id)}/logs?limit=${enc(String(limit))}`
+  },
+  modelArtifacts: {
+    list: "/api/model-artifacts",
+    detail: (id: string) => `/api/model-artifacts/${enc(id)}`,
+    register: "/api/model-artifacts/register",
+    reconcile: (id: string) => `/api/model-artifacts/${enc(id)}/reconcile`,
+    update: (id: string) => `/api/model-artifacts/${enc(id)}`,
+    delete: (id: string) => `/api/model-artifacts/${enc(id)}`
+  },
+  configuredModels: {
+    list: "/api/configured-models",
+    create: "/api/configured-models",
+    detail: (id: string) => `/api/configured-models/${enc(id)}`,
+    update: (id: string) => `/api/configured-models/${enc(id)}`,
+    duplicate: (id: string) => `/api/configured-models/${enc(id)}/duplicate`,
+    revalidate: (id: string) => `/api/configured-models/${enc(id)}/revalidate`,
+    delete: (id: string) => `/api/configured-models/${enc(id)}`
+  },
+  builds: {
+    list: "/api/builds",
+    detail: (id: string) => `/api/builds/${enc(id)}`,
+    register: "/api/builds/register",
+    reconcile: (id: string) => `/api/builds/${enc(id)}/reconcile`,
+    validateRouter: (id: string) => `/api/builds/${enc(id)}/validate-router`,
+    capabilities: (id: string) => `/api/builds/${enc(id)}/capabilities`,
+    update: (id: string) => `/api/builds/${enc(id)}`,
+    delete: (id: string) => `/api/builds/${enc(id)}`,
+    presetPreview: (id: string) => `/api/builds/${enc(id)}/router-preset/preview`,
+    generatePreset: (id: string) => `/api/builds/${enc(id)}/router-preset/generate`,
+    launchPreview: (id: string) => `/api/builds/${enc(id)}/router-launch/preview`
   },
   logs: {
     service: "/api/logs/service"

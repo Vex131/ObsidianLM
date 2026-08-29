@@ -1,119 +1,85 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { DiscoveredModel } from "@obsidianlm/shared";
+  import type { ConfiguredModelDetails, ConfiguredModelListResponse, ModelArtifactListItem, ModelArtifactListResponse, ModelDiscoveryResponse, RouterRuntimeResponse } from "@obsidianlm/shared";
   import PageHeader from "../components/PageHeader.svelte";
-  import { API_ENDPOINTS, fetchJson, type GgufMetadataInspection, type ModelArtifactUsageResponse, type ModelDiscoveryResponse, type ProfileListResponse, type RuntimeState } from "../api";
-  import { artifactSignature, effectiveKind, formatBytes, formatDate, isPrimaryModel, matchesModel, relatedArtifactCandidates, sortModels, typeLabel, type ModelSort, type ModelTab } from "../model-library";
+  import ConfiguredModelRuntimeAction from "../components/ConfiguredModelRuntimeAction.svelte";
+  import { API_ENDPOINTS, fetchJson } from "../api";
 
-  type RuntimeStateResponse = { state: RuntimeState; warnings: string[] };
-  let models: DiscoveredModel[] = [];
-  let warnings: string[] = [];
-  let scannedFolders: string[] = [];
-  let profiles: ProfileListResponse["profiles"] = [];
-  let activeProfileId: string | null = null;
-  let usage = new Map<string, string[]>();
-  let missingProfileIds: string[] = [];
-  let inspections = new Map<string, GgufMetadataInspection>();
-  let signatures = new Map<string, string>();
-  let loadingIds = new Set<string>();
-  let request = 0;
-  let selectedId: string | null = null;
-  let query = "";
-  let tab: ModelTab = "models";
-  let family = "all";
-  let quant = "all";
-  let folder = "all";
-  let usageFilter: "all" | "used" | "unused" = "all";
-  let sort: ModelSort = "name";
-  let message = "";
-  let loading = true;
+  type ArtifactRow = ModelArtifactListItem | { id: string; discoveryId: string; resource: { owner: { scope: "local" }; locator: string }; kind: string; referenceStatus: string; configuredModelIds: string[]; metadata?: undefined };
+  let mode: "configured" | "artifacts" = "configured";
+  let configured: ConfiguredModelDetails[] = [], artifacts: ModelArtifactListItem[] = [], discovery: ModelDiscoveryResponse["models"] = [], runtime: RouterRuntimeResponse | null = null;
+  let selected: string | null = null, message = "", query = "", availability = "all", enabled = "all";
+  $: currentConfigured = configured.find((model) => model.id === selected) ?? null;
+  $: merged = [...artifacts, ...discovery.filter((found) => !artifacts.some((artifact) => artifact.discoveryId === found.id)).map((found) => ({ id: `discovery:${found.id}`, discoveryId: found.id, resource: { owner: { scope: "local" as const }, locator: found.path }, kind: found.artifactKindGuess ?? "unknown", referenceStatus: "available", configuredModelIds: [] }))] as ArtifactRow[];
+  $: currentArtifact = merged.find((artifact) => artifact.id === selected) ?? null;
+  $: configuredRows = configured.filter((model) => `${model.displayName} ${model.routerAlias}`.toLowerCase().includes(query.toLowerCase()) && (availability === "all" || model.validation.references.artifact === availability || model.validation.references.build === availability) && (enabled === "all" || String(model.enabled) === enabled));
+  $: artifactRows = merged.filter((artifact) => `${artifact.metadata?.displayName ?? ""} ${artifact.resource.locator} ${artifact.kind}`.toLowerCase().includes(query.toLowerCase()) && (availability === "all" || artifact.referenceStatus === availability));
+  $: discoveryEvidence = currentArtifact?.discoveryId ? discovery.find((entry) => entry.id === currentArtifact?.discoveryId) : undefined;
+  $: artifactRegistered = !!currentArtifact && !currentArtifact.id.startsWith("discovery:");
+  $: artifactConfigurable = artifactRegistered && (currentArtifact?.kind === "model" || currentArtifact?.kind === "unknown");
 
-  $: usedIds = new Set([...usage.entries()].filter(([, profileIds]) => profileIds.length).map(([id]) => id));
-  $: filtered = sortModels(models.filter((model) => matchesModel(model, inspections.get(model.id), query, tab, family, quant, usageFilter, folder, usedIds)), sort);
-  $: selected = models.find((model) => model.id === selectedId) ?? null;
-  $: selectedInspection = selected ? inspections.get(selected.id) : undefined;
-  $: selectedProfiles = selected ? (usage.get(selected.id) ?? []).map((id) => profiles.find((profile) => profile.id === id)).filter(Boolean) : [];
-  $: families = [...new Set(models.flatMap((model) => [model.familyGuess, inspections.get(model.id)?.architecture]).filter((value): value is string => Boolean(value)))].sort();
-  $: quants = [...new Set(models.map((model) => model.quantizationGuess ?? "Unknown"))].sort();
-  $: folders = [...new Set(models.map((model) => model.folder))].sort();
-  $: tabCounts = {
-    models: models.filter((model) => { const kind = effectiveKind(model, inspections.get(model.id)); return kind === "model" || kind === "unknown"; }).length,
-    projectors: models.filter((model) => effectiveKind(model, inspections.get(model.id)) === "mmproj").length,
-    other: models.filter((model) => ["adapter", "imatrix", "other"].includes(effectiveKind(model, inspections.get(model.id)))).length,
-    all: models.length
-  };
-
-  async function load(rescan = false) {
-    loading = true;
-    const current = ++request;
+  async function load() {
+    message = "";
     try {
-      if (rescan) await fetchJson(API_ENDPOINTS.discovery.rescanModels, { method: "POST" });
-      const [discovery, profileResponse, usageResponse, runtimeResponse] = await Promise.all([
-        fetchJson<ModelDiscoveryResponse>(API_ENDPOINTS.discovery.models), fetchJson<ProfileListResponse>(API_ENDPOINTS.profiles.list),
-        fetchJson<ModelArtifactUsageResponse>(API_ENDPOINTS.discovery.modelUsage), fetchJson<RuntimeStateResponse>(API_ENDPOINTS.runtime.state)
-      ]);
-      if (current !== request) return;
-      const nextSignatures = new Map(discovery.models.map((model) => [model.id, artifactSignature(model)]));
-      inspections = new Map([...inspections].filter(([id]) => signatures.get(id) === nextSignatures.get(id)));
-      signatures = nextSignatures;
-      models = discovery.models;
-      warnings = discovery.warnings.map((warning) => warning.message);
-      scannedFolders = discovery.scannedFolders;
-      profiles = profileResponse.profiles;
-      usage = new Map(usageResponse.usage.map((entry) => [entry.artifactId, entry.profileIds]));
-      missingProfileIds = usageResponse.missingProfileIds;
-      activeProfileId = runtimeResponse.state.activeProfileId;
-      if (selectedId && !discovery.models.some((model) => model.id === selectedId)) selectedId = null;
-      message = rescan ? "Model discovery rescanned." : "";
-    } catch (error) { if (current === request) message = error instanceof Error ? error.message : "Could not load model library"; }
-    finally { if (current === request) loading = false; }
+      const [models, registered] = await Promise.all([fetchJson<ConfiguredModelListResponse>(API_ENDPOINTS.configuredModels.list), fetchJson<ModelArtifactListResponse>(API_ENDPOINTS.modelArtifacts.list)]);
+      configured = models.configuredModels; artifacts = registered.artifacts;
+      const [found, router] = await Promise.allSettled([fetchJson<ModelDiscoveryResponse>(API_ENDPOINTS.discovery.models), fetchJson<RouterRuntimeResponse>(API_ENDPOINTS.runtime.state)]);
+      discovery = found.status === "fulfilled" ? found.value.models : [];
+      runtime = router.status === "fulfilled" ? router.value : null;
+      if (found.status === "rejected" || router.status === "rejected") message = "Discovery or runtime status is unavailable; registered records remain available.";
+    } catch (error) { message = error instanceof Error ? error.message : "Could not load configured models."; }
   }
-
-  async function selectModel(model: DiscoveredModel) {
-    selectedId = model.id;
-    if (inspections.has(model.id) || loadingIds.has(model.id)) return;
-    const current = ++request;
-    loadingIds = new Set(loadingIds).add(model.id);
-    try {
-      const inspection = await fetchJson<GgufMetadataInspection>(API_ENDPOINTS.discovery.modelMetadata(model.id));
-      if (current === request && selectedId === model.id) inspections = new Map(inspections).set(model.id, inspection);
-    } catch (error) { if (current === request) message = error instanceof Error ? error.message : "Could not inspect this GGUF artifact"; }
-    finally { loadingIds = new Set(loadingIds); loadingIds.delete(model.id); loadingIds = new Set(loadingIds); }
+  async function action(path: string, method = "POST", body?: unknown, success = "Completed.") {
+    try { await fetchJson(path, { method, headers: { "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); message = success; await load(); }
+    catch (error) { message = error instanceof Error ? error.message : "Action failed."; }
   }
-
-  async function copyPath(path: string) { try { await navigator.clipboard.writeText(path); message = "Path copied."; } catch { message = "Copy the selected path manually."; } }
-  function clearFilters() { query = ""; tab = "models"; family = quant = folder = "all"; usageFilter = "all"; }
-  function profileHref(id: string) { return `#profiles?profile=${encodeURIComponent(id)}`; }
-  function configureHref(id: string) { return `#profiles?model=${encodeURIComponent(id)}`; }
+  function routerState(model: ConfiguredModelDetails, currentRuntime: RouterRuntimeResponse | null) { if (!currentRuntime) return "unavailable"; if (currentRuntime.routerState.activeBuildId !== model.buildId) return "Other Build"; return currentRuntime.routerState.configuredModelStates.find((entry) => entry.configuredModelId === model.id)?.state ?? "unknown"; }
+  function buildLabel(model: ConfiguredModelDetails) { return model.build?.displayName ?? "Other Build"; }
   onMount(() => { void load(); });
 </script>
 
 <main class="page-surface models-page" aria-label="Models">
-  <PageHeader title="Models" subtitle="Inspect discovered GGUF artifacts, see profile usage, and hand off primary models to Profiles." />
-  <div class="models-actions"><button class="btn primary" type="button" on:click={() => load(true)}>Rescan models</button><span role="status" aria-live="polite">{message}</span></div>
-  {#if warnings.length}<details class="discovery-warning"><summary>{warnings.length} discovery warning{warnings.length === 1 ? "" : "s"}</summary>{#each warnings as warning}<p>{warning}</p>{/each}</details>{/if}
-  <div class="models-layout">
-    <section class="panel model-library" aria-label="Model artifact library">
-      <div class="panel-head"><h2 class="section-title">Artifact library</h2><span class="mini-pill">{filtered.length} of {models.length}</span></div>
-      <div class="filters"><label>Search<input bind:value={query} placeholder="Name, path, architecture" /></label><div class="tabs" aria-label="Artifact type filters">{#each [["models", "Models"], ["projectors", "Projectors"], ["other", "Other GGUF"], ["all", "All"]] as [value, label]}<button class:active={tab === value} type="button" on:click={() => tab = value as ModelTab}>{label} ({tabCounts[value as ModelTab]})</button>{/each}</div><div class="filter-selects"><select aria-label="Family" bind:value={family}><option value="all">All families</option>{#each families as value}<option>{value}</option>{/each}</select><select aria-label="Quantization" bind:value={quant}><option value="all">All quants</option>{#each quants as value}<option>{value}</option>{/each}</select><select aria-label="Usage" bind:value={usageFilter}><option value="all">Used and unused</option><option value="used">Used by profiles</option><option value="unused">Unused</option></select><select aria-label="Folder" bind:value={folder}><option value="all">All folders</option>{#each folders as value}<option>{value}</option>{/each}</select><select aria-label="Sort" bind:value={sort}><option value="name">Name</option><option value="size">Size</option><option value="modified">Modified</option></select></div></div>
-      {#if loading}<p class="empty-state" role="status">Loading discovered artifacts…</p>{:else if !scannedFolders.length}<p class="empty-state">No model folders are configured. <a href="#settings">Open Settings</a> to add one, then rescan.</p>{:else if !models.length}<p class="empty-state">No GGUF artifacts were found in configured folders. Check the folders or <button type="button" class="link-button" on:click={() => load(true)}>rescan models</button>.</p>{:else if !filtered.length}<p class="empty-state">No artifacts match these filters. <button type="button" class="link-button" on:click={clearFilters}>Clear filters</button>.</p>{:else}<div class="model-table"><div class="model-head" aria-hidden="true"><span>Name</span><span>Type</span><span>Architecture</span><span>Quant</span><span>Size</span><span>Context</span><span>Profiles</span><span>Modified</span></div>{#each filtered as model}<button class:active={model.id === selectedId} class="model-row" type="button" aria-label={`Inspect ${model.name}`} on:click={() => selectModel(model)}><strong>{model.name}{#if activeProfileId && (usage.get(model.id) ?? []).includes(activeProfileId)}<b class="active-badge">Active</b>{/if}</strong><span>{typeLabel(model, inspections.get(model.id))}</span><span>{inspections.get(model.id)?.architecture ?? "Uninspected"}</span><span>{model.quantizationGuess ?? "Unknown"}</span><span>{formatBytes(model.sizeBytes)}</span><span>{inspections.get(model.id)?.trainedContext?.toLocaleString() ?? "Uninspected"}</span><span>{(usage.get(model.id) ?? []).length}</span><span>{formatDate(model.modifiedAt)}</span></button>{/each}</div>{/if}
+  <PageHeader title="Models" subtitle="Configured Models are authoritative. Artifacts remain persistent records even when discovery is unavailable." />
+  <div class="actions" role="group" aria-label="Models views">
+    <button class:primary={mode === "configured"} class="btn" type="button" aria-pressed={mode === "configured"} on:click={() => { mode = "configured"; selected = null; }}>Configured Models</button>
+    <button class:primary={mode === "artifacts"} class="btn" type="button" aria-pressed={mode === "artifacts"} on:click={() => { mode = "artifacts"; selected = null; }}>Artifacts</button>
+    <span role="status">{message}</span>
+  </div>
+  <div class="filters">
+    <label>Search <input bind:value={query} placeholder="Name, alias, or artifact" /></label>
+    <label>Availability <select bind:value={availability}><option value="all">All</option><option value="available">Available</option><option value="missing">Missing</option><option value="invalid">Invalid</option><option value="unknown">Unknown</option></select></label>
+    {#if mode === "configured"}<label>Enabled <select bind:value={enabled}><option value="all">All</option><option value="true">Enabled</option><option value="false">Disabled</option></select></label>{/if}
+    {#if mode === "artifacts"}<button class="btn" type="button" on:click={() => action(API_ENDPOINTS.discovery.rescanModels, "POST", undefined, "Discovery rescanned.")}>Rescan discovery</button>{/if}
+  </div>
+  <div class="layout">
+    <section class="panel list" aria-label={mode === "configured" ? "Configured Models" : "Artifacts"}>
+      {#if mode === "configured"}
+        <div class="table configured-table" role="table" aria-label="Configured Models"><div class="head" role="row"><span>Name</span><span>Alias</span><span>Build</span><span>Mode</span><span>Availability</span><span>Router state</span><span>Enabled</span></div>
+          {#each configuredRows as model}<button class:active={selected === model.id} class="row" type="button" role="row" on:click={() => selected = model.id}><strong>{model.displayName}</strong><span>{model.routerAlias}</span><span>{buildLabel(model)}</span><span>{model.projector ? "Vision" : "Text"}</span><span>{model.validation.references.artifact}/{model.validation.references.build}</span><span>{routerState(model, runtime)}</span><span>{model.enabled ? "Yes" : "No"}</span></button>{:else}<p class="empty-state">No configured models match these filters.</p>{/each}
+        </div>
+      {:else}
+        <div class="table artifact-table" role="table" aria-label="Artifacts"><div class="head" role="row"><span>Name</span><span>State</span><span>Kind</span><span>Availability</span></div>
+          {#each artifactRows as artifact}<button class:active={selected === artifact.id} class="row" type="button" role="row" on:click={() => selected = artifact.id}><strong>{artifact.metadata?.displayName ?? artifact.resource.locator.split(/[\\/]/).pop()}</strong><span>{artifact.id.startsWith("discovery:") ? "Discovered only" : "Registered Artifact"}</span><span>{artifact.kind}</span><span>{artifact.referenceStatus}</span></button>{:else}<p class="empty-state">No registered or discovered artifacts match these filters.</p>{/each}
+        </div>
+      {/if}
     </section>
-    <aside class="panel model-inspector" aria-label="Artifact inspector">
-      <div class="panel-head"><h2 class="section-title">Inspector</h2><span class="mini-pill">{selected ? loadingIds.has(selected.id) ? "Loading" : selectedInspection?.status ?? "Uninspected" : "Select artifact"}</span></div>
-      {#if selected}<div class="inspector-body"><h3>Identity</h3><p><strong>{selectedInspection?.displayName ?? selected.name}</strong><br /><small>{typeLabel(selected, selectedInspection)} · {selectedInspection?.architecture ?? selected.familyGuess ?? "Architecture unknown"}</small></p><label>Path<input readonly value={selected.path} aria-label="Artifact path" /></label><button class="btn" type="button" on:click={() => copyPath(selected.path)}>Copy path</button>
-        <h3>Model metadata</h3>{#if loadingIds.has(selected.id)}<p>Inspecting metadata without interrupting the library…</p>{:else if selectedInspection}<p>Status: {selectedInspection.status}</p><dl><dt>Name</dt><dd>{selectedInspection.displayName ?? "Unknown"}</dd><dt>Architecture</dt><dd>{selectedInspection.architecture ?? "Unknown"}</dd><dt>Size label</dt><dd>{selectedInspection.metadata["general.size_label"] ?? "Unknown"}</dd><dt>Quantization hint</dt><dd>{selected.quantizationGuess ?? "Unknown"}</dd><dt>Trained context</dt><dd>{selectedInspection.trainedContext?.toLocaleString() ?? "Unknown"}</dd><dt>Blocks / layers</dt><dd>{selectedInspection.blockCount ?? "Unknown"}</dd><dt>Embedding size</dt><dd>{selectedInspection.embeddingLength?.toLocaleString() ?? "Unknown"}</dd><dt>MoE</dt><dd>{selectedInspection.isMoE === undefined ? "Unknown" : selectedInspection.isMoE ? "Yes" : "No"}</dd><dt>Experts / active</dt><dd>{selectedInspection.expertCount ?? "Unknown"} / {selectedInspection.expertUsedCount ?? "Unknown"}</dd><dt>Finetune</dt><dd>{selectedInspection.metadata["general.finetune"] ?? "Unknown"}</dd><dt>License</dt><dd>{selectedInspection.metadata["general.license"] ?? "Unknown"}</dd><dt>Source</dt><dd>{selectedInspection.metadata["general.source.huggingface.repository"] ?? "Unknown"}</dd></dl><details><summary>Metadata details ({Object.keys(selectedInspection.metadata).length})</summary>{#each Object.entries(selectedInspection.metadata) as [key, value]}<p><code>{key}</code>: {String(value)}</p>{/each}</details>{:else}<p>Selecting an artifact loads its GGUF metadata.</p>{/if}
-        <h3>File details</h3><dl><dt>Discovery root</dt><dd>{selected.folder}</dd><dt>Size</dt><dd>{formatBytes(selected.sizeBytes)}</dd><dt>Modified</dt><dd>{formatDate(selected.modifiedAt)}</dd><dt>GGUF version</dt><dd>{selectedInspection?.version ?? "Unknown"}</dd><dt>Tensor count</dt><dd>{selectedInspection?.tensorCount ?? "Unknown"}</dd><dt>Metadata count</dt><dd>{selectedInspection?.kvCount ?? "Unknown"}</dd></dl>
-        <h3>Profile usage</h3>{#if selectedProfiles.length}{#each selectedProfiles as profile}{#if profile}<p><a href={profileHref(profile.id)}>{profile.name}</a>{#if profile.id === activeProfileId} — current managed runtime profile{/if}</p>{/if}{/each}{:else}<p>No saved profile references this artifact.</p>{/if}{#if missingProfileIds.length}<p class="warning">{missingProfileIds.length} referenced profile{missingProfileIds.length === 1 ? " is" : "s are"} missing.</p>{/if}
-        <h3>Related artifacts</h3>{#each relatedArtifactCandidates(selected, models, inspections) as related}<button class="related" type="button" on:click={() => selectModel(related.model)}>{related.model.name}<small>{related.reason}</small></button>{:else}<p>No conservative same-folder candidates found.</p>{/each}
-        <h3>Warnings</h3>{#each selectedInspection?.warnings ?? [] as warning}<p class="warning">{warning}</p>{:else}<p>None reported.</p>{/each}
-        {#if isPrimaryModel(selected, selectedInspection)}<a class="btn primary configure" href={configureHref(selected.id)}>Configure in Profiles</a>{:else if selectedInspection?.status !== "invalid"}<p class="warning">{typeLabel(selected, selectedInspection)} artifacts are not directly configurable.</p>{/if}
-      </div>{:else}<p class="empty-state">Select an artifact to inspect metadata and profile usage.</p>{/if}
+    <aside class="panel inspector" aria-label="Model inspector"><div class="panel-head"><h2 class="section-title">Inspector</h2></div>
+      {#if currentConfigured}
+        <dl><dt>Identity</dt><dd>{currentConfigured.id}</dd><dt>Alias</dt><dd>{currentConfigured.routerAlias}</dd><dt>Artifact</dt><dd>{currentConfigured.artifact?.resource.locator ?? currentConfigured.artifactId}</dd><dt>Build</dt><dd>{buildLabel(currentConfigured)}</dd><dt>Enabled</dt><dd>{currentConfigured.enabled ? "Yes" : "No"}</dd><dt>References</dt><dd>{currentConfigured.validation.references.artifact} artifact / {currentConfigured.validation.references.build} build</dd><dt>Build eligibility</dt><dd>{currentConfigured.validation.managedInferenceEligibility ?? "unknown"}</dd><dt>Router state</dt><dd>{routerState(currentConfigured, runtime)}</dd></dl>
+        <section><h3>Projector</h3>{#if currentConfigured.projector}<p>Explicit: {currentConfigured.projector.resource.locator} ({currentConfigured.projectorAssociation?.validationStatus ?? "unknown"})</p>{:else}<p>None selected.</p>{/if}{#each currentConfigured.projectorCandidates ?? [] as candidate}<p>Candidate only: {candidate.artifactId} ({candidate.basis}{candidate.confidence ? `, ${candidate.confidence}` : ""})</p>{/each}</section>
+        {#if currentConfigured.warnings?.length}<section><h3>Warnings</h3>{#each currentConfigured.warnings as warning}<p class="warning">{warning}</p>{/each}</section>{/if}
+        <p><a class="btn" href={`#/profiles?configuredModel=${currentConfigured.id}`}>Edit Profiles</a></p>
+        <ConfiguredModelRuntimeAction model={currentConfigured} {runtime} onComplete={load} />
+      {:else if currentArtifact}
+        <dl><dt>Identity</dt><dd>{currentArtifact.id}</dd><dt>Resource</dt><dd>{currentArtifact.resource.locator}</dd><dt>Kind</dt><dd>{currentArtifact.kind}</dd><dt>Availability</dt><dd>{currentArtifact.referenceStatus}</dd><dt>Configured Models</dt><dd>{#if currentArtifact.configuredModelIds.length}{#each currentArtifact.configuredModelIds as id}<a href={`#/profiles?configuredModel=${id}`}>{id}</a>{/each}{:else}None{/if}</dd></dl>
+        {#if discoveryEvidence}<section><h3>Discovery evidence</h3><p>{discoveryEvidence.path}</p><p>Detected {new Date(discoveryEvidence.detectedAt).toLocaleString()}</p></section>{/if}
+        {#if currentArtifact.metadata}<section><h3>Metadata</h3><p>{currentArtifact.metadata.architecture ?? "Unknown architecture"} · {currentArtifact.metadata.status}</p>{#each currentArtifact.metadata.warnings as warning}<p class="warning">{warning}</p>{/each}</section>{/if}
+        <div class="actions">{#if !artifactRegistered}<button class="btn primary" type="button" on:click={() => action(API_ENDPOINTS.modelArtifacts.register, "POST", { discoveryId: currentArtifact!.discoveryId }, "Artifact registered.")}>Register artifact</button>{:else}<button class="btn" type="button" on:click={() => action(API_ENDPOINTS.modelArtifacts.reconcile(currentArtifact!.id), "POST", undefined, "Artifact reconciled.")}>Reconcile</button>{#if artifactConfigurable}<a class="btn primary" href={`#/profiles?artifact=${currentArtifact.id}`}>New configuration</a>{:else}<small class="warning">New configuration requires a registered model or unknown artifact.</small>{/if}<button class="btn danger" type="button" on:click={() => confirm(`Delete registered artifact ${currentArtifact!.id}?`) && action(API_ENDPOINTS.modelArtifacts.delete(currentArtifact!.id), "DELETE", undefined, "Artifact deleted.")}>Delete</button>{/if}</div>
+      {:else}<p class="empty-state">Select a record to inspect.</p>{/if}
     </aside>
   </div>
 </main>
 
 <style>
-  .models-page { --text-muted:var(--color-muted); --surface-raised:var(--color-panel-strong); --text:var(--color-text); --border:var(--color-line); --accent:var(--color-purple); --warning:var(--color-amber); }
-  .active-badge { margin-left:.45rem; color:var(--color-green); font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; }
-  .models-actions { display:flex; align-items:center; gap:.75rem; margin-bottom:.75rem; min-height:2.25rem; }.models-actions span { color:var(--text-muted); font-size:.85rem; }.discovery-warning { margin-bottom:.75rem; }.discovery-warning p { margin:.4rem 0; }.models-layout { display:grid; grid-template-columns:minmax(0,1fr) 25rem; gap:1rem; align-items:start; }.filters { display:grid; gap:.65rem; margin-bottom:.75rem; }.filters label { display:grid; gap:.25rem; }.tabs { display:flex; flex-wrap:wrap; gap:.25rem; }.tabs button { border:0; background:transparent; color:var(--text-muted); padding:.35rem .5rem; border-radius:.25rem; }.tabs button.active { background:var(--surface-raised); color:var(--text); }.filter-selects { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:.4rem; }.model-table { min-width:0; }.model-head,.model-row { display:grid; grid-template-columns:minmax(12rem,2fr) .8fr 1fr .7fr .75fr .8fr .55fr .85fr; gap:.55rem; align-items:center; }.model-head { color:var(--text-muted); font-size:.72rem; padding:.25rem; text-transform:uppercase; }.model-row { width:100%; text-align:left; border:0; border-top:1px solid var(--border); background:transparent; color:inherit; padding:.65rem .25rem; font:inherit; }.model-row:hover,.model-row.active { background:var(--surface-raised); }.model-row:focus-visible,.tabs button:focus-visible,.related:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }.model-row span { color:var(--text-muted); font-size:.82rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.inspector-body { display:grid; gap:.65rem; }.inspector-body h3 { margin:.5rem 0 0; }.inspector-body p { margin:0; }.inspector-body label { display:grid; gap:.25rem; }.inspector-body input { min-width:0; }.inspector-body dl { display:grid; grid-template-columns:max-content 1fr; gap:.2rem .6rem; margin:0; font-size:.85rem; }.inspector-body dt { color:var(--text-muted); }.inspector-body dd { margin:0; overflow-wrap:anywhere; }.related { display:grid; width:100%; text-align:left; border:0; background:var(--surface-raised); color:inherit; padding:.45rem; }.related small { color:var(--text-muted); }.configure { width:max-content; }.link-button { border:0; background:none; color:var(--accent); padding:0; text-decoration:underline; font:inherit; cursor:pointer; }@media (max-width:1000px){.models-layout{grid-template-columns:1fr}.model-inspector{order:2}}@media (max-width:720px){.filter-selects{grid-template-columns:repeat(2,minmax(0,1fr))}.model-head{display:none}.model-row{grid-template-columns:minmax(0,1fr) auto;gap:.25rem .5rem}.model-row span:nth-of-type(2),.model-row span:nth-of-type(4),.model-row span:nth-of-type(6),.model-row span:nth-of-type(7){display:none}.model-row span{white-space:normal}.models-page{min-width:0;overflow-x:hidden}}@media (max-width:320px){.filter-selects{grid-template-columns:1fr}.models-actions{align-items:flex-start;flex-direction:column}}
+  .actions,.filters{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:.75rem}.actions span{color:var(--color-muted)}.filters label{display:grid;gap:.2rem;font-size:.82rem}.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(17rem,27rem);gap:1rem}.list{overflow:auto}.table{min-width:43rem}.head,.row{display:grid;grid-template-columns:1.4fr 1fr 1.2fr .8fr 1.1fr 1fr .65fr;gap:.6rem;align-items:center;padding:.65rem .75rem}.artifact-table .head,.artifact-table .row{grid-template-columns:1.5fr 1fr .7fr .8fr}.head{font-size:.75rem;color:var(--color-muted);border-bottom:1px solid var(--color-line)}.row{width:100%;text-align:left;color:inherit;background:transparent;border:0;border-bottom:1px solid var(--color-line)}.row:hover,.row.active{background:var(--color-panel-strong)}.row span,.row strong,dd{overflow-wrap:anywhere}.inspector{padding:1rem;min-width:0}.inspector section{border-top:1px solid var(--color-line);padding-top:.65rem;margin-top:.65rem}.inspector h3{margin:.1rem 0 .45rem;font-size:.9rem}.inspector p{overflow-wrap:anywhere}dl{display:grid;grid-template-columns:8rem minmax(0,1fr);gap:.4rem .6rem;margin:0}dt{color:var(--color-muted)}dd{margin:0}.warning{color:var(--color-warning)}@media(max-width:760px){.layout{grid-template-columns:1fr}.models-page{min-width:0;overflow-x:hidden}.list{max-width:100%}}@media(max-width:320px){.filters input,.filters select{max-width:100%}.inspector{min-width:0}}
 </style>

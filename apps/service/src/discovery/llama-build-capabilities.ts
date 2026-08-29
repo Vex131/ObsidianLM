@@ -215,8 +215,9 @@ export async function getLlamaBuildCapabilities(build: DiscoveredLlamaCppBuild, 
       warnings: [{ code: "server_unavailable", message: "The discovered llama.cpp server is no longer available." }]
     };
   }
-  const cached = capabilityCache.get(fingerprint);
-  if (cached) return cached;
+  const cacheKey = `${fingerprint}:${build.serverPath}`;
+  const cached = capabilityCache.get(cacheKey);
+  if (cached) return { ...cached, buildId: build.id, serverPath: build.serverPath };
 
   const [version, help, devices] = await Promise.all([runner(build.serverPath, ["--version"]), runner(build.serverPath, ["--help"]), runner(build.serverPath, ["--list-devices"])]);
   const warnings = [probeWarning("version", version), probeWarning("help", help), probeWarning("devices", devices)].filter((warning): warning is DiscoveryWarning => Boolean(warning));
@@ -241,7 +242,7 @@ export async function getLlamaBuildCapabilities(build: DiscoveredLlamaCppBuild, 
     router: assessRouter(parsedHelp.flags, help.ok),
     warnings
   };
-  capabilityCache.set(fingerprint, manifest);
+  capabilityCache.set(cacheKey, manifest);
   if (capabilityCache.size > 32) capabilityCache.delete(capabilityCache.keys().next().value as string);
   return manifest;
 }

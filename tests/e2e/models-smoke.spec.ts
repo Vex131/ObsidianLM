@@ -1,82 +1,28 @@
 import { expect, test } from "@playwright/test";
 
-const model = {
-  id: "model-1", name: "Qwen Tiny", fileName: "Qwen-Tiny-Q4_K_M.gguf", path: "C:/models/Qwen-Tiny-Q4_K_M.gguf", folder: "C:/models",
-  extension: ".gguf", sizeBytes: 2_147_483_648, modifiedAt: "2026-08-28T10:00:00.000Z", detectedAt: "2026-08-28T10:01:00.000Z",
-  quantizationGuess: "Q4_K_M", familyGuess: "qwen", artifactKindGuess: "unknown", artifactKindSource: "unknown"
-};
-const projector = {
-  id: "projector-1", name: "mmproj-Qwen-Tiny", fileName: "mmproj-Qwen-Tiny-F16.gguf", path: "C:/models/mmproj-Qwen-Tiny-F16.gguf", folder: "C:/models",
-  extension: ".gguf", sizeBytes: 33_554_432, modifiedAt: "2026-08-28T09:00:00.000Z", detectedAt: "2026-08-28T10:01:00.000Z",
-  familyGuess: "qwen", artifactKindGuess: "mmproj", artifactKindSource: "filename"
-};
-const profile = { id: "qwen-profile", name: "Qwen coding", runtimeType: "llama.cpp", providerKind: "server", buildPath: "C:/llama/llama-server.exe", modelPath: model.path, host: "127.0.0.1", port: 8085 };
+const configured = { id: "configured-1", displayName: "Vision configured", routerAlias: "vision", artifactId: "artifact-1", buildId: "build-1", enabled: true, artifact: { id: "artifact-1", resource: { locator: "C:/models/vision.gguf" }, kind: "model" }, build: { displayName: "Build A" }, projector: { resource: { locator: "C:/models/mmproj.gguf" } }, projectorAssociation: { validationStatus: "available" }, projectorCandidates: [{ artifactId: "artifact-mmproj", basis: "filename", confidence: "high" }], validation: { references: { artifact: "available", build: "available" }, status: "valid", managedInferenceEligibility: "eligible" }, warnings: [] };
+const registered = { id: "artifact-1", discoveryId: "discovered-1", resource: { owner: { scope: "local" }, locator: "C:/models/vision.gguf" }, kind: "model", referenceStatus: "available", configuredModelIds: [configured.id] };
+const discovered = { id: "discovered-only", name: "Discovered only", path: "C:/models/new.gguf", artifactKindGuess: "model", detectedAt: "2026-08-28T00:00:00Z" };
 
-test("Models inspects artifacts and hands an unsaved draft to Profiles", async ({ page }) => {
-  let profileWrites = 0;
+test("Models separates configured models, registered artifacts, and discovered-only records", async ({ page }) => {
+  const calls: string[] = [];
   await page.addInitScript(() => localStorage.setItem("obsidianlm.adminToken", "e2e-token"));
-  await page.route("**/api/status", (route) => route.fulfill({ json: { app: "ObsidianLM", service: "running", warnings: [] } }));
-  await page.route("**/api/runtime", (route) => route.fulfill({ json: { state: { activeProfileId: profile.id, status: "running" }, warnings: [] } }));
-  await page.route("**/api/settings", (route) => route.fulfill({ json: { managedLlamaPort: 8085 } }));
-  await page.route("**/api/profiles", async (route) => {
-    if (route.request().method() !== "GET") profileWrites += 1;
-    await route.fulfill({ json: { profiles: [profile] } });
+  await page.route("**/api/**", async route => {
+    const url = new URL(route.request().url()); calls.push(`${route.request().method()} ${url.pathname}`);
+    if (url.pathname === "/api/configured-models") return route.fulfill({ json: { revision: 1, configuredModels: [configured] } });
+    if (url.pathname === "/api/model-artifacts") return route.fulfill({ json: { revision: 1, artifacts: [registered] } });
+    if (url.pathname === "/api/discovery/models") return route.fulfill({ json: { models: [discovered], warnings: [], scannedFolders: ["C:/models"], detectedAt: "now" } });
+    if (url.pathname === "/api/runtime") return route.fulfill({ json: { state: { status: "running", activeProfileId: null }, routerState: { status: "running", activeBuildId: "build-1", configuredModelStates: [{ configuredModelId: "configured-1", state: "loaded" }] }, warnings: [] } });
+    if (url.pathname === "/api/profiles") return route.fulfill({ json: { profiles: [] } });
+    return route.fulfill({ json: { ok: true } });
   });
-  await page.route("**/api/discovery/models/usage", (route) => route.fulfill({ json: { usage: [{ artifactId: model.id, profileIds: [profile.id] }], missingProfileIds: [] } }));
-  await page.route("**/api/discovery/models/model-1/metadata", (route) => route.fulfill({ json: {
-    artifactId: model.id, status: "ready", artifactKind: "model", artifactKindSource: "metadata", version: 3, tensorCount: 42, kvCount: 8,
-    displayName: "Qwen Tiny Fixture", architecture: "qwen3", trainedContext: 32768, embeddingLength: 2048, blockCount: 24,
-    expertCount: 8, expertUsedCount: 2, isMoE: true, metadata: { "general.type": "model", "general.name": "Qwen Tiny Fixture", "general.architecture": "qwen3", "qwen3.context_length": 32768 }, warnings: []
-  } }));
-  await page.route("**/api/discovery/models", (route) => route.fulfill({ json: { models: [model, projector], warnings: [], scannedFolders: ["C:/models"], detectedAt: "2026-08-28T10:01:00.000Z" } }));
-  await page.route("**/api/discovery/llama-builds", (route) => route.fulfill({ json: { builds: [], warnings: [], scannedFolders: [], detectedAt: "now" } }));
-
-  await page.setViewportSize({ width: 1366, height: 850 });
-  await page.goto("/#models");
-  await expect(page.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Inspect Qwen Tiny" })).toBeVisible();
-  await expect(page.getByText("mmproj-Qwen-Tiny", { exact: true })).not.toBeVisible();
-  await page.getByPlaceholder("Name, path, architecture").fill("nothing-here");
-  await expect(page.getByText("No artifacts match these filters.")).toBeVisible();
-  await page.getByRole("button", { name: "Clear filters" }).click();
-  await page.getByRole("button", { name: /Projectors \(1\)/ }).click();
-  await expect(page.getByText("mmproj-Qwen-Tiny", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: /Models \(1\)/ }).click();
-  await page.getByRole("button", { name: "Inspect Qwen Tiny" }).click();
-  await expect(page.getByText("Qwen Tiny Fixture", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("32,768", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Qwen coding", { exact: true })).toBeVisible();
-  await expect(page.getByText(/current managed runtime profile/)).toBeVisible();
-  for (const width of [1600, 1366, 768, 390, 320]) {
-    await page.setViewportSize({ width, height: 850 });
-    await expect(page.getByRole("complementary", { name: "Artifact inspector" })).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  }
-
-  await page.getByRole("link", { name: "Configure in Profiles" }).click();
-  await expect(page.getByRole("heading", { name: "Profiles", exact: true })).toBeVisible();
-  await expect(page.getByLabel("Model")).toHaveValue(model.path);
-  await expect(page.getByLabel("Build")).toHaveValue("");
-  await expect(page.getByRole("heading", { name: "New local draft" })).toBeVisible();
-  expect(profileWrites).toBe(0);
-
-});
-
-test("Profiles accepts an ID-only handoff when metadata overrides a misleading filename hint", async ({ page }) => {
-  const misleading = { ...model, fileName: "adapter-Qwen-Tiny.gguf", artifactKindGuess: "adapter", artifactKindSource: "filename" };
-  let profileWrites = 0;
-  await page.addInitScript(() => localStorage.setItem("obsidianlm.adminToken", "e2e-token"));
-  await page.route("**/api/status", (route) => route.fulfill({ json: { app: "ObsidianLM", service: "running", warnings: [] } }));
-  await page.route("**/api/runtime", (route) => route.fulfill({ json: { state: { activeProfileId: null, status: "stopped" }, warnings: [] } }));
-  await page.route("**/api/settings", (route) => route.fulfill({ json: { managedLlamaPort: 8085 } }));
-  await page.route("**/api/profiles", async (route) => { if (route.request().method() !== "GET") profileWrites += 1; await route.fulfill({ json: { profiles: [] } }); });
-  await page.route("**/api/discovery/models/model-1/metadata", (route) => route.fulfill({ json: { artifactId: model.id, status: "ready", artifactKind: "model", artifactKindSource: "metadata", metadata: { "general.type": "model" }, warnings: [] } }));
-  await page.route("**/api/discovery/models", (route) => route.fulfill({ json: { models: [misleading], warnings: [], scannedFolders: ["C:/models"], detectedAt: "now" } }));
-  await page.route("**/api/discovery/llama-builds", (route) => route.fulfill({ json: { builds: [], warnings: [], scannedFolders: [], detectedAt: "now" } }));
-
-  await page.goto("/#profiles?model=model-1");
-  await expect(page.getByLabel("Model")).toHaveValue(model.path);
-  await expect(page.getByLabel("Build")).toHaveValue("");
-  await expect(page.getByRole("heading", { name: "New local draft" })).toBeVisible();
-  expect(profileWrites).toBe(0);
+  const errors: string[] = []; page.on("pageerror", e => errors.push(e.message)); page.on("console", msg => { if (msg.type() === "error") errors.push(msg.text()); });
+  await page.goto("/#models"); await expect(page.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
+  await expect(page.getByText("Vision configured")).toBeVisible(); await expect(page.getByText("loaded")).toBeVisible();
+  await page.getByRole("button", { name: "Artifacts" }).click(); await expect(page.getByText("Registered Artifact")).toBeVisible(); await expect(page.getByText("Discovered only")).toBeVisible();
+  await page.getByRole("row", { name: /Discovered only/ }).click(); await expect(page.getByRole("button", { name: "Register artifact" })).toBeVisible(); await expect(page.getByRole("link", { name: "New configuration" })).not.toBeVisible();
+  await page.getByRole("row", { name: /Registered Artifact/ }).click(); await expect(page.getByRole("link", { name: "New configuration" })).toBeVisible(); await expect(page.getByText("configured-1")).toBeVisible();
+  expect(calls.some(call => /^(POST|PATCH|PUT|DELETE) \/api\/profiles(?:\/|$)/.test(call))).toBe(false);
+  for (const viewport of [{ width: 1600, height: 900 }, { width: 1366, height: 850 }, { width: 768, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 720 }]) { await page.setViewportSize(viewport); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); }
+  expect(errors).toEqual([]);
 });

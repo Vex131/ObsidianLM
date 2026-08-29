@@ -10,7 +10,7 @@ The implemented Phases 1-13 used one model-bound profile per managed `llama-serv
 profile = llama-server build + GGUF model + model arguments + endpoint
 ```
 
-The Phase 15 foundation, production router lifecycle, model/Build switching, and process/GPU/log awareness are implemented through Builder Run 8. `RuntimeManager` selects one validated Build, generates/uses its derived preset, launches one managed router, and persists current lifecycle authority in `router-runtime-state.json`. ObsidianLM remains the control plane; it is not a general inference proxy.
+The Phase 15 foundation, production router lifecycle, model/Build switching, process/GPU/log awareness, and configuration-facing operator console are implemented through Builder Run 9. `RuntimeManager` selects one validated Build, generates/uses its derived preset, launches one managed router, and persists current lifecycle authority in `router-runtime-state.json`. ObsidianLM remains the control plane; it is not a general inference proxy.
 
 ```text
 Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
@@ -18,7 +18,7 @@ Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
 OpenCode / Illustria / local clients → llama.cpp :8085/v1
 ```
 
-Profile start now starts the mapped Build and loads its mapped model when stopped, or switches models in place when the same Build is running. It never hides a cross-Build restart. Direct same-Build selection uses the router management API and preserves the router PID/runtime ID; explicit cross-Build selection performs preflight, stop, port release, target start, and target load on the same endpoint. Run 8 classifies a router child as managed only from current in-memory router ownership, direct parent evidence, and the exact active Build executable path. It attributes GPU memory and child-prefixed logs only after that proof; previous and unknown processes remain read-only candidates. UI work remains Runs 9–10.
+Profile compatibility start now starts the mapped Build and loads its mapped model when stopped, or switches models in place when the same Build is running. It never hides a cross-Build restart. Direct same-Build selection uses the router management API and preserves the router PID/runtime ID; explicit cross-Build selection performs preflight, stop, port release, target start, and target load on the same endpoint. Run 8 classifies a router child as managed only from current in-memory router ownership, direct parent evidence, and the exact active Build executable path. It attributes GPU memory and child-prefixed logs only after that proof; previous and unknown processes remain read-only candidates. Run 9 makes Profiles edit authoritative Configured Models, Models distinguish configurations from persistent/discovered Artifacts, and Builds distinguish stable registered Builds from discovery. Runtime and Dashboard integration remains Run 10.
 
 ## Package Manager
 

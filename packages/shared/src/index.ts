@@ -182,6 +182,19 @@ export type {
   RouterSwitchKind,
   RouterSwitchStage
 } from "./types/router.js";
+export type {
+  ConfiguredModelDetailResponse,
+  ConfiguredModelDetails,
+  ConfiguredModelListResponse,
+  LlamaCppBuildCapabilitiesResponse,
+  LlamaCppBuildDetailResponse,
+  LlamaCppBuildDetails,
+  LlamaCppBuildListResponse,
+  ModelArtifactDetailResponse,
+  ModelArtifactListItem,
+  ModelArtifactListResponse,
+  RouterRuntimeResponse
+} from "./types/phase15-domain-api.js";
 export { LEGACY_PROFILE_SOURCE_VERSION, PROFILE_MIGRATION_TARGET_VERSION, PHASE15_DOMAIN_TARGET_VERSION } from "./types/profile-migration.js";
 export type {
   LegacyProfileCompatibilityBinding,
