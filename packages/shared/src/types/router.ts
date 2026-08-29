@@ -120,3 +120,24 @@ export interface RouterRuntimeState {
 export interface RouterRuntimeActionResult extends RuntimeActionResult {
   routerState: RouterRuntimeState;
 }
+
+export type RouterSwitchKind = "same_build_model" | "cross_build";
+export type RouterSwitchStage =
+  | "validated"
+  | "loading"
+  | "target_preflight"
+  | "source_stop"
+  | "port_release"
+  | "target_revalidation"
+  | "target_start"
+  | "target_model_load"
+  | "completed"
+  | "failed";
+
+export interface RouterSwitchActionResult extends RouterRuntimeActionResult {
+  switchKind: RouterSwitchKind;
+  targetConfiguredModelId: ConfiguredModelId;
+  sourceBuildId: LlamaCppBuildId | null;
+  targetBuildId: LlamaCppBuildId | null;
+  stage: RouterSwitchStage;
+}

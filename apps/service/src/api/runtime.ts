@@ -6,7 +6,13 @@ import { sanitizeDetectionForApi } from "./sanitize.js";
 const actionStatus = (result: { ok: boolean; error?: string }): number => {
   if (result.ok) return 200;
   if (result.error === "not_found") return 404;
-  if (["prerequisite", "conflict", "port_conflict", "runtime_active", "different_build_active", "stop_timeout"].includes(result.error ?? "")) return 409;
+  if ([
+    "prerequisite", "conflict", "port_conflict", "runtime_active", "different_build_active", "stop_timeout", "not_running",
+    "configured_model_disabled", "configured_model_invalid", "unsupported_scope", "build_switch_required", "same_build_switch_required",
+    "runtime_preset_restart_required", "model_not_available", "model_state_unknown", "model_load_failed", "model_load_timeout",
+    "residency_policy_violation", "router_catalog_mismatch", "cross_build_target_preflight_failed", "cross_build_target_revalidation_failed", "cross_build_target_start_failed",
+    "cross_build_target_model_failed"
+  ].includes(result.error ?? "")) return 409;
   return 400;
 };
 
@@ -14,6 +20,12 @@ function validStartBody(value: unknown): value is { buildId: string } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const body = value as Record<string, unknown>;
   return Object.keys(body).length === 1 && typeof body.buildId === "string" && body.buildId.length > 0;
+}
+
+function validSwitchBody(value: unknown): value is { configuredModelId: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const body = value as Record<string, unknown>;
+  return Object.keys(body).length === 1 && typeof body.configuredModelId === "string" && body.configuredModelId.length > 0;
 }
 
 export async function registerRuntimeRoutes(app: FastifyInstance, runtimeManager: RuntimeManager): Promise<void> {
@@ -39,6 +51,18 @@ export async function registerRuntimeRoutes(app: FastifyInstance, runtimeManager
   app.post<{ Body: unknown }>("/api/runtime/restart", async (request, reply) => {
     if (request.body && typeof request.body === "object" && Object.keys(request.body).length > 0) return reply.status(400).send({ error: "invalid_payload", message: "Restart does not accept a Build or launch parameters." });
     const result = await runtimeManager.restart();
+    return reply.status(actionStatus(result)).send(result);
+  });
+
+  app.post<{ Body: unknown }>("/api/runtime/switch-model", async (request, reply) => {
+    if (!validSwitchBody(request.body)) return reply.status(400).send({ error: "invalid_payload", message: "Body must contain only a non-empty configuredModelId." });
+    const result = await runtimeManager.switchModel(request.body.configuredModelId);
+    return reply.status(actionStatus(result)).send(result);
+  });
+
+  app.post<{ Body: unknown }>("/api/runtime/switch-build", async (request, reply) => {
+    if (!validSwitchBody(request.body)) return reply.status(400).send({ error: "invalid_payload", message: "Body must contain only a non-empty configuredModelId." });
+    const result = await runtimeManager.switchBuild(request.body.configuredModelId);
     return reply.status(actionStatus(result)).send(result);
   });
 

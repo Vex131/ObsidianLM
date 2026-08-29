@@ -10,7 +10,7 @@ The implemented Phases 1-13 used one model-bound profile per managed `llama-serv
 profile = llama-server build + GGUF model + model arguments + endpoint
 ```
 
-The Phase 15 foundation and production router lifecycle are implemented through Builder Run 6. `RuntimeManager` selects one validated Build, generates/uses its derived preset, launches one managed router, and persists current lifecycle authority in `router-runtime-state.json`. ObsidianLM remains the control plane; it will not become a general inference proxy.
+The Phase 15 foundation, production router lifecycle, and model/Build switching are implemented through Builder Run 7. `RuntimeManager` selects one validated Build, generates/uses its derived preset, launches one managed router, and persists current lifecycle authority in `router-runtime-state.json`. ObsidianLM remains the control plane; it is not a general inference proxy.
 
 ```text
 Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
@@ -18,7 +18,7 @@ Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
 OpenCode / Illustria / local clients → llama.cpp :8085/v1
 ```
 
-Profile start is a temporary compatibility Build-selection hint and loads no model. Restart reuses the same Build. Same-build model switching and cross-Build/model switching remain Run 7 work; GPU child/log attribution remains Run 8 work. See the [Project Plan](docs/ObsidianLM_Project_Plan.md) for migration and safety requirements.
+Profile start now starts the mapped Build and loads its mapped model when stopped, or switches models in place when the same Build is running. It never hides a cross-Build restart. Direct same-Build selection uses the router management API and preserves the router PID/runtime ID; explicit cross-Build selection performs preflight, stop, port release, target start, and target load on the same endpoint. GPU child/log attribution remains Run 8; UI work remains Runs 9–10. See the [Project Plan](docs/ObsidianLM_Project_Plan.md) for migration and safety requirements.
 
 ## Package Manager
 
@@ -371,7 +371,7 @@ The implemented Phase 15 foundation establishes schema-v2 authority and explicit
 
 `phase15-domain.json` is authoritative for configuration. Its canonical revision changes only when stored authoritative content changes. The strict v1-to-v2 upgrade was verified with backup and atomic replacement; valid v2 ignores `profiles.json` changes. `profiles.json` is retained as legacy migration/recovery material and is never rewritten by Profile API after cutover. A separate `LegacyProfileCompatibilityBinding` preserves legacy IDs and `host`/`port`; Profile API operations project/translate through one domain transaction. Runtime lifecycle authority is `router-runtime-state.json`; `runtime-state.json` remains preserved legacy evidence.
 
-Run 6 adds production router launch and managed environment use after Run 4 validation and Run 5 preset generation. Static Build evidence/classification remains independent of managed eligibility.
+Run 6 adds production router launch and managed environment use after Run 4 validation and Run 5 preset generation. Run 7 adds model and Build switching. Static Build evidence/classification remains independent of managed eligibility.
 
 The planned router evolution will adopt llama.cpp's built-in router/preset capability while preserving ObsidianLM's conservative single-managed-runtime policy:
 
@@ -385,7 +385,7 @@ generated model presets
 
 The current Run 5 launch argv is the exact registered server executable followed by `--host 0.0.0.0 --port <managed-port> --models-preset <data>/generated/llama-router/<build-id>.ini --models-max 1` and the positive autoload flag proven by that Build's help. It does not pass `--models-dir` or `--model`. Generated INI files are derived artifacts; authoritative structured configuration remains in ObsidianLM. The router uses a controlled per-Build cache/environment.
 
-One router uses one `llama-server` executable/build family for its model children. Same-build model selection can be handled by llama.cpp. Cross-build selection must be initiated through ObsidianLM and restarts the managed router on the stable `:8085` endpoint. No transparent request-driven cross-build proxying, multiple permanent routers, automatic build updates, or unknown-process killing is planned for the initial integration.
+One router uses one `llama-server` executable/build family for its model children. `POST /api/runtime/switch-model` resolves the persisted router alias, calls llama.cpp `POST /models/load`, and polls `/models`; the same PID, Runtime ID, command, and endpoint survive. llama.cpp owns residency, LRU eviction, and `models-max=1`; ObsidianLM does not issue a normal unload. `POST /api/runtime/switch-build` preflights the target Build/preset before source shutdown, verifies source exit and port release, revalidates and starts the target on the same managed port, then loads the requested model. There is no automatic source rollback; if only target model loading fails, the healthy target router remains running. No transparent request-driven cross-build proxying, alternate production port, overlapping router, automatic build update, or unknown-process killing is used.
 
 Phase 15 router diagnostics separate `GET /health` for bounded router/server health from `GET /models` for the router catalog and model load state. Start requires both checks and strict reconciliation against the expected configured-model aliases. Catalog states may include unloaded, loading, loaded, sleeping, and an unavailable/failure condition where applicable. OpenAI-compatible `/v1/*` endpoints remain for inference clients and bounded inference validation, not as the router control-plane catalog.
 
@@ -689,7 +689,7 @@ From the UI:
 4. Start the profile.
 5. Connect external tools directly to llama.cpp at `http://localhost:8085/v1` unless your profile uses a different port.
 
-These steps retain the legacy Profile workflow for compatibility. Current managed runtime start selects a Build and launches its router; a Profile start is only a temporary Build-selection hint and loads no model. Restart reuses the same Build.
+These steps retain the legacy Profile workflow for compatibility. Current managed runtime start selects a Build and launches its router; Profile start then loads its mapped model when stopped or switches it in place under the same Build. It returns `build_switch_required` for another Build. Restart reuses the same Build and does not restore a prior loaded model automatically.
 
 View runtime logs in the dashboard **Logs** panel. It streams live output while a managed runtime is running and can refresh recent persisted runtime logs from disk. The **Jobs** panel shows job logs separately.
 

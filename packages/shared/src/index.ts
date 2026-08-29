@@ -173,7 +173,10 @@ export type {
   RouterPresetPreview,
   RouterRuntimeId,
   RouterRuntimeActionResult,
-  RouterRuntimeState
+  RouterRuntimeState,
+  RouterSwitchActionResult,
+  RouterSwitchKind,
+  RouterSwitchStage
 } from "./types/router.js";
 export { LEGACY_PROFILE_SOURCE_VERSION, PROFILE_MIGRATION_TARGET_VERSION, PHASE15_DOMAIN_TARGET_VERSION } from "./types/profile-migration.js";
 export type {

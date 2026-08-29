@@ -95,6 +95,11 @@ test("runtime API exposes router state and strictly validates start/restart payl
   assert.ok(state.json().routerState);
   assert.equal((await app.inject({ method: "POST", url: "/api/runtime/start", headers: authHeader(), payload: { buildId: "build-a", port: 9999 } })).statusCode, 400);
   assert.equal((await app.inject({ method: "POST", url: "/api/runtime/restart", headers: authHeader(), payload: { buildId: "build-a" } })).statusCode, 400);
+  for (const route of ["/api/runtime/switch-model", "/api/runtime/switch-build"]) {
+    assert.equal((await app.inject({ method: "POST", url: route, payload: { configuredModelId: "model-a" } })).statusCode, 401);
+    assert.equal((await app.inject({ method: "POST", url: route, headers: authHeader(), payload: { configuredModelId: "model-a", extra: true } })).statusCode, 400);
+    assert.equal((await app.inject({ method: "POST", url: route, headers: authHeader(), payload: {} })).statusCode, 400);
+  }
 });
 
 test("runtime health and catalog report no current managed router without probing inference", async (t) => {
@@ -124,7 +129,7 @@ test("injected router start enables health/catalog APIs, while test-chat sends n
     loadDomain: async () => ({ configuredModels: [{ id: "model-a", buildId: "build-a", enabled: true, routerAlias: "managed-model" }] } as any),
     portDetector: async (port, host = "127.0.0.1") => ({ port, host, inUse: spawned && child.exitCode === null, ownerPid: spawned && child.exitCode === null ? child.pid : null, detectionMethod: "test", warnings: [] }),
     spawnRuntime: (() => { spawned = true; return child as any; }) as any,
-    routerClient: { health: async () => { healthCalls += 1; }, models: async () => { modelCalls += 1; return [{ id: "managed-model", status: "unloaded" }]; } },
+    routerClient: { health: async () => { healthCalls += 1; }, models: async () => { modelCalls += 1; return [{ id: "managed-model", status: "unloaded" }]; }, loadModel: async () => undefined },
     sleep: async () => undefined,
     dataDir: () => process.env.OBSIDIANLM_DATA_DIR!,
     mkdir: async () => undefined

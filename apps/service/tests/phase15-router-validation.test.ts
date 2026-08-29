@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { reconcileBuildFingerprintInSnapshot, type Phase15DomainSnapshot } from "../src/config/phase15-domain.js";
 import { getLlamaBuildCapabilitiesForServer } from "../src/discovery/llama-build-capabilities.js";
 import { fingerprintServerExecutable } from "../src/router/fingerprint.js";
+import { createRouterClient } from "../src/router/runtime-client.js";
 
 const observedAt = "2026-08-28T00:00:00.000Z";
 const modelId = createConfiguredModelId("router-model");
@@ -132,6 +133,34 @@ test("runRouterProbe classifies timeout as failed and confirms owned-child clean
     now: () => ++clock
   });
   assert.equal(result.classification, "failed"); assert.equal(result.cleanup.childTerminated, true); assert.equal(result.cleanup.workspaceRemoved, true);
+});
+
+test("RouterClient posts the alias, bounds malformed and oversized responses, and times out", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = createRouterClient({ fetch: async (input, init) => {
+    requests.push({ url: String(input), init });
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "content-type": "application/json" } });
+  } });
+  await client.loadModel("http://127.0.0.1:49152", "managed-model");
+  assert.equal(requests[0]?.url, "http://127.0.0.1:49152/models/load");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(requests[0]?.init?.headers && new Headers(requests[0].init.headers).get("content-type"), "application/json");
+  assert.equal(requests[0]?.init?.body, JSON.stringify({ model: "managed-model" }));
+  const rejected = createRouterClient({ fetch: async () => new Response(JSON.stringify({ success: false, error: "busy" }), { status: 200 }) });
+  await assert.rejects(() => rejected.loadModel("http://router", "managed-model"), /busy/u);
+  const malformedLoad = createRouterClient({ fetch: async () => new Response("not-json", { status: 200 }) });
+  await assert.rejects(() => malformedLoad.loadModel("http://router", "managed-model"), SyntaxError);
+  const oversizedLoad = createRouterClient({ maxResponseBytes: 4, fetch: async () => new Response("12345", { status: 200 }) });
+  await assert.rejects(() => oversizedLoad.loadModel("http://router", "managed-model"), /exceeded 4 bytes/u);
+
+  const malformed = createRouterClient({ fetch: async () => new Response("not-json", { status: 200 }), timeoutMs: 50 });
+  await assert.rejects(() => malformed.models("http://router"), SyntaxError);
+  const oversized = createRouterClient({ maxResponseBytes: 4, fetch: async () => new Response("12345", { status: 200 }) });
+  await assert.rejects(() => oversized.models("http://router"), /exceeded 4 bytes/u);
+  const timedOut = createRouterClient({ timeoutMs: 5, fetch: async (_input, init) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+  }) });
+  await assert.rejects(() => timedOut.health("http://router"), /aborted/u);
 });
 
 const local = (locator: string) => ({ owner: { scope: "local" as const }, locator });

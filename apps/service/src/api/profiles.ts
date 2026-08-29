@@ -206,8 +206,7 @@ export async function registerProfileRoutes(app: FastifyInstance, runtimeManager
     if (!binding || !model) return reply.status(409).send({ error: "invalid_compatibility_binding", message: "Profile is not mapped to a current Configured Model." });
     if (!model.enabled) return reply.status(409).send({ error: "configured_model_disabled", message: "The Configured Model mapped to this Profile is disabled." });
     if (!domain.builds.some((build) => build.id === model.buildId)) return reply.status(409).send({ error: "invalid_compatibility_binding", message: "The mapped Configured Model does not reference a registered Build." });
-    const result = await runtimeManager.start(model.buildId, profile.id);
-    const warnings = [...(result.warnings ?? []), "Compatibility Profile start launches its Build router and does not explicitly load a model."];
-    return reply.status(result.ok ? 200 : result.error === "not_found" ? 404 : 409).send({ ...result, warnings });
+    const result = await runtimeManager.activateCompatibilityProfile(model.id, profile.id);
+    return reply.status(result.ok ? 200 : result.error === "not_found" ? 404 : 409).send(result);
   });
 }

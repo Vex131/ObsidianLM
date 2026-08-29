@@ -11,7 +11,7 @@
 
 ObsidianLM is **not** primarily a chat app and should not look like LM Studio. It is a focused operator console for starting, stopping, validating, monitoring, and switching local AI runtime configuration safely.
 
-**Architecture status:** the current implementation uses one selected Build and one managed llama.cpp router. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence. A Profile start is a temporary Build-selection hint and loads no model. Same-build model switching and cross-Build/model switching remain Run 7 work; GPU child/log attribution remains Run 8 work. Do not claim Phase 15 complete.
+**Architecture status:** the current implementation uses one selected Build and one managed llama.cpp router. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence. Run 7 implements same-Build model loading through llama.cpp's management API without a router restart, plus explicit preflight/stop/release/start/load cross-Build replacement on the stable endpoint. Profile compatibility actions load only stopped or same-Build targets and never hide a cross-Build restart. GPU child/log attribution remains Run 8; Profiles/Models/Builds and Runtime/Dashboard UI work remains Runs 9–10. Do not claim Phase 15 complete.
 
 ### Design Direction
 
@@ -656,7 +656,7 @@ Goal: distinguish discovered local model artifacts from configured model presets
 
 Implemented Phase 14 behavior: Models displays GGUF artifacts discovered in configured model folders. It distinguishes primary models from projector, adapter, importance-matrix, and other/unknown GGUF files using explicit filename hints first and authoritative whitelisted GGUF metadata after lazy inspection. The selected-artifact inspector performs bounded header/KV inspection without loading tensor data or starting llama.cpp, shows current Profile usage and active-profile runtime usage, and can open an unsaved Profiles draft with the artifact preselected.
 
-Discovery IDs remain path-derived and do not survive a move or folder rename. Projector matches are candidates only; Models does not persist model/projector relationships. Configured router models, aliases, and presets are current Phase 15 contracts; switching remains Run 7 work.
+Discovery IDs remain path-derived and do not survive a move or folder rename. Projector matches are candidates only; Models does not persist model/projector relationships. Configured router models, aliases, presets, and explicit switching are current Phase 15 contracts; switching UI remains Runs 9–10 work.
 
 Current and forward-looking requirements:
 
@@ -1023,7 +1023,9 @@ Runtime rules:
 - Stop/restart actions must explain scope.
 - Logs should be visible without passing through unrelated UI.
 - Command preview is first-class, not hidden behind a disclosure.
-- Profile start is a temporary Build-selection hint and loads no model. Same-build and cross-Build/model switching remain Run 7 work.
+- Profile start loads its mapped model when stopped or under the same active Build. A different Build requires the explicit cross-Build replacement action.
+- Same-Build switching keeps the router PID, Runtime ID, command, and endpoint; llama.cpp owns `models-max=1` eviction and ObsidianLM issues no normal unload.
+- Cross-Build switching preflights before source stop, verifies port release, starts on the same endpoint, and does not automatically roll back on target failure.
 - Do not infer loaded model or GPU ownership solely from the router PID.
 - In Phase 16, controls name the target Node and are disabled while that Node is offline or lacks the required capability.
 

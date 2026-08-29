@@ -206,7 +206,7 @@ Router-capable builds are the normal/default architecture. Option B must not be 
 
 ### Same-build model switch
 
-Same-build model switching is not yet implemented. Profile start is a temporary Build-selection hint and loads no model; clients must not infer switching support from the current lifecycle contract.
+Run 7 implements explicit same-build model switching through the router management API. Profile start loads its mapped model only when stopped or under the same active Build; a different Build requires the explicit cross-Build action.
 
 The target machine default is conceptually:
 
@@ -368,9 +368,8 @@ RuntimeManager → one router for selected build
                → strict `/health` and `/models` startup reconciliation
 ```
 
-Remaining work includes:
+Run 7 adds serialized same-build model switching and explicit cross-build stop/release/replacement transitions. Remaining work includes:
 
-- same-build model switching and cross-build stop/release/replacement transitions (Run 7);
 - optional later `/models/sse` integration only if polling proves insufficient;
 - separate bounded inference validation through relevant `/v1` endpoints;
 - GPU child/log attribution and router/model-child process awareness (Run 8), without unsafe ownership inference.
@@ -521,13 +520,13 @@ Phase 14 remains a UI restructuring phase. It does not implement the router, mig
 
 ## 17. Phase 15 - llama.cpp Router Integration
 
-**Status:** Foundation and Build/router lifecycle implemented through Builder Run 6. Phase 15 is not complete.
+**Status:** Foundation, Build/router lifecycle, and model/Build switching implemented through Builder Run 7. Phase 15 is not complete.
 
 ### Goal
 
 Evolve the one-profile/one-server runtime into one ObsidianLM-managed llama.cpp router for one selected build, with generated per-model presets and safe cross-build replacement on the stable `:8085` endpoint.
 
-Run 5 added deterministic exact-executable, capability-aware production presets, atomic derived-artifact generation, freshness evaluation, and separate read-only preset/launch previews. Run 6 adds production launch through a Build/router `RuntimeManager`, controlled cache/environment, managed port preflight/ownership, and strict `/health`/`/models` reconciliation. It does not claim Phase 15 completion.
+Run 5 added deterministic exact-executable, capability-aware production presets, atomic derived-artifact generation, freshness evaluation, and separate read-only preset/launch previews. Run 6 added production launch through a Build/router `RuntimeManager`, controlled cache/environment, managed port preflight/ownership, and strict `/health`/`/models` reconciliation. Run 7 adds explicit same-Build model loading and safe cross-Build replacement. It does not claim Phase 15 completion.
 
 ### Forward-compatible ownership constraint
 
@@ -547,10 +546,11 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 3. **Build capability and catalog safety:** **Implemented in Run 4.** Exact local executables receive bounded static and functional control-plane validation on an isolated temporary loopback router. Current fingerprint evidence and explicit alias reconciliation are required for eligibility; unexpected catalog entries never become managed.
 4. **Preset generation:** **Implemented in Run 5.** Deterministic atomic production INI generation per Build, Windows path handling, capability-aware validation, and separate launch/preset previews.
 5. **RuntimeManager router support:** **Implemented in Run 6.** Launch one router, validate `/health` and strictly reconcile `/models`, stop safely, recover startup state, and retain managed port ownership rules.
-6. **Build switching:** Run 7. Add explicit cross-build stop/release/start/validate transitions; same-build model switching also remains Run 7.
-7. **Models/builds/runtime UI:** Run 7. Expose artifact versus configuration, active build, available/loaded model status, and switching actions.
-8. **Process/GPU/log awareness:** Run 8. Classify proven router children, attribute GPU use conservatively, preserve useful router/child logs, and warn on uncertain ownership.
-9. **Real-machine validation:** Validate official, custom, and compatibility builds; same-build autoload/eviction; cross-build restart; multimodal/text-only configurations; service restart; failure recovery; and direct client access.
+6. **Model and Build switching:** **Implemented in Run 7.** Same-Build selection uses `POST /models/load` and bounded `/models` observation without restarting the router or issuing normal unload requests. Explicit cross-Build selection preflights the target before stopping the source, verifies exit and port release, revalidates and starts the target on the stable endpoint, then loads the requested model. There is no automatic rollback.
+7. **Process/GPU/log awareness:** Run 8. Classify proven router children, attribute GPU use conservatively, preserve useful router/child logs, and warn on uncertain ownership.
+8. **Profiles/Models/Builds UI:** Run 9. Expose artifact versus configuration, available/loaded model status, Build requirements, and explicit switching actions.
+9. **Runtime/Dashboard integration:** Run 10. Integrate router and model observations into Runtime and Dashboard views without creating a data-plane proxy.
+10. **Real-machine certification and closure:** Run 11. Validate official, custom, and compatibility builds; same-build autoload/eviction; cross-build restart; multimodal/text-only configurations; service restart; failure recovery; and direct client access.
 
 ### Safety requirements
 
@@ -590,7 +590,7 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 - ObsidianLM owns the managed build/router start, stop, restart, replacement, generated configuration, and endpoint lifecycle; llama.cpp owns same-build model loading, unloading, autoload, residency limits, and eviction.
 - Router-visible models outside ObsidianLM's configured catalog are isolated, rejected, or clearly distinguished as external/unmanaged and cannot silently become normal managed/autoloadable models.
 - The selected build is verified by actual capability evidence to provide required router behavior; unsupported builds have an explicitly designed safe ineligible or legacy-compatibility behavior.
-- Same-build model selection and cross-Build/model switching remain Run 7; Run 6 does not claim either behavior.
+- Same-build model selection and explicit cross-Build/model switching are implemented in Run 7. The same router PID/runtime identity survives same-Build selection; cross-Build replacement creates a new runtime only after source exit and managed-port release.
 - Process, GPU, and log views distinguish the router, proven children, unmanaged processes, and uncertainty without unsafe cleanup.
 - `llama-bench` and `llama-perplexity` continue to run as independent one-shot jobs.
 - OpenCode, Illustria, and local clients continue direct access through `http://<home-pc>:8085/v1`.

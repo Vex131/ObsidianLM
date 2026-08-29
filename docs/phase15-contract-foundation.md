@@ -1,6 +1,6 @@
 # Phase 15 Contract Foundation
 
-Builder Runs 1-6 add the versioned domain contract, storage, legacy Profile migration, persistent model/build foundations, bounded functional Build validation, the production derived-preset pipeline, and Build/router lifecycle integration. Run 6 launches the managed router only after managed port preflight and strict `/health`/`/models` reconciliation. Phase 15 is not complete.
+Builder Runs 1-7 add the versioned domain contract, storage, legacy Profile migration, persistent model/build foundations, bounded functional Build validation, the production derived-preset pipeline, Build/router lifecycle integration, and explicit model/Build switching. Phase 15 is not complete.
 
 ## Terms and authority
 
@@ -15,7 +15,7 @@ Builder Runs 1-6 add the versioned domain contract, storage, legacy Profile migr
 - `phase15-domain.json` is the authoritative schema-v2 configuration. Its canonical revision changes only when stored authoritative content changes; equivalent reads and no-op writes do not create a new revision.
 - The strict v1-to-v2 upgrade path was verified with a backup and atomic replacement. A valid v2 file ignores `profiles.json` changes.
 - `profiles.json` remains legacy migration/recovery material. After cutover, the Profile API projects from the domain and translates writes into one domain transaction; it never rewrites `profiles.json`.
-- Legacy Profile IDs and `host`/`port` are retained. Profile start is a temporary compatibility Build-selection hint and loads no model; `activeProfileId` remains a legacy projection.
+- Legacy Profile IDs and `host`/`port` are retained. Profile start starts and loads its mapped model when stopped or selects it in place under the same active Build. It returns `build_switch_required` rather than hiding a cross-Build replacement; `activeProfileId` remains a legacy projection hint, not residency authority.
 
 ## Identity
 
@@ -38,7 +38,7 @@ Functional validation certifies the required router controls and control-plane b
 
 ## Router boundaries
 
-Run 4 adds a validation-only router probe. Run 5 adds authenticated read-only preset and launch previews plus explicit preset generation under the `/api/builds` route family. Run 6 adds production launch; discovery endpoints remain evidence-producing and non-authoritative.
+Run 4 adds a validation-only router probe. Run 5 adds authenticated read-only preset and launch previews plus explicit preset generation under the `/api/builds` route family. Run 6 adds production launch. Run 7 adds authenticated `POST /api/runtime/switch-model` and `POST /api/runtime/switch-build`; discovery endpoints remain evidence-producing and non-authoritative.
 
 - `GET /health` supplies bounded router/server health evidence.
 - `GET /models` supplies the router catalog and model load state.
@@ -54,7 +54,7 @@ The exact executable is fingerprinted around capability acquisition and again be
 
 `GET /api/builds/:id/router-preset/preview` and `GET /api/builds/:id/router-launch/preview` are read-only. `POST /api/builds/:id/router-preset/generate` performs the loss-resistant temporary-write, byte/hash verification, source recheck, and rename. Freshness compares bounded existing bytes with expected bytes: matching is `current`, differing is `stale`, and missing is `unknown`. A failed regeneration leaves an older stale file intact. The current Run 5 launch argv is `[registered server executable, "--host", "0.0.0.0", "--port", <managed-port>, "--models-preset", <data>/generated/llama-router/<build-id>.ini, "--models-max", "1", <positive autoload flag>]`; the final flag is the exact positive flag proven by Build help. It does not include `--model` or `--models-dir`.
 
-Generator validation means authoritative inputs, exact-Build mappings, and serialization are coherent. The disposable Run 4 probe INI is not a `GeneratedRouterArtifact`. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence and is not rewritten by the router lifecycle. Run 6 uses a controlled per-Build cache/environment, performs managed port preflight/ownership checks, and blocks initial external or unknown catalog leakage. No legacy adoption or kill occurs. Restart uses the same Build; same-build and cross-Build/model switching remain Run 7, and GPU child/log attribution remains Run 8.
+Generator validation means authoritative inputs, exact-Build mappings, and serialization are coherent. The disposable Run 4 probe INI is not a `GeneratedRouterArtifact`. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence and is not rewritten by the router lifecycle. Run 6 uses a controlled per-Build cache/environment, performs managed port preflight/ownership checks, and blocks initial external or unknown catalog leakage. Run 7 serializes refresh and lifecycle operations. Same-Build switching requires the exact launch-time ID/alias map, calls `POST /models/load` once when needed, and polls `/models` until the target is observed loaded. The router PID/runtime identity is unchanged; llama.cpp owns unloading, residency, LRU eviction, and `models-max=1` enforcement. Cross-Build switching prepares the target before source shutdown, verifies exit and port release, revalidates target evidence, starts on the same endpoint, then loads the requested model. It never adopts or kills unknown processes, overlaps production routers, uses an alternate port, proxies inference, or automatically rolls back. A target router remains running if only its requested model fails to load. GPU child/log attribution remains Run 8 and UI remains Runs 9–10.
 
 ## Migration
 
