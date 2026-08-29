@@ -19,6 +19,8 @@ export async function registerMonitoringRoutes(app: FastifyInstance, runtimeMana
 
   app.get("/api/monitoring/gpu", async () => {
     const awareness = await runtimeManager.refreshProcessAwareness();
-    return getGpuMonitoringStatus(awareness.available === false ? null : awareness.processes, gpuMonitorOptions);
+    const status = await getGpuMonitoringStatus(awareness.available === false ? null : awareness.processes, gpuMonitorOptions);
+    runtimeManager.setGpuStatusSnapshot(status);
+    return status;
   });
 }

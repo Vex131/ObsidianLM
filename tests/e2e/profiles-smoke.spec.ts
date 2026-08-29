@@ -10,6 +10,7 @@ test("Profiles uses configured-model routes, preserves capabilities, and has no 
   await page.addInitScript(() => localStorage.setItem("obsidianlm.adminToken", "e2e-token"));
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url()); const method = route.request().method(); calls.push(`${method} ${url.pathname}`);
+    if (url.pathname === "/api/auth/status") return route.fulfill({ json: { configured: true, authRequired: true } });
     if (url.pathname === "/api/configured-models") return route.fulfill({ json: { revision: 1, configuredModels: [model] } });
     if (url.pathname === "/api/model-artifacts") return route.fulfill({ json: { revision: 1, artifacts: [artifact, projector] } });
     if (url.pathname === "/api/builds") return route.fulfill({ json: { revision: 1, builds: [build] } });

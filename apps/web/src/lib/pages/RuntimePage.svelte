@@ -5,6 +5,7 @@
   import Icon from "../components/Icon.svelte";
   import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type RuntimeActionResult } from "../api";
   import { emptyDashboardData, fetchDashboardData, type DashboardData } from "../dashboard/dashboard-data";
+  import { createCompletionAwarePoller, type CompletionAwarePoller } from "../polling";
   import { formatNumber, formatTimestamp, inferLogTone } from "../dashboard/dashboard-format";
   import { configuredModelActionLabel, configuredModelActionMessage, runConfiguredModelAction } from "../components/configured-model-runtime-action";
 
@@ -16,7 +17,7 @@
   let dashboardData: DashboardData = emptyDashboardData;
   let actionPending = false;
   let actionMessage = "";
-  let refreshTimer: number | null = null;
+  let poller: CompletionAwarePoller | undefined;
   let refreshGeneration = 0;
   let endpointCopyLabel = "Copy";
   let commandCopyLabel = "Copy";
@@ -72,7 +73,7 @@
     } catch (cause) {
       actionMessage = configuredModelActionMessage(cause);
     } finally {
-      await refreshRuntimeData();
+      await (poller?.refresh() ?? refreshRuntimeData());
       actionPending = false;
     }
   }
@@ -89,7 +90,7 @@
     } catch (cause) {
       actionMessage = configuredModelActionMessage(cause);
     } finally {
-      await refreshRuntimeData();
+      await (poller?.refresh() ?? refreshRuntimeData());
       actionPending = false;
     }
   }
@@ -161,9 +162,9 @@
   }
 
   onMount(() => {
-    void refreshRuntimeData();
-    refreshTimer = window.setInterval(() => void refreshRuntimeData(), 5000);
-    return () => { if (refreshTimer) window.clearInterval(refreshTimer); };
+    poller = createCompletionAwarePoller(refreshRuntimeData, 5000);
+    poller.start();
+    return () => poller?.stop();
   });
 </script>
 

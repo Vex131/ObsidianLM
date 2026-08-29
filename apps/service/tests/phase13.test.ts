@@ -241,10 +241,12 @@ test("status uses router identity without a compatibility Profile", async (t) =>
   t.after(() => app.close());
   await registerStatusRoutes(app, {
     getRouterState: () => ({ activeRuntimeId: "router_test", activeBuildId: "build_test", pid: 4321, port: 19001, status: "running", compatibilityProfileId: null }),
-    refreshDetection: async () => ({ categories: [], warnings: [], actions: [], processes: [], ports: [], previousState: null, checkedAt: "2026-08-29T00:00:00.000Z" }),
-    refreshProcessAwareness: async () => ({ processes: [], warnings: [], detectionMethod: "test", available: false }),
+    getDetectionSummary: () => ({ categories: [], warnings: [], actions: [], processes: [], ports: [], previousState: null, checkedAt: "2026-08-29T00:00:00.000Z" }),
+    getGpuStatusSnapshot: () => null,
+    refreshDetection: async () => { throw new Error("status must not refresh detection"); },
+    refreshProcessAwareness: async () => { throw new Error("status must not enumerate processes"); },
     getWarnings: () => []
-  } as any, gpuUnavailableOptions());
+  } as any);
   const response = await app.inject({ method: "GET", url: "/api/status" });
   assert.equal(response.statusCode, 200);
   const body = response.json();

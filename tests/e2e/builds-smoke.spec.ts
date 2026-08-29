@@ -9,6 +9,7 @@ test("Builds exposes registration, evidence, router previews, and dependency-saf
   await page.addInitScript(() => localStorage.setItem("obsidianlm.adminToken", "e2e-token"));
   await page.route("**/api/**", async route => {
     const url = new URL(route.request().url()); const method = route.request().method(); calls.push(`${method} ${url.pathname}`);
+    if (url.pathname === "/api/auth/status") return route.fulfill({ json: { configured: true, authRequired: true } });
     if (url.pathname === "/api/builds") return route.fulfill({ json: { revision: 1, builds: [build] } });
     if (url.pathname === "/api/discovery/llama-builds") return route.fulfill({ json: { builds: [candidate], warnings: [], scannedFolders: ["C:/"], detectedAt: "now" } });
     if (url.pathname === "/api/runtime") return route.fulfill({ json: { state: { status: "running", activeProfileId: null }, routerState: { status: "running", activeBuildId: "build-1", configuredModelStates: [] }, warnings: [] } });

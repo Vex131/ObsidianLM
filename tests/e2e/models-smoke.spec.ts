@@ -9,6 +9,7 @@ test("Models separates configured models, registered artifacts, and discovered-o
   await page.addInitScript(() => localStorage.setItem("obsidianlm.adminToken", "e2e-token"));
   await page.route("**/api/**", async route => {
     const url = new URL(route.request().url()); calls.push(`${route.request().method()} ${url.pathname}`);
+    if (url.pathname === "/api/auth/status") return route.fulfill({ json: { configured: true, authRequired: true } });
     if (url.pathname === "/api/configured-models") return route.fulfill({ json: { revision: 1, configuredModels: [configured] } });
     if (url.pathname === "/api/model-artifacts") return route.fulfill({ json: { revision: 1, artifacts: [registered] } });
     if (url.pathname === "/api/discovery/models") return route.fulfill({ json: { models: [discovered], warnings: [], scannedFolders: ["C:/models"], detectedAt: "now" } });

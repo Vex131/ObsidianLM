@@ -32,6 +32,7 @@ export interface CreateServerOptions {
 
 export async function createServer(options: CreateServerOptions = {}): Promise<FastifyInstance> {
   const app = fastify({
+    disableRequestLogging: true,
     logger: {
       level: process.env.LOG_LEVEL ?? "info"
     }
@@ -57,7 +58,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
     await runtimeManager.shutdown();
   });
 
-  await registerStatusRoutes(app, runtimeManager, options.gpuMonitorOptions);
+  await registerStatusRoutes(app, runtimeManager);
   await registerAuthRoutes(app);
   await registerAdminAuthProtection(app);
   await registerSettingsRoutes(app, runtimeManager);

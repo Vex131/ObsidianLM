@@ -2,19 +2,19 @@ import type { FastifyInstance } from "fastify";
 import type { StatusResponse } from "@obsidianlm/shared";
 import { getStorageWarnings, loadSettings } from "../config/storage.js";
 import { getAppPaths } from "../config/paths.js";
-import { getGpuMonitoringStatus, type GpuMonitorOptions } from "../monitoring/gpu-monitor.js";
 import type { RuntimeManager } from "../runtime/manager.js";
 import { getProfile } from "../runtime/profiles.js";
 import { sanitizeDetectionForApi } from "./sanitize.js";
 
-export async function registerStatusRoutes(app: FastifyInstance, runtimeManager: RuntimeManager, gpuMonitorOptions: GpuMonitorOptions = {}): Promise<void> {
+export async function registerStatusRoutes(app: FastifyInstance, runtimeManager: RuntimeManager): Promise<void> {
   app.get("/api/status", async (): Promise<StatusResponse> => {
     const settings = await loadSettings();
     const paths = getAppPaths();
-    const detection = sanitizeDetectionForApi(await runtimeManager.refreshDetection({ reconcileStaleState: false }));
+    const detection = sanitizeDetectionForApi(runtimeManager.getDetectionSummary() ?? {
+      categories: [], warnings: [], actions: [], processes: [], ports: [], previousState: null, checkedAt: new Date(0).toISOString()
+    });
     const routerState = runtimeManager.getRouterState();
-    const awareness = await runtimeManager.refreshProcessAwareness();
-    const gpuStatus = await getGpuMonitoringStatus(awareness.available === false ? null : awareness.processes, gpuMonitorOptions);
+    const gpuStatus = runtimeManager.getGpuStatusSnapshot();
     const activeProfile = routerState.compatibilityProfileId ? await getProfile(routerState.compatibilityProfileId) : null;
     const hasActiveRuntime = ["starting", "running", "stopping"].includes(routerState.status);
 
@@ -48,14 +48,14 @@ export async function registerStatusRoutes(app: FastifyInstance, runtimeManager:
         checkedAt: detection.checkedAt
       },
       gpu: {
-        available: gpuStatus.available,
-        gpuCount: gpuStatus.summary.gpuCount,
-        totalMemoryMiB: gpuStatus.summary.totalMemoryMiB,
-        usedMemoryMiB: gpuStatus.summary.usedMemoryMiB,
-        currentManagedRuntimeGpuMemoryMiB: gpuStatus.summary.currentManagedRuntimeGpuMemoryMiB,
-        unknownGpuProcessCount: gpuStatus.summary.unknownGpuProcessCount,
-        warningsCount: gpuStatus.summary.warningsCount,
-        checkedAt: gpuStatus.checkedAt
+        available: gpuStatus?.available ?? false,
+        gpuCount: gpuStatus?.summary.gpuCount ?? 0,
+        totalMemoryMiB: gpuStatus?.summary.totalMemoryMiB ?? null,
+        usedMemoryMiB: gpuStatus?.summary.usedMemoryMiB ?? null,
+        currentManagedRuntimeGpuMemoryMiB: gpuStatus?.summary.currentManagedRuntimeGpuMemoryMiB ?? null,
+        unknownGpuProcessCount: gpuStatus?.summary.unknownGpuProcessCount ?? 0,
+        warningsCount: gpuStatus?.summary.warningsCount ?? 0,
+        checkedAt: gpuStatus?.checkedAt ?? detection.checkedAt
       }
     };
   });

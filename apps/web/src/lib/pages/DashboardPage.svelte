@@ -6,6 +6,7 @@
   import type { RouterRuntimeResponse } from "@obsidianlm/shared";
   import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type GpuMonitoringStatus, type RuntimeActionResult } from "../api";
   import { emptyDashboardData, fetchDashboardData, type DashboardData } from "../dashboard/dashboard-data";
+  import { createCompletionAwarePoller, type CompletionAwarePoller } from "../polling";
   import {
     clampPercent,
     formatNumber,
@@ -27,7 +28,7 @@
   let copyLabel = "Copy";
   let actionPending = false;
   let actionError = "";
-  let refreshTimer: number | null = null;
+  let poller: CompletionAwarePoller | undefined;
   let refreshGeneration = 0;
 
   $: runtime = dashboardData.runtime ?? routerRuntime;
@@ -75,10 +76,10 @@
       if (!result.ok) {
         actionError = result.error ?? result.message;
       }
-      await refreshDashboardData();
+      await (poller?.refresh() ?? refreshDashboardData());
     } catch (error) {
       actionError = error instanceof Error ? error.message : "Router action failed.";
-      await refreshDashboardData();
+      await (poller?.refresh() ?? refreshDashboardData());
     } finally {
       actionPending = false;
     }
@@ -198,14 +199,12 @@
   }
 
   onMount(() => {
-    void refreshDashboardData();
-    refreshTimer = window.setInterval(() => void refreshDashboardData(), 5000);
+    poller = createCompletionAwarePoller(refreshDashboardData, 5000);
+    poller.start();
 
     return () => {
       refreshGeneration += 1;
-      if (refreshTimer) {
-        window.clearInterval(refreshTimer);
-      }
+      poller?.stop();
     };
   });
 </script>

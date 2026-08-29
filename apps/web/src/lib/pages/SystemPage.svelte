@@ -4,11 +4,12 @@
   import Panel from "../components/Panel.svelte";
   import StatusBadge from "../components/StatusBadge.svelte";
   import CopyButton from "../components/CopyButton.svelte";
-  import { API_ENDPOINTS, fetchJson, publicFetchJson, type AuthStatusResponse, type ReadinessResponse, type RuntimeSettingsResponse, type StatusResponse } from "../api";
+  import { API_ENDPOINTS, fetchJson, type ReadinessResponse, type RuntimeSettingsResponse } from "../api";
+  import { applicationStatus, refreshApplicationStatus } from "../app-status";
 
-  let status: StatusResponse | null = null;
+  $: status = $applicationStatus.status;
   let readiness: ReadinessResponse | null = null;
-  let auth: AuthStatusResponse | null = null;
+  $: auth = $applicationStatus.auth;
   let settings: RuntimeSettingsResponse | null = null;
   let message = "";
   let loading = false;
@@ -33,13 +34,12 @@
     return ["Settings", "#settings"];
   }
 
-  async function load() {
+  async function load(refreshStatus = true) {
     loading = true;
     try {
-      [status, readiness, auth, settings] = await Promise.all([
-        publicFetchJson<StatusResponse>(API_ENDPOINTS.status),
+      if (refreshStatus) await refreshApplicationStatus();
+      [readiness, settings] = await Promise.all([
         fetchJson<ReadinessResponse>(API_ENDPOINTS.readiness),
-        publicFetchJson<AuthStatusResponse>(API_ENDPOINTS.auth.status),
         fetchJson<RuntimeSettingsResponse>(API_ENDPOINTS.settings.get)
       ]);
       message = "";
@@ -72,7 +72,7 @@
     warnings: warningMessages
   }, null, 2);
 
-  onMount(() => void load());
+  onMount(() => void load(false));
 </script>
 
 <main class="page-surface system-page" aria-label="System">

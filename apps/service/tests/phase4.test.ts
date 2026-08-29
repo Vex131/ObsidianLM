@@ -7,7 +7,7 @@ import fastify from "fastify";
 import { defaultSettings, type DetectedProcess, type GpuMonitoringStatus, type RouterAlias } from "@obsidianlm/shared";
 import { createServer } from "../src/server.js";
 import { registerMonitoringRoutes } from "../src/api/monitoring.js";
-import type { RuntimeManager } from "../src/runtime/manager.js";
+import type { RuntimeManager, RuntimeManagerOptions } from "../src/runtime/manager.js";
 import {
   classifyGpuProcesses,
   getGpuMonitoringStatus,
@@ -31,10 +31,10 @@ async function makeDataFixture() {
   return { root, dataDir };
 }
 
-async function createFixtureApp(t: TestContext, commandRunner: GpuCommandRunner) {
+async function createFixtureApp(t: TestContext, commandRunner: GpuCommandRunner, runtimeManagerOptions: RuntimeManagerOptions = {}) {
   const fixture = await makeDataFixture();
   process.env.OBSIDIANLM_DATA_DIR = fixture.dataDir;
-  const app = await createServer({ gpuMonitorOptions: { commandRunner }, runtimeManagerOptions: { processDetector: async () => ({ processes: [], warnings: [], detectionMethod: "fixture" }) } });
+  const app = await createServer({ gpuMonitorOptions: { commandRunner }, runtimeManagerOptions: { processDetector: async () => ({ processes: [], warnings: [], detectionMethod: "fixture" }), ...runtimeManagerOptions } });
   const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { token: adminToken } });
   assert.equal(setup.statusCode, 201);
   t.after(async () => {
@@ -200,7 +200,7 @@ test("GPU monitor warns and avoids managed attribution without process awareness
 
 test("GPU API reuses proven process awareness for child attribution", async (t) => {
   const awareness = [detectedProcess(10, "managed_router", "proven"), detectedProcess(20, "managed_router_child", "proven", { parentPid: 10, configuredModelId: "model_a" })];
-  const manager = { refreshProcessAwareness: async () => ({ processes: awareness, warnings: [], detectionMethod: "fixture" }) } as unknown as RuntimeManager;
+  const manager = { refreshProcessAwareness: async () => ({ processes: awareness, warnings: [], detectionMethod: "fixture" }), setGpuStatusSnapshot: () => {} } as unknown as RuntimeManager;
   const app = fastify({ logger: false });
   await registerMonitoringRoutes(app, manager, { commandRunner: runnerWithOutputs([representativeGpuCsv, "10, router.exe, GPU-111, 100\n20, llama-server.exe, GPU-222, 8000"]) });
   t.after(async () => app.close());
@@ -214,7 +214,7 @@ test("GPU API reuses proven process awareness for child attribution", async (t) 
 });
 
 test("GPU API reports unavailable ownership when process detection returns warnings instead of throwing", async (t) => {
-  const manager = { refreshProcessAwareness: async () => ({ processes: [], warnings: ["Process detection is unavailable: fixture"], detectionMethod: "fixture", available: false }) } as unknown as RuntimeManager;
+  const manager = { refreshProcessAwareness: async () => ({ processes: [], warnings: ["Process detection is unavailable: fixture"], detectionMethod: "fixture", available: false }), setGpuStatusSnapshot: () => {} } as unknown as RuntimeManager;
   const app = fastify({ logger: false });
   await registerMonitoringRoutes(app, manager, { commandRunner: runnerWithOutputs([representativeGpuCsv, "20, llama-server.exe, GPU-222, 8000"]) });
   t.after(async () => app.close());
@@ -276,9 +276,14 @@ test("GET /api/monitoring/gpu returns a stable GPU monitoring shape", async (t) 
   assert.equal(body.processes[0].kind, "possible_llama_runtime");
   assert.equal(body.processes[0].processName, "llama-server.exe");
   assert.doesNotMatch(body.processes[0].processName, /[\\/]/u);
+
+  const status = (await app.inject({ method: "GET", url: "/api/status" })).json();
+  assert.equal(status.gpu.available, true);
+  assert.equal(status.gpu.gpuCount, body.summary.gpuCount);
+  assert.equal(status.gpu.checkedAt, body.checkedAt);
 });
 
-test("GET /api/status remains 200 when GPU monitoring command fails", async (t) => {
+test("GET /api/status returns its initialized unavailable GPU snapshot without monitor execution", async (t) => {
   const { app } = await createFixtureApp(t, async () => {
     throw Object.assign(new Error("nvidia-smi failed"), { stderr: "GPU query failed" });
   });
@@ -289,5 +294,31 @@ test("GET /api/status remains 200 when GPU monitoring command fails", async (t) 
   assert.equal(body.service, "running");
   assert.equal(body.gpu.available, false);
   assert.equal(body.gpu.gpuCount, 0);
-  assert.equal(body.gpu.warningsCount, 1);
+  assert.equal(body.gpu.warningsCount, 0);
+});
+
+test("GET /api/status uses initialized snapshots without live process or GPU probes", async (t) => {
+  let gpuCalls = 0;
+  let processCalls = 0;
+  const { app } = await createFixtureApp(t, async () => {
+    gpuCalls += 1;
+    return { stdout: "", stderr: "" };
+  }, {
+    processDetector: async () => {
+      processCalls += 1;
+      return { processes: [], warnings: [], detectionMethod: "fixture" };
+    }
+  });
+  assert.equal(app.initialConfig.disableRequestLogging, true);
+
+  const responses = await Promise.all(Array.from({ length: 8 }, () => app.inject({ method: "GET", url: "/api/status" })));
+  for (const response of responses) {
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.deepEqual(Object.keys(body.detection).sort(), ["categories", "checkedAt", "ports", "warnings"]);
+    assert.deepEqual(Object.keys(body.gpu).sort(), ["available", "checkedAt", "currentManagedRuntimeGpuMemoryMiB", "gpuCount", "totalMemoryMiB", "unknownGpuProcessCount", "usedMemoryMiB", "warningsCount"]);
+    assert.equal(body.gpu.available, false);
+  }
+  assert.equal(processCalls, 0);
+  assert.equal(gpuCalls, 0);
 });

@@ -83,3 +83,46 @@ test("System and Runtime expose readiness, actions, health, command, and safe li
   await fixture(page); await page.goto("/#system"); await expect(page.getByText("Ready")).toBeVisible(); await expect(page.getByText("Models discovered")).toBeVisible(); await expect(page.getByRole("heading", { name: "Next actions" })).toBeVisible(); await expect(page.getByRole("button", { name: /Run checks/ })).toBeVisible(); await expect(page.locator("body")).not.toContainText("hash");
   await page.goto("/#runtime"); await expect(page.getByLabel("Router control hero").getByText("Router running")).toBeVisible(); await expect(page.getByText("healthy").first()).toBeVisible(); await expect(page.getByRole("heading", { name: "Launch Command" })).toBeVisible(); await expect(page.getByRole("link", { name: "Open full Logs" })).toBeVisible(); await expect(page.getByText("Clean", { exact: true })).not.toBeVisible(); await expect(page.getByText("Force", { exact: true })).not.toBeVisible(); await expect(page.getByText("Check recovery", { exact: true })).not.toBeVisible(); await page.getByRole("button", { name: "Switch model" }).click(); await expect(page.getByRole("complementary", { name: "Configured model drawer" })).toBeVisible();
 });
+
+test("navigation keeps one non-overlapping application status poller", async ({ page }) => {
+  test.setTimeout(45_000);
+  await fixture(page);
+  let requests = 0, inFlight = 0, maxInFlight = 0;
+  await page.route("**/api/status", async (route) => {
+    requests += 1;
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    inFlight -= 1;
+    await route.fulfill({ json: status });
+  });
+
+  await page.goto("/#dashboard");
+  for (const label of ["Runtime", "Profiles", "Models", "Builds", "Jobs", "Logs", "Telemetry", "Settings", "System", "Dashboard"]) {
+    await page.getByRole("link", { name: new RegExp(`^${label}$`) }).click();
+  }
+  await page.waitForTimeout(30_000);
+
+  expect(requests).toBeGreaterThanOrEqual(4);
+  expect(requests).toBeLessThanOrEqual(5);
+  expect(maxInFlight).toBe(1);
+});
+
+test("runtime log stream waits for authoritative setup state and resumes with bounded reconnects", async ({ page }) => {
+  test.setTimeout(20_000);
+  await fixture(page);
+  let configured = false, streamRequests = 0;
+  await page.route("**/api/auth/status", (route) => route.fulfill({ json: { configured } }));
+  await page.route("**/api/runtime/logs/stream**", (route) => {
+    streamRequests += 1;
+    return route.fulfill({ status: 200, contentType: "text/event-stream", body: "" });
+  });
+
+  await page.goto("/#logs");
+  await page.waitForTimeout(2_000);
+  expect(streamRequests).toBe(0);
+  configured = true;
+  await page.waitForTimeout(8_000);
+  expect(streamRequests).toBeGreaterThanOrEqual(1);
+  expect(streamRequests).toBeLessThanOrEqual(3);
+});

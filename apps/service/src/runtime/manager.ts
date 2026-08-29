@@ -9,6 +9,7 @@ import {
   type ConfiguredModelId,
   type DetectedProcess,
   type DetectedPort,
+  type GpuMonitoringStatus,
   type LlamaCppBuildId,
   type RouterLaunchPreview,
   type RouterProcessAwarenessContext,
@@ -77,6 +78,31 @@ const active = (state: RouterRuntimeState) => ["starting", "running", "stopping"
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const maxPartialLogLineBytes = 64 * 1024;
 
+function unavailableGpuStatus(checkedAt: string): GpuMonitoringStatus {
+  return {
+    available: false,
+    checkedAt,
+    detectionMethod: "unavailable",
+    driverVersion: null,
+    cudaVersion: null,
+    gpus: [],
+    processes: [],
+    warnings: [],
+    summary: {
+      gpuCount: 0,
+      totalMemoryMiB: null,
+      usedMemoryMiB: null,
+      freeMemoryMiB: null,
+      currentManagedRuntimeGpuMemoryMiB: null,
+      managedRouterGpuMemoryMiB: null,
+      managedRouterChildrenGpuMemoryMiB: null,
+      managedRuntimeGpuMemoryMiB: null,
+      unknownGpuProcessCount: 0,
+      warningsCount: 0
+    }
+  };
+}
+
 export class RuntimeManager {
   private child: ChildProcessWithoutNullStreams | null = null;
   private routerState: RouterRuntimeState = structuredClone(defaultRouterRuntimeState);
@@ -87,6 +113,7 @@ export class RuntimeManager {
   private previousRouterPid: number | null = null;
   private previousBuildServerLocator: string | null = null;
   private processAwareness: DetectedProcess[] = [];
+  private gpuStatusSnapshot: GpuMonitoringStatus | null = null;
   private readonly partialOutput = { stdout: "", stderr: "" };
   private processError: string | null = null;
   private serialized = Promise.resolve();
@@ -107,6 +134,7 @@ export class RuntimeManager {
       }
     }
     this.detectionSummary = await runStartupDetection(null, { ...this.options.startupDetectorOptions, reconcileStaleState: false });
+    this.gpuStatusSnapshot = unavailableGpuStatus(this.now().toISOString());
     if (!active(this.routerState)) return;
 
     const detectionUnavailable = this.detectionSummary.warnings.some((warning) => warning.category === "no_runtime_detected");
@@ -156,6 +184,8 @@ export class RuntimeManager {
   getActiveCommand(): CommandSpec | null { return this.command ? { ...this.command, args: [...this.command.args] } : null; }
   getWarnings(): string[] { return [...new Set([...this.routerState.warnings.map((warning) => warning.message), ...(this.detectionSummary?.warnings.map((warning) => warning.message) ?? [])])]; }
   getDetectionSummary(): StartupDetectionSummary | null { return this.detectionSummary ? structuredClone(this.detectionSummary) : null; }
+  getGpuStatusSnapshot(): GpuMonitoringStatus | null { return this.gpuStatusSnapshot ? structuredClone(this.gpuStatusSnapshot) : null; }
+  setGpuStatusSnapshot(status: GpuMonitoringStatus): void { this.gpuStatusSnapshot = structuredClone(status); }
 
   getProcessAwarenessContext(): RouterProcessAwarenessContext {
     return {

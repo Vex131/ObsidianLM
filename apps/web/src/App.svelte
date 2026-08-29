@@ -12,7 +12,9 @@
   import SettingsPage from "./lib/pages/SettingsPage.svelte";
   import SystemPage from "./lib/pages/SystemPage.svelte";
   import { defaultShellStatus, type ShellStatusSummary, type ShellStatusTone } from "./lib/layout/shell-status";
-  import { API_ENDPOINTS, fetchJson, publicFetchJson, readStoredAdminToken, type StatusResponse } from "./lib/api";
+  import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type StatusResponse } from "./lib/api";
+  import { applicationStatus } from "./lib/app-status";
+  import { createCompletionAwarePoller, type CompletionAwarePoller } from "./lib/polling";
   import type { RouterRuntimeResponse } from "@obsidianlm/shared";
 
   const pageLabels = {
@@ -44,10 +46,11 @@
   };
 
   let activeHash = "#dashboard";
-  let status: StatusResponse | null = null;
-  let statusRequestFailed = false;
+  $: status = $applicationStatus.status;
+  $: statusRequestFailed = Boolean($applicationStatus.error);
   let routerRuntime: RouterRuntimeResponse | null = null;
   let now = Date.now();
+  let shellRuntimePoller: CompletionAwarePoller | undefined;
 
   $: shellStatus = buildShellStatus(status, statusRequestFailed, routerRuntime, now);
 
@@ -133,15 +136,7 @@
     };
   }
 
-  async function refreshShellStatus() {
-    try {
-      status = await publicFetchJson<StatusResponse>(API_ENDPOINTS.status);
-      statusRequestFailed = false;
-    } catch {
-      status = null;
-      statusRequestFailed = true;
-    }
-
+  async function refreshShellRuntime() {
     if (!readStoredAdminToken()) {
       routerRuntime = null;
       return;
@@ -161,16 +156,16 @@
 
   onMount(() => {
     syncHash();
-    void refreshShellStatus();
+    shellRuntimePoller = createCompletionAwarePoller(refreshShellRuntime, 5000);
+    shellRuntimePoller.start();
     window.addEventListener("hashchange", syncHash);
-    const statusInterval = window.setInterval(() => void refreshShellStatus(), 5000);
     const uptimeInterval = window.setInterval(() => {
       now = Date.now();
     }, 1000);
 
     return () => {
       window.removeEventListener("hashchange", syncHash);
-      window.clearInterval(statusInterval);
+      shellRuntimePoller?.stop();
       window.clearInterval(uptimeInterval);
     };
   });

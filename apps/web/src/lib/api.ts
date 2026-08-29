@@ -167,6 +167,32 @@ export interface ApiFetchOptions {
   onUnauthorized?: () => void;
 }
 
+let authConfigured: boolean | undefined;
+let authConfigurationError: string | undefined;
+let authWaiters: Array<() => void> = [];
+
+export function setAuthConfigured(configured: boolean | undefined): void {
+  authConfigured = configured;
+  authConfigurationError = undefined;
+  if (configured !== undefined) {
+    const waiters = authWaiters;
+    authWaiters = [];
+    waiters.forEach((resolve) => resolve());
+  }
+}
+
+export function setAuthConfigurationUnavailable(message: string): void {
+  authConfigured = undefined;
+  authConfigurationError = message;
+  const waiters = authWaiters;
+  authWaiters = [];
+  waiters.forEach((resolve) => resolve());
+}
+
+export function isSetupRequiredError(statusCode: number, data: unknown): boolean {
+  return statusCode === 423 && Boolean(data && typeof data === "object" && "error" in data && data.error === "setup_required");
+}
+
 export class ApiRequestError extends Error {
   readonly statusCode: number;
   readonly url: string;
@@ -203,6 +229,7 @@ export function writeStoredAdminToken(token: string): void {
   if (storageAvailable()) {
     window.localStorage.setItem(adminTokenStorageKey, token);
   }
+  setAuthConfigured(true);
 }
 
 export function clearStoredAdminToken(): void {
@@ -240,6 +267,15 @@ export async function publicFetchJson<T>(url: string, init?: RequestInit): Promi
 }
 
 export async function fetchJson<T>(url: string, init?: RequestInit, options: ApiFetchOptions = {}): Promise<T> {
+  if (authConfigured === undefined && !authConfigurationError) {
+    await new Promise<void>((resolve) => authWaiters.push(resolve));
+  }
+  if (authConfigurationError) {
+    throw new ApiRequestError(503, url, authConfigurationError, { error: "auth_status_unavailable" });
+  }
+  if (authConfigured === false) {
+    throw new ApiRequestError(423, url, "Admin token setup is required", { code: "setup_required" });
+  }
   const headers = new Headers(init?.headers);
   const token = options.token === undefined ? readStoredAdminToken() : options.token;
 
@@ -251,6 +287,9 @@ export async function fetchJson<T>(url: string, init?: RequestInit, options: Api
   const data = await readResponseData(response);
 
   if (!response.ok) {
+    if (isSetupRequiredError(response.status, data)) {
+      setAuthConfigured(false);
+    }
     if (response.status === 401 || response.status === 403) {
       clearStoredAdminToken();
       options.onUnauthorized?.();
