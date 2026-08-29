@@ -12,12 +12,11 @@ export async function registerStatusRoutes(app: FastifyInstance, runtimeManager:
     const settings = await loadSettings();
     const paths = getAppPaths();
     const detection = sanitizeDetectionForApi(await runtimeManager.refreshDetection({ reconcileStaleState: false }));
-    const state = runtimeManager.getState();
     const routerState = runtimeManager.getRouterState();
     const awareness = await runtimeManager.refreshProcessAwareness();
     const gpuStatus = await getGpuMonitoringStatus(awareness.available === false ? null : awareness.processes, gpuMonitorOptions);
-    const activeProfile = runtimeManager.getActiveProfile() ?? (state.activeProfileId ? await getProfile(state.activeProfileId) : null);
-    const hasActiveRuntime = ["starting", "running", "stopping"].includes(state.status);
+    const activeProfile = routerState.compatibilityProfileId ? await getProfile(routerState.compatibilityProfileId) : null;
+    const hasActiveRuntime = ["starting", "running", "stopping"].includes(routerState.status);
 
     return {
       service: "running",
@@ -30,11 +29,13 @@ export async function registerStatusRoutes(app: FastifyInstance, runtimeManager:
       uiPort: settings.uiPort,
       managedLlamaPort: settings.managedLlamaPort,
       activeRuntime: hasActiveRuntime
-        ? {
+          ? {
+            runtimeId: routerState.activeRuntimeId,
+            buildId: routerState.activeBuildId,
             type: activeProfile?.runtimeType ?? "llama.cpp",
-            status: state.status,
-            pid: state.pid,
-            profileId: state.activeProfileId,
+            status: routerState.status,
+            pid: routerState.pid,
+            profileId: routerState.compatibilityProfileId ?? null,
             profileName: activeProfile?.name ?? null,
             apiUrl: routerState.port === null ? null : `http://localhost:${routerState.port}/v1`
           }

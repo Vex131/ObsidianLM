@@ -11,7 +11,7 @@
 
 ObsidianLM is **not** primarily a chat app and should not look like LM Studio. It is a focused operator console for starting, stopping, validating, monitoring, and switching local AI runtime configuration safely.
 
-**Architecture status:** the current implementation uses one selected Build and one managed llama.cpp router. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence. Run 7 implements same-Build model loading through llama.cpp's management API without a router restart, plus explicit preflight/stop/release/start/load cross-Build replacement on the stable endpoint. Run 8 adds conservative router-child process, GPU, and forwarded-log attribution without child lifecycle authority. Run 9 assigns configuration-facing responsibility as follows: Profiles edits authoritative Configured Models; Models shows Configured Model/Artifact relationships and router-reported model state; Builds owns stable Build readiness, dependencies, and generated artifacts. Profile compatibility actions load only stopped or same-Build targets and never hide a cross-Build restart. Runtime and Dashboard remain Run 10. Do not claim Phase 15 complete.
+**Architecture status:** the current implementation uses one selected Build and one managed llama.cpp router. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence. App shell, Runtime, and Dashboard read `RouterRuntimeState` directly and do not rely on an active Profile. Run 7 implements same-Build model loading through llama.cpp's management API without a router restart, plus explicit preflight/stop/release/start/load cross-Build replacement on the stable endpoint. Run 8 adds conservative read-only router-child process, GPU, and forwarded-log attribution without child lifecycle authority. Run 9 assigns configuration-facing responsibility as follows: Profiles edits authoritative Configured Models; Models shows Configured Model/Artifact relationships and router-reported model state; Builds owns stable Build readiness, dependencies, and generated artifacts. Run 10 assigns Runtime ownership of managed router lifecycle and the Configured Model drawer, and Dashboard ownership of high-level active Build/loaded-model/resource summary. Profile compatibility actions load only stopped or same-Build targets and never hide a cross-Build restart; cross-Build replacement has no automatic rollback. `/api/profiles` and `activeProfileId` remain compatibility only. Do not claim Phase 15 complete.
 
 ### Design Direction
 
@@ -68,7 +68,7 @@ Runtime state hierarchy:
 
 Legacy active-profile fields remain available only as a compatibility projection where required by the API. Runtime UI should lead with Build/router state and the configured-model catalog; `activeProfileId` is not lifecycle authority.
 
-Planned router-mode model state should accommodate concepts such as available/unloaded, loading, loaded, sleeping, and unavailable/error without prematurely hardcoding exact labels or upstream response fields. Router health and router catalog are separate views: bounded health comes from `GET /health`, while configured-model availability/load state comes from `GET /models`; `/models/sse` may be considered later for live updates.
+Router-mode model state accommodates concepts such as available/unloaded, loading, loaded, sleeping, and unavailable/error without hardcoding upstream labels. Router health and router catalog are separate views: bounded health comes from `GET /health`, while configured-model availability/load state comes from `GET /models`; `/models/sse` remains optional future work.
 
 ### 3.2 Safe By Default
 
@@ -320,7 +320,7 @@ The dashboard should answer these questions immediately:
 1. Which Node is active, and is it local, remote, online, or offline?
 2. Is that Node's ObsidianLM service healthy?
 3. Is a runtime currently managed on that Node?
-4. Which current profile or configured model is selected?
+4. Which configured model is selected, and which model is loaded?
 5. Which llama.cpp build is active?
 6. Which configured models are available and which model is loaded, if known?
 7. Which port is llama.cpp using on that Node?
@@ -349,7 +349,7 @@ Recommended layout:
 
 ### 5.5 Profiles Page Composition
 
-Profiles are the current configuration objects. The page should feel like a precise editor, not a chat prompt form. Planned router migration may rename or version this concept, but must preserve legacy profile compatibility.
+Profiles edits authoritative Configured Models. The page should feel like a precise editor, not a chat prompt form, while preserving legacy Profile compatibility.
 
 The Profiles editor is capability-driven. A new unsaved draft initially shows only discovered Model and llama.cpp Build selectors; applicable controls appear progressively after the selected build is inspected. llama.cpp defaults are inherited, not copied into every profile: an inherited field stores no override and emits no flag. ObsidianLM-managed host and port defaults remain a separate runtime-management contract.
 
@@ -477,8 +477,9 @@ Rules:
 - Highlight changed/important args later if useful.
 - Include a note when command preview differs from currently running process.
 - Current mode shows the model-bound `llama-server` command.
-- Planned router mode shows two separate copyable views: the router launch command and the generated model-preset INI.
+- Current router mode shows two separate copyable views: the router launch command and the generated model-preset INI.
 - Label generated INI as a derived artifact, not the authoritative editable configuration.
+- Runtime owns the Configured Model drawer and presents the active router configuration plus the actual router launch command.
 
 ### 6.7 Logs
 
@@ -654,7 +655,7 @@ Must include:
 
 Goal: distinguish discovered local model artifacts from configured model presets.
 
-Implemented Phase 14 behavior: Models displays GGUF artifacts discovered in configured model folders. It distinguishes primary models from projector, adapter, importance-matrix, and other/unknown GGUF files using explicit filename hints first and authoritative whitelisted GGUF metadata after lazy inspection. The selected-artifact inspector performs bounded header/KV inspection without loading tensor data or starting llama.cpp, shows current Profile usage and active-profile runtime usage, and can open an unsaved Profiles draft with the artifact preselected.
+Implemented behavior: Models displays GGUF artifacts discovered in configured model folders. It distinguishes primary models from projector, adapter, importance-matrix, and other/unknown GGUF files using explicit filename hints first and authoritative whitelisted GGUF metadata after lazy inspection. The selected-artifact inspector performs bounded header/KV inspection without loading tensor data or starting llama.cpp, shows Configured Model relationships and router observation, and can open an unsaved Profiles draft with the artifact preselected.
 
 Discovery IDs remain path-derived and do not survive a move or folder rename. Projector matches are candidates only; Models does not persist model/projector relationships. Configured router models, aliases, presets, and explicit switching are current Phase 15 contracts; switching UI remains Runs 9–10 work.
 
@@ -667,7 +668,7 @@ Current and forward-looking requirements:
 - Quantization hint if derivable
 - Size
 - Last modified
-- Current Profile usage
+- Configured Model relationships and router observation
 - Configured-model identities/aliases that reference the artifact
 - Optional `mmproj` association and text-only versus multimodal configuration state when implemented
 - `Switch model` when available under the active build, or `Switch build & restart router` when another build is required
@@ -833,13 +834,13 @@ Before completing UI work, check:
 
 The dashboard reference in `docs/design/reference/obsidianlm-dashboard.html` supersedes earlier Phase 14 shell dimensions where they conflict. The current priority is to keep the interface aligned with this real operator-console baseline.
 
-Phase 14 is complete. Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System are focused operator-console pages. Existing reference copy that says `profile` or `managed server` may describe legacy compatibility surfaces; current runtime state is Build/router based.
+Phase 14 is complete. Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System are focused operator-console pages. Existing reference copy that says `profile` or `managed server` may describe legacy compatibility surfaces; current runtime state is Build/router based. Run 10 integration is implemented; Phase 15 remains in progress.
 
 ### Approved Reference Screens
 
 Use the dashboard reference as the primary visual reference for shell and dashboard UI work:
 
-1. **Dashboard / Command Center** — compact operator overview with runtime status first, quick actions, active profile details, recent events, health checklist, resource snapshot, and performance log.
+1. **Dashboard / Command Center** — compact operator overview with runtime status first, quick actions, active Build/loaded-model/resource summary, recent events, health checklist, and performance log.
 2. **Runtime / Managed Server** — should reuse the shell, heading, panel, status, and log conventions established by the dashboard.
 3. **Profiles / Launch Configs** — should reuse the same matte panels, grouped detail sections, compact rows, and status pills.
 
@@ -964,11 +965,11 @@ Main content order:
 
 1. Runtime Status Card
 2. Quick Actions Strip
-3. Active Profile Summary
+3. Active Build / Loaded Model / Resource Summary
 4. Safety & Warnings
-5. Command Preview
+5. Active Router Configuration and Launch Command
 6. Recent Runtime Logs
-7. GPU / Telemetry Summary
+7. GPU / Process / Resource Summary
 
 Right inspector:
 
@@ -1003,7 +1004,7 @@ Main content order:
 1. Runtime Status Card
 2. Runtime action bar: Start runtime, Stop, Restart, Validate, Copy endpoint
 3. Validation Checklist
-4. Router Command Preview and Generated Preset Preview
+4. Active Router Configuration, Actual Launch Command, and Generated Preset Preview
 5. Startup & Safety
 6. Runtime Logs
 
@@ -1031,7 +1032,7 @@ Runtime rules:
 
 ### 16.3 Profiles / Model Configurations
 
-Goal: preserve current repeatable launch profiles and evolve them into configured model presets through an explicit compatibility migration.
+Goal: edit authoritative Configured Models while preserving the legacy Profile compatibility surface.
 
 Page header:
 
@@ -1072,6 +1073,7 @@ Profiles rules:
 - Show `Requires build switch` for configurations outside the active build.
 - Do not show `Requires restart` for same-build model selection merely because the historical profile flow restarted a server.
 - Keep legacy profile import/export and migration status visible until compatibility work is complete.
+- `/api/profiles` and `activeProfileId` are compatibility only; they are not lifecycle or loaded-model authority.
 
 ### 16.4 Models
 
@@ -1085,7 +1087,7 @@ Must include:
 - Selected model inspector.
 - Quantization hint when derivable.
 - Size and modified time.
-- Profile usage if known.
+- Configured Model relationships if known.
 - Optional mmproj candidates/association without automatic same-directory pairing claims.
 - Separate artifact identity from each configured model identity and router alias.
 
@@ -1101,6 +1103,7 @@ Must include:
 - Detected executables/tools.
 - Build/version/compiler metadata if available.
 - Static router flag/preset capability evidence plus separate functional Build validation; current launch requires both.
+- Readiness counts/checks use authoritative Configured Models, stable registered Builds, and router-eligible Builds; discovery remains evidence.
 - Clear ineligible/unsupported state when a build lacks required router behavior; version labels alone are not proof of capability.
 - Official/custom/experimental/compatibility classification only when known or explicitly configured.
 - Dependent configured models and whether selecting one requires a router restart.

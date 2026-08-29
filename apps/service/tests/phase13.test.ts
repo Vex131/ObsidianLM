@@ -3,9 +3,14 @@ import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import Fastify from "fastify";
 import { defaultSettings, type RuntimeProfile } from "@obsidianlm/shared";
 import { hashAdminToken } from "../src/auth/admin-token.js";
 import { ensureStorageFiles, saveProfiles, saveSettings } from "../src/config/storage.js";
+import { mutatePhase15Domain } from "../src/config/phase15-domain.js";
+import { discoverLlamaBuilds } from "../src/discovery/llama-builds.js";
+import { discoverModels } from "../src/discovery/models.js";
+import { registerStatusRoutes } from "../src/api/status.js";
 import { createServer } from "../src/server.js";
 
 const adminToken = "phase13-valid-admin-token";
@@ -62,6 +67,35 @@ async function createReadinessServer(t: TestContext) {
   return app;
 }
 
+async function createPhase15ReadinessFixture(t: TestContext, options: { configuredModel: boolean; eligibleBuild: boolean }) {
+  const fixture = await makeFixture(t);
+  const modelPath = path.join(fixture.modelDir, "configured.gguf");
+  const serverPath = path.join(fixture.buildDir, process.platform === "win32" ? "llama-server.exe" : "llama-server");
+  await Promise.all([writeFile(modelPath, "model", "utf8"), writeFile(serverPath, "server", "utf8")]);
+  await ensureStorageFiles();
+  await saveProfiles([]);
+  await saveSettings({ ...defaultSettings, modelFolders: [fixture.modelDir], llamaCppFolders: [path.join(fixture.root, "llama")], adminTokenHash: await hashAdminToken(adminToken), managedLlamaPort: 18093 });
+  const app = await createReadinessServer(t);
+  const auth = authHeader();
+  const models = await discoverModels();
+  const builds = await discoverLlamaBuilds();
+  const artifact = (await app.inject({ method: "POST", url: "/api/model-artifacts/register", headers: auth, payload: { discoveryId: models.models[0]!.id } })).json().artifact;
+  const build = (await app.inject({ method: "POST", url: "/api/builds/register", headers: auth, payload: { discoveryId: builds.builds[0]!.id } })).json().build;
+  if (options.configuredModel) {
+    const created = await app.inject({ method: "POST", url: "/api/configured-models", headers: auth, payload: { displayName: "Configured", artifactId: artifact.id, buildId: build.id, enabled: true } });
+    assert.equal(created.statusCode, 201);
+  }
+  if (options.eligibleBuild) {
+    await mutatePhase15Domain((snapshot) => {
+      const registered = snapshot.builds.find((entry) => entry.id === build.id)!;
+      registered.serverFingerprint = "phase13-test";
+      registered.managedInferenceEligibility = "eligible";
+      registered.functionalEvidence = { kind: "functional", state: "eligible", validationProtocolVersion: 1, serverFingerprint: "phase13-test", launchAttempted: true, presetAccepted: true, healthVerified: true, modelsVerified: true, catalogBoundaryVerified: true, requiredBehaviorVerified: true, warnings: [], failures: [] };
+    });
+  }
+  return { app, auth };
+}
+
 test("readiness is setup-protected before admin token setup and reports fresh empty state after setup", async (t) => {
   await makeFixture(t);
   await ensureStorageFiles();
@@ -78,7 +112,7 @@ test("readiness is setup-protected before admin token setup and reports fresh em
   const body = response.json();
   assert.equal(body.ok, false);
   assert.equal(body.configured.adminToken, true);
-  assert.deepEqual(body.counts, { ggufModels: 0, serverBuilds: 0, llamaBenchTools: 0, llamaPerplexityTools: 0, toolInputs: 0, profiles: 0 });
+  assert.deepEqual(body.counts, { registeredArtifacts: 0, configuredModels: 0, registeredBuilds: 0, eligibleBuilds: 0, ggufModels: 0, serverBuilds: 0, llamaBenchTools: 0, llamaPerplexityTools: 0, toolInputs: 0, profiles: 0 });
   assert.ok(body.blockingChecks.some((item: { id: string }) => item.id === "gguf-models"));
   assert.ok(body.nextActions.length > 0);
 });
@@ -148,11 +182,12 @@ test("readiness reports ready-ish discovered counts from temp folders", async (t
   const response = await app.inject({ method: "GET", url: "/api/readiness", headers: authHeader() });
   assert.equal(response.statusCode, 200);
   const body = response.json();
-  assert.equal(body.ok, true);
-  assert.deepEqual(body.counts, { ggufModels: 1, serverBuilds: 1, llamaBenchTools: 1, llamaPerplexityTools: 1, toolInputs: 1, profiles: 1 });
-  assert.equal(body.blockingChecks.length, 0);
+  assert.equal(body.ok, false);
+  assert.deepEqual(body.counts, { registeredArtifacts: 1, configuredModels: 1, registeredBuilds: 1, eligibleBuilds: 0, ggufModels: 1, serverBuilds: 1, llamaBenchTools: 1, llamaPerplexityTools: 1, toolInputs: 1, profiles: 1 });
+  assert.ok(body.blockingChecks.some((item: { id: string }) => item.id === "eligible-builds"));
   assert.equal(body.runtime.active, false);
   assert.equal(body.runtime.health, "inactive");
+  assert.equal(body.runtime.routerHealth, "unknown");
   assert.equal(body.gpu.available, false);
 });
 
@@ -197,4 +232,43 @@ test("readiness requires auth after admin setup", async (t) => {
   assert.ok([401, 403].includes(badToken.statusCode));
   const goodToken = await app.inject({ method: "GET", url: "/api/readiness", headers: authHeader() });
   assert.equal(goodToken.statusCode, 200);
+});
+
+test("status uses router identity without a compatibility Profile", async (t) => {
+  const fixture = await makeFixture(t);
+  await ensureStorageFiles();
+  const app = Fastify();
+  t.after(() => app.close());
+  await registerStatusRoutes(app, {
+    getRouterState: () => ({ activeRuntimeId: "router_test", activeBuildId: "build_test", pid: 4321, port: 19001, status: "running", compatibilityProfileId: null }),
+    refreshDetection: async () => ({ categories: [], warnings: [], actions: [], processes: [], ports: [], previousState: null, checkedAt: "2026-08-29T00:00:00.000Z" }),
+    refreshProcessAwareness: async () => ({ processes: [], warnings: [], detectionMethod: "test", available: false }),
+    getWarnings: () => []
+  } as any, gpuUnavailableOptions());
+  const response = await app.inject({ method: "GET", url: "/api/status" });
+  assert.equal(response.statusCode, 200);
+  const body = response.json();
+  assert.deepEqual(body.activeRuntime, { runtimeId: "router_test", buildId: "build_test", type: "llama.cpp", status: "running", pid: 4321, profileId: null, profileName: null, apiUrl: "http://localhost:19001/v1" });
+  assert.doesNotMatch(response.body, new RegExp(fixture.root.replace(/[\\^$.*+?()[\]{}|]/gu, "\\$&"), "u"));
+});
+
+test("readiness accepts a valid Phase 15 domain with zero Profiles", async (t) => {
+  const { app, auth } = await createPhase15ReadinessFixture(t, { configuredModel: true, eligibleBuild: true });
+  const response = await app.inject({ method: "GET", url: "/api/readiness", headers: auth });
+  assert.equal(response.statusCode, 200);
+  const body = response.json();
+  assert.equal(body.ok, true);
+  assert.deepEqual({ configuredModels: body.counts.configuredModels, registeredBuilds: body.counts.registeredBuilds, eligibleBuilds: body.counts.eligibleBuilds, profiles: body.counts.profiles }, { configuredModels: 1, registeredBuilds: 1, eligibleBuilds: 1, profiles: 0 });
+  assert.deepEqual({ runtimeId: body.runtime.runtimeId, buildId: body.runtime.buildId, loadedConfiguredModelIds: body.runtime.loadedConfiguredModelIds, health: body.runtime.health, routerHealth: body.runtime.routerHealth }, { runtimeId: null, buildId: null, loadedConfiguredModelIds: [], health: "inactive", routerHealth: "unknown" });
+  assert.equal(body.blockingChecks.some((item: { id: string }) => item.id === "profiles"), false);
+});
+
+test("readiness blocks missing configured models and ineligible Builds", async (t) => {
+  const missingModel = await createPhase15ReadinessFixture(t, { configuredModel: false, eligibleBuild: true });
+  const missingModelResponse = await missingModel.app.inject({ method: "GET", url: "/api/readiness", headers: missingModel.auth });
+  assert.ok(missingModelResponse.json().blockingChecks.some((item: { id: string }) => item.id === "configured-models"));
+
+  const ineligibleBuild = await createPhase15ReadinessFixture(t, { configuredModel: true, eligibleBuild: false });
+  const ineligibleBuildResponse = await ineligibleBuild.app.inject({ method: "GET", url: "/api/readiness", headers: ineligibleBuild.auth });
+  assert.ok(ineligibleBuildResponse.json().blockingChecks.some((item: { id: string }) => item.id === "eligible-builds"));
 });

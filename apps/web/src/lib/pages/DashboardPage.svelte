@@ -3,7 +3,8 @@
   import PageHeader from "../components/PageHeader.svelte";
   import Icon from "../components/Icon.svelte";
   import StatusDot from "../components/StatusDot.svelte";
-  import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type GpuMonitoringStatus, type RuntimeActionResult, type RuntimeState, type StatusResponse } from "../api";
+  import type { RouterRuntimeResponse } from "@obsidianlm/shared";
+  import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type GpuMonitoringStatus, type RuntimeActionResult } from "../api";
   import { emptyDashboardData, fetchDashboardData, type DashboardData } from "../dashboard/dashboard-data";
   import {
     clampPercent,
@@ -15,15 +16,9 @@
     formatUtilization,
     formatVramMiB,
     inferLogTone,
-    normalizeEndpoint,
     vramPercent
   } from "../dashboard/dashboard-format";
-  import { defaultShellStatus, type ShellStatusSummary } from "../layout/shell-status";
-
-  export let shellStatus: ShellStatusSummary = defaultShellStatus;
-  export let status: StatusResponse | null = null;
-  export let runtimeState: RuntimeState | null = null;
-  export let runtimeWarnings: string[] = [];
+  export let routerRuntime: RouterRuntimeResponse | null = null;
 
   type HealthTone = "ok" | "warn" | "error" | "muted";
   type HealthItem = { label: string; state: string; tone: HealthTone };
@@ -31,56 +26,58 @@
   let dashboardData: DashboardData = emptyDashboardData;
   let copyLabel = "Copy";
   let actionPending = false;
+  let actionError = "";
   let refreshTimer: number | null = null;
+  let refreshGeneration = 0;
 
-  $: activeRuntime = dashboardData.runtimeState ?? runtimeState;
-  $: activeProfileId = activeRuntime?.activeProfileId ?? status?.activeRuntime?.profileId ?? null;
-  $: activeProfile = dashboardData.profiles.find((profile) => profile.id === activeProfileId) ?? null;
-  $: runtimeStatus = activeRuntime?.status ?? status?.activeRuntime?.status ?? "stopped";
-  $: isRunning = runtimeStatus === "running";
-  $: isTransitioning = runtimeStatus === "starting" || runtimeStatus === "stopping";
+  $: runtime = dashboardData.runtime ?? routerRuntime;
+  $: router = runtime?.routerState ?? null;
+  $: routerStatus = router?.status ?? "unknown";
+  $: isRunning = routerStatus === "running";
+  $: isTransitioning = routerStatus === "starting" || routerStatus === "stopping";
   $: hasToken = dashboardData.hasToken || Boolean(readStoredAdminToken());
-  $: endpoint = normalizeEndpoint(status, activeProfile);
-  $: heroTitle = status?.activeRuntime?.profileName ?? activeProfile?.name ?? (activeProfileId ? activeProfileId : "No active profile");
-  $: heroSubtitle = runtimeSubtitle(runtimeStatus);
-  $: runtimeLabel = shellStatus.runtimeLabel.replace(/^Runtime\s+/i, "Runtime ");
-  $: profileLabel = activeProfile?.name ?? status?.activeRuntime?.profileName ?? "—";
-  $: portLabel = String(activeRuntime?.port ?? activeProfile?.port ?? status?.managedLlamaPort ?? shellStatus.portLabel ?? "—");
-  $: pidLabel = activeRuntime?.pid ? String(activeRuntime.pid) : status?.activeRuntime?.pid ? String(status.activeRuntime.pid) : "—";
-  $: uptimeLabel = formatUptime(activeRuntime?.startedAt);
-  $: llamaArgs = activeProfile?.llamaArgs;
+  $: activeBuild = dashboardData.builds.find((build) => build.id === router?.activeBuildId) ?? null;
+  $: modelStates = router?.configuredModelStates ?? [];
+  $: loadedStates = modelStates.filter((entry) => entry.state === "loaded");
+  $: activeModelId = loadedStates.length === 1 ? loadedStates[0].configuredModelId : null;
+  $: activeModel = dashboardData.configuredModels.find((model) => model.id === activeModelId) ?? null;
+  $: activeModelLabel = activeModel?.displayName ?? activeModelId ?? null;
+  $: endpoint = router?.port ? `http://localhost:${router.port}/v1` : `Managed port ${dashboardData.readiness?.managedPort.port ?? "—"} stopped`;
+  $: heroTitle = routerStatus === "stopped" ? "Managed router stopped" : routerStatus === "failed" ? "Managed router failed" : routerStatus === "unknown" || routerStatus === "unknown_previous_runtime" ? "Managed router status uncertain" : activeBuild?.displayName ?? router?.activeBuildId ?? "Managed router";
+  $: heroSubtitle = runtimeSubtitle();
+  $: runtimeLabel = `Router ${routerStatus}`;
+  $: pidLabel = router?.pid ? String(router.pid) : "—";
+  $: uptimeLabel = formatUptime(router?.startedAt);
+  $: llamaArgs = activeModel?.llamaArgs;
   $: healthItems = buildHealthItems();
   $: healthOkCount = healthItems.filter((item) => item.tone === "ok").length;
   $: gpuDevices = dashboardData.gpuStatus?.gpus ?? [];
   $: recentLogs = dashboardData.runtimeLogs.slice().reverse();
+  $: runtimeTone = (routerStatus === "running" ? "green" : isTransitioning ? "amber" : routerStatus === "failed" ? "red" : "muted") as "green" | "amber" | "red" | "muted";
 
   async function refreshDashboardData() {
-    dashboardData = await fetchDashboardData(activeProfileId);
+    const requestGeneration = ++refreshGeneration;
+    const data = await fetchDashboardData();
+    if (requestGeneration === refreshGeneration) {
+      dashboardData = data;
+    }
   }
 
-  async function runRuntimeAction(action: "restart" | "stop" | "start") {
+  async function runRuntimeAction(action: "restart" | "stop") {
     if (actionPending || !hasToken) {
       return;
     }
 
-    const url = action === "restart"
-      ? API_ENDPOINTS.runtime.restart
-      : action === "stop"
-        ? API_ENDPOINTS.runtime.stop
-        : activeProfileId
-          ? API_ENDPOINTS.profiles.start(activeProfileId)
-          : null;
-
-    if (!url) {
-      return;
-    }
-
     actionPending = true;
+    actionError = "";
     try {
-      await fetchJson<RuntimeActionResult>(url, { method: "POST" });
+      const result = await fetchJson<RuntimeActionResult>(action === "restart" ? API_ENDPOINTS.runtime.restart : API_ENDPOINTS.runtime.stop, { method: "POST" });
+      if (!result.ok) {
+        actionError = result.error ?? result.message;
+      }
       await refreshDashboardData();
-    } catch {
-      // Runtime action failures are surfaced through the refreshed status/log panels.
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : "Router action failed.";
       await refreshDashboardData();
     } finally {
       actionPending = false;
@@ -103,61 +100,41 @@
     }, 1200);
   }
 
-  function runtimeSubtitle(currentStatus: string): string {
-    if (currentStatus === "running") {
-      return "llama.cpp runtime is active with the selected profile. Endpoint is ready for local tools and agents.";
-    }
-    if (currentStatus === "starting") {
-      return "Runtime startup is in progress. Controls are paused until the process reports a stable state.";
-    }
-    if (currentStatus === "stopping") {
-      return "Runtime shutdown is in progress. The dashboard will refresh when the process exits.";
-    }
-    if (currentStatus === "failed" || currentStatus === "exited") {
-      return "The last runtime did not remain active. Check recent events and profile details before restarting.";
-    }
-    return "No llama.cpp runtime is currently active. Select a profile, validate setup, then start when ready.";
+  function runtimeSubtitle(): string {
+    const health = router?.health.state ?? "unknown";
+    const loading = modelStates.find((entry) => entry.state === "loading");
+    const loadingModel = dashboardData.configuredModels.find((model) => model.id === loading?.configuredModelId);
+    if (routerStatus === "stopped") return "No managed router is currently running.";
+    if (routerStatus === "unknown_previous_runtime") return "Previous router ownership is uncertain; ObsidianLM has not adopted or stopped it.";
+    if (loadedStates.length > 1) return `${health} router health · ${loadedStates.length} models loaded · policy warning`;
+    if (loading) return `Loading ${loadingModel?.displayName ?? loading.configuredModelId}`;
+    if (activeModelLabel) return `${health} router health · ${activeModelLabel} loaded`;
+    return `${health} router health · no model loaded`;
   }
 
   function buildHealthItems(): HealthItem[] {
     const warnings = [
-      ...(status?.warnings ?? []),
-      ...(status?.detection?.warnings ?? []).map((warning) => warning.message),
-      ...runtimeWarnings,
-      ...dashboardData.runtimeWarnings,
+      ...(runtime?.warnings ?? []).map((warning) => warning.message),
       ...(dashboardData.gpuStatus?.warnings ?? []).map((warning) => warning.message)
     ];
     const warningText = warnings.join(" ").toLowerCase();
     const gpuWarning = warningText.includes("vram") || warningText.includes("gpu") || (dashboardData.gpuStatus?.summary.warningsCount ?? 0) > 0;
-    const hasBuild = Boolean(activeProfile?.buildPath);
-    const hasModel = Boolean(activeProfile?.modelPath);
-    const stale = runtimeStatus === "unknown_previous_runtime";
-    const health = dashboardData.runtimeHealth;
+    const catalogState = router?.catalog?.reconciliationState ?? "unknown";
+    const presetState = router?.generatedArtifact?.freshness ?? "unknown";
+    const managedPort = dashboardData.readiness?.managedPort;
+    const processAwareness = dashboardData.processes;
 
     return [
-      { label: "Backend API reachable", state: status ? "OK" : "Error", tone: status ? "ok" : "error" },
-      { label: "Runtime process detected", state: activeRuntime?.pid ? "OK" : isRunning ? "Warn" : "Idle", tone: activeRuntime?.pid ? "ok" : isRunning ? "warn" : "muted" },
-      { label: "Runtime API health", state: health?.ok ? "Healthy" : isRunning ? "Not verified" : "Idle", tone: health?.ok ? "ok" : isRunning ? "warn" : "muted" },
-      { label: "Model configured", state: hasModel ? "Configured" : "Missing", tone: hasModel ? "ok" : "muted" },
-      { label: "Build path configured", state: hasBuild ? "OK" : "Missing", tone: hasBuild ? "ok" : "muted" },
-      { label: "VRAM headroom low / GPU warnings", state: gpuWarning ? "Warn" : dashboardData.gpuStatus ? "OK" : "—", tone: gpuWarning ? "warn" : dashboardData.gpuStatus ? "ok" : "muted" },
-      { label: "Admin token loaded", state: hasToken ? "OK" : "Locked", tone: hasToken ? "ok" : "muted" },
-      { label: "No stale process", state: stale ? "Warn" : "OK", tone: stale ? "warn" : "ok" }
+      { label: "Backend API", state: runtime ? "Reachable" : "Unavailable", tone: runtime ? "ok" : "error" },
+      { label: "Router ownership", state: router?.startedByObsidianLM ? "Managed" : router ? router.ownershipEvidence : "Unknown", tone: router?.startedByObsidianLM ? "ok" : router ? "warn" : "muted" },
+      { label: "Router health", state: router?.health.state ?? "Unknown", tone: router?.health.state === "healthy" ? "ok" : isRunning ? "warn" : "muted" },
+      { label: "Build eligible", state: activeBuild?.managedInferenceEligibility ?? "Unknown", tone: activeBuild?.managedInferenceEligibility === "eligible" ? "ok" : activeBuild ? "warn" : "muted" },
+      { label: "Preset current", state: presetState, tone: presetState === "current" ? "ok" : presetState === "stale" ? "warn" : "muted" },
+      { label: "Catalog reconciled", state: catalogState, tone: catalogState === "reconciled" ? "ok" : catalogState === "mismatch" || catalogState === "failed" ? "error" : "muted" },
+      { label: "Managed port", state: managedPort ? (managedPort.conflict ? "Conflict" : managedPort.inUse ? "In use" : "Stopped") : "Unknown", tone: managedPort?.conflict ? "error" : managedPort?.inUse ? "ok" : "muted" },
+      { label: "GPU-process awareness", state: processAwareness?.available === false ? "Unavailable" : gpuWarning ? "Warning" : processAwareness ? "Known" : "Unknown", tone: processAwareness?.available === false ? "muted" : gpuWarning ? "warn" : processAwareness ? "ok" : "muted" },
+      { label: "Runtime uncertainty", state: router?.previousRuntimeUncertainty ? "Review" : "None", tone: router?.previousRuntimeUncertainty ? "warn" : router ? "ok" : "muted" }
     ];
-  }
-
-  function contextReuseLabel(): string {
-    if (llamaArgs?.contBatching === undefined) {
-      return "—";
-    }
-    return llamaArgs.contBatching ? "Enabled" : "Disabled";
-  }
-
-  function flashAttentionLabel(): string {
-    if (llamaArgs?.flashAttention === undefined) {
-      return "—";
-    }
-    return llamaArgs.flashAttention ? "Enabled" : "Disabled";
   }
 
   function gpuLayersLabel(): string {
@@ -167,32 +144,40 @@
     return llamaArgs.gpuLayers === "all" ? "All layers" : `${llamaArgs.gpuLayers} layers`;
   }
 
-  function batchLabel(): string {
-    const batch = llamaArgs?.batchSize ? formatNumber(llamaArgs.batchSize) : "—";
-    const ubatch = llamaArgs?.ubatchSize ? formatNumber(llamaArgs.ubatchSize) : "—";
-    return `${batch} / ${ubatch}`;
-  }
-
   function kvCacheLabel(): string {
     const key = llamaArgs?.cacheTypeK ?? "—";
     const value = llamaArgs?.cacheTypeV ?? "—";
     return `${key} / ${value}`;
   }
 
-  function logType(message: string, source: string): string {
+  function logType(message: string, source: string, origin: string, configuredModelId?: string): string {
     const tone = inferLogTone(message);
     if (tone === "amber") return "WARN";
     if (tone === "red") return "ERR";
-    if (/listening|started|loaded|runtime/i.test(message)) return "RUN";
-    return source === "stderr" ? "ERR" : "INFO";
+    if (configuredModelId || origin.includes("child")) return "MODEL";
+    if (origin === "router") return "ROUTER";
+    return source === "system" ? "SYSTEM" : "SYSTEM";
   }
 
-  function logToneClass(message: string, source: string): string {
-    const type = logType(message, source);
+  function logToneClass(message: string, source: string, origin: string, configuredModelId?: string): string {
+    const type = logType(message, source, origin, configuredModelId);
     if (type === "WARN") return "warn";
     if (type === "ERR") return "error";
-    if (type === "RUN") return "run";
+    if (type === "ROUTER" || type === "MODEL") return "run";
     return "info";
+  }
+
+  function configuredModelName(id?: string): string {
+    return dashboardData.configuredModels.find((model) => model.id === id)?.displayName ?? id ?? "Unknown configured model";
+  }
+
+  function managedModelVram(gpu: NonNullable<GpuMonitoringStatus["gpus"]>[number]): number | null {
+    if (!activeModelId) return null;
+    const memory = gpu.processes
+      .filter((process) => (process.kind === "managed_router_child" || process.kind === "current_managed_runtime") && process.configuredModelId === activeModelId)
+      .filter((process) => dashboardData.processes?.processes.some((detected) => detected.pid === process.pid && detected.ownership === "proven" && detected.configuredModelId === activeModelId))
+      .reduce((total, process) => total + (process.usedMemoryMiB ?? 0), 0);
+    return memory > 0 ? memory : null;
   }
 
   function deviceRole(index: number): string {
@@ -217,6 +202,7 @@
     refreshTimer = window.setInterval(() => void refreshDashboardData(), 5000);
 
     return () => {
+      refreshGeneration += 1;
       if (refreshTimer) {
         window.clearInterval(refreshTimer);
       }
@@ -231,7 +217,7 @@
     <div class="left-column">
       <section class="panel hero" aria-label="Runtime control hero">
         <div class="hero-main">
-          <div class:muted={!isRunning} class="hero-status-line"><StatusDot tone={shellStatus.runtimeTone} />{runtimeLabel}</div>
+           <div class:muted={!isRunning} class="hero-status-line"><StatusDot tone={runtimeTone} />{runtimeLabel}</div>
           <h2 class="hero-title">{heroTitle}</h2>
           <p class="hero-subtitle">{heroSubtitle}</p>
 
@@ -241,8 +227,8 @@
           </button>
 
           <div class="hero-meta">
-            <div class="hero-stat"><div class="label">Profile</div><div class="value">{profileLabel}</div></div>
-            <div class="hero-stat"><div class="label">Port</div><div class="value">{portLabel}</div></div>
+            <div class="hero-stat"><div class="label">Build</div><div class="value">{activeBuild?.displayName ?? router?.activeBuildId ?? "—"}</div></div>
+             <div class="hero-stat"><div class="label">Loaded model</div><div class="value">{activeModelLabel ?? (loadedStates.length > 1 ? `${loadedStates.length} loaded · policy warning` : "None")}</div></div>
             <div class="hero-stat"><div class="label">PID</div><div class="value">{pidLabel}</div></div>
             <div class="hero-stat"><div class="label">Uptime</div><div class="value">{uptimeLabel}</div></div>
           </div>
@@ -251,19 +237,22 @@
         <div class="hero-side">
           <div class="runtime-control">
             <div class="control-title-row">
-              <strong>Runtime controls</strong>
-              <span class="mini-pill"><StatusDot tone={shellStatus.runtimeTone} />{isRunning ? "Healthy" : shellStatus.runtimeLabel.replace(/^Runtime\s+/i, "")}</span>
+              <strong>Router controls</strong>
+               <span class="mini-pill"><StatusDot tone={runtimeTone} />{router?.health.state ?? routerStatus}</span>
             </div>
             <div class="control-grid">
-              <button class:primary={isRunning} class:disabled={!isRunning || actionPending || isTransitioning || !hasToken} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning || !hasToken} on:click={() => runRuntimeAction("restart")}><Icon name="refresh" size={16} />Restart</button>
-              <button class:disabled={!isRunning || actionPending || isTransitioning || !hasToken} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning || !hasToken} on:click={() => runRuntimeAction("stop")}><Icon name="stop" size={16} />Stop</button>
-              <button class:primary={!isRunning && Boolean(activeProfileId)} class:disabled={isRunning || actionPending || isTransitioning || !activeProfileId || !hasToken} class="btn wide" type="button" disabled={isRunning || actionPending || isTransitioning || !activeProfileId || !hasToken} on:click={() => runRuntimeAction("start")}><Icon name="play" size={16} />Start runtime</button>
+              <button class:primary={isRunning} class:disabled={!isRunning || actionPending || isTransitioning || !hasToken} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning || !hasToken} on:click={() => runRuntimeAction("restart")}><Icon name="refresh" size={16} />Restart router</button>
+              <button class:disabled={!isRunning || actionPending || isTransitioning || !hasToken} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning || !hasToken} on:click={() => runRuntimeAction("stop")}><Icon name="stop" size={16} />Stop router</button>
+              {#if !isRunning}
+                 <a class="btn wide" href="#runtime"><Icon name="terminal" size={16} />Open Runtime to start</a>
+              {/if}
             </div>
+            {#if actionError}<div class="runtime-micro">{actionError}</div>{/if}
             <div class="runtime-micro">
-              <span>Runtime</span><span>llama-server</span>
-              <span>Build</span><span title={activeProfile?.buildPath ?? ""}>{activeProfile?.buildPath?.split(/[\\/]/).pop() ?? "—"}</span>
-              <span>Model</span><span title={activeProfile?.modelPath ?? ""}>{activeProfile?.modelPath?.split(/[\\/]/).pop() ?? "—"}</span>
-              <span>Last started</span><span>{activeRuntime?.startedAt ? formatTimestamp(activeRuntime.startedAt) : "—"}</span>
+              <span>Router</span><span>{routerStatus}</span>
+              <span>Build</span><span>{activeBuild?.displayName ?? router?.activeBuildId ?? "—"}</span>
+              <span>Models</span><span>{modelStates.length}</span>
+              <span>Last started</span><span>{router?.startedAt ? formatTimestamp(router.startedAt) : "—"}</span>
             </div>
           </div>
         </div>
@@ -272,37 +261,40 @@
       <section class="panel quick-actions" aria-label="Quick actions">
         <div class="panel-head compact"><h2 class="section-title">Quick Actions</h2></div>
         <div class="quick-grid">
-          <a class="quick-action" href="#profiles"><div class="quick-icon"><Icon name="zap" size={20} /></div><div class="quick-text"><strong>Manage profiles</strong><span>Edit launch configuration</span></div></a>
+          <a class="quick-action" href="#profiles"><div class="quick-icon"><Icon name="zap" size={20} /></div><div class="quick-text"><strong>Manage configurations</strong><span>Profiles</span></div></a>
           <a class="quick-action" href="#models"><div class="quick-icon"><Icon name="load" size={20} /></div><div class="quick-text"><strong>Browse models</strong><span>Inspect GGUF artifacts</span></div></a>
-          <a class="quick-action" href="#jobs"><div class="quick-icon"><Icon name="terminal" size={20} /></div><div class="quick-text"><strong>Run jobs</strong><span>Bench and perplexity tools</span></div></a>
-          <a class="quick-action" href="#system"><div class="quick-icon cyan"><Icon name="shield" size={20} /></div><div class="quick-text"><strong>Validate setup</strong><span>Review readiness checks</span></div></a>
+          <a class="quick-action" href="#builds"><div class="quick-icon"><Icon name="terminal" size={20} /></div><div class="quick-text"><strong>Inspect Builds</strong><span>Builds</span></div></a>
+          <a class="quick-action" href="#jobs"><div class="quick-icon cyan"><Icon name="shield" size={20} /></div><div class="quick-text"><strong>Run jobs</strong><span>Jobs</span></div></a>
         </div>
       </section>
 
-      <section class="panel profile-details" aria-label="Active profile details">
-        <div class="panel-head compact"><h2 class="section-title">Active Profile Details</h2></div>
+      <section class="panel profile-details" aria-label="Active runtime details">
+        <div class="panel-head compact"><h2 class="section-title">Active Runtime Details</h2></div>
         <div class="profile-grid">
           <div class="detail-group">
-            <h3>Launch configuration</h3>
+            <h3>Router</h3>
             <div class="kv-list">
-              <div class="kv-row"><span>Context size</span><span>{formatNumber(llamaArgs?.ctxSize)}</span></div>
-              <div class="kv-row"><span>GPU offload</span><span>{gpuLayersLabel()}</span></div>
-              <div class="kv-row"><span>Context reuse</span><span>{contextReuseLabel()}</span></div>
-              <div class="kv-row"><span>Parallel slots</span><span>{formatNumber(llamaArgs?.parallel)}</span></div>
-              <div class="kv-row"><span>Batch / ubatch</span><span>{batchLabel()}</span></div>
+              <div class="kv-row"><span>Build</span><span>{activeBuild?.displayName ?? router?.activeBuildId ?? "—"}</span></div>
+              <div class="kv-row"><span>Status</span><span>{routerStatus}</span></div>
+              <div class="kv-row"><span>Health</span><span>{router?.health.state ?? "unknown"}</span></div>
+              <div class="kv-row"><span>Catalog</span><span>{router?.catalog?.reconciliationState ?? "unknown"}</span></div>
+              <div class="kv-row"><span>Preset</span><span>{router?.generatedArtifact?.freshness ?? "unknown"}</span></div>
+              <div class="kv-row"><span>Endpoint</span><span>{endpoint}</span></div>
             </div>
           </div>
           <div class="detail-group">
-            <h3>Memory &amp; model</h3>
+            <h3>Model</h3>
             <div class="kv-list">
+               <div class="kv-row"><span>Name</span><span>{activeModelLabel ?? "—"}</span></div>
+              <div class="kv-row"><span>Alias</span><span>{activeModel?.routerAlias ?? "—"}</span></div>
+              <div class="kv-row"><span>Text / Vision</span><span>{activeModel?.projector ? "Vision" : activeModel ? "Text" : "—"}</span></div>
+              <div class="kv-row"><span>Context</span><span>{formatNumber(activeModel?.artifact?.metadata?.trainedContext ?? llamaArgs?.ctxSize)}</span></div>
+              <div class="kv-row"><span>GPU offload</span><span>{gpuLayersLabel()}</span></div>
               <div class="kv-row"><span>KV cache</span><span>{kvCacheLabel()}</span></div>
-              <div class="kv-row"><span>Flash attention</span><span>{flashAttentionLabel()}</span></div>
-              <div class="kv-row"><span>Tensor split</span><span>{llamaArgs?.tensorSplit ?? "—"}</span></div>
-              <div class="kv-row"><span>Model path</span><span class="path-value" title={activeProfile?.modelPath ?? ""}>{activeProfile?.modelPath ?? "—"}</span></div>
-              <div class="kv-row"><span>Profile file / profile id</span><span>{activeProfile?.id ?? activeProfileId ?? "—"}</span></div>
             </div>
           </div>
         </div>
+         {#if loadedStates.length === 0}<div class="empty-state compact-empty">No configured model is loaded in the managed router.</div>{:else if loadedStates.length === 1 && !activeModel}<div class="empty-state compact-empty">The router reports {activeModelId} loaded; configuration details are unavailable.</div>{:else if loadedStates.length > 1}<div class="empty-state compact-empty">Multiple configured models report loaded; review router catalog reconciliation.</div>{/if}
       </section>
 
       <section class="panel events-card" aria-label="Recent events">
@@ -312,8 +304,8 @@
             {#each recentLogs as log}
               <div class="event-line">
                 <span class="event-time">{formatTimestamp(log.timestamp)}</span>
-                <span class={`event-type ${logToneClass(log.message, log.source)}`}>{logType(log.message, log.source)}</span>
-                <span class="event-message" title={log.message}>{log.message}</span>
+                <span class={`event-type ${logToneClass(log.message, log.source, log.origin, log.configuredModelId)}`}>{logType(log.message, log.source, log.origin, log.configuredModelId)}</span>
+                <span class="event-message" title={log.message}>{log.configuredModelId ? `${configuredModelName(log.configuredModelId)}: ` : log.origin === "unknown" ? "Unknown or older event: " : ""}{log.message}</span>
               </div>
             {/each}
           {:else}
@@ -347,6 +339,7 @@
                   <div class="meter"><div class="meter-top"><span>Core usage</span><span>{formatUtilization(gpu.utilizationGpuPercent)}</span></div><div class="meter-bar"><span style={meterWidth(gpu.utilizationGpuPercent ?? 0)}></span></div></div>
                   <div class="meter"><div class="meter-top"><span>Temperature</span><span>{formatTemperature(gpu.temperatureGpuC)}</span></div><div class="meter-bar"><span style={meterWidth(gpu.temperatureGpuC ?? 0)}></span></div></div>
                   <div class="meter"><div class="meter-top"><span>Power</span><span>{formatPowerWatts(gpu.powerDrawW)}</span></div><div class="meter-bar"><span style={meterWidth(powerPercent(gpu))}></span></div></div>
+                  {#if managedModelVram(gpu) !== null}<div class="meter"><div class="meter-top"><span>Managed model VRAM</span><span>{formatVramMiB(managedModelVram(gpu))}</span></div></div>{/if}
                 </div>
               </div>
             {/each}

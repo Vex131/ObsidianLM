@@ -1,4 +1,6 @@
 import type { RuntimeStatus } from "./runtime-state.js";
+import type { ConfiguredModelId, LlamaCppBuildId } from "./model-configuration.js";
+import type { RouterHealthState, RouterRuntimeId } from "./router.js";
 
 export type ReadinessCheckStatus = "pass" | "warning" | "block" | "unavailable";
 
@@ -11,6 +13,10 @@ export interface ReadinessCheck {
 }
 
 export interface ReadinessCounts {
+  registeredArtifacts?: number;
+  configuredModels?: number;
+  registeredBuilds?: number;
+  eligibleBuilds?: number;
   ggufModels: number;
   serverBuilds: number;
   llamaBenchTools: number;
@@ -42,12 +48,16 @@ export interface ReadinessGpuState {
 }
 
 export interface ReadinessRuntimeState {
+  runtimeId?: RouterRuntimeId | null;
+  buildId?: LlamaCppBuildId | null;
+  loadedConfiguredModelIds?: ConfiguredModelId[];
   status: RuntimeStatus;
   active: boolean;
   profileId: string | null;
   profileName: string | null;
   port: number | null;
   health: "active" | "inactive" | "unavailable";
+  routerHealth?: RouterHealthState;
   message: string | null;
 }
 

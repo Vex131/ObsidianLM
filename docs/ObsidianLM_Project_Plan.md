@@ -8,7 +8,7 @@ This document separates three things that earlier revisions mixed together:
 
 - **Completed foundation/history:** Phases 0-13 are implemented. Their original single-model runtime architecture was valid for those phases.
 - **Completed UI restructure:** Phase 14 provides focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Its discovery view reports static router CLI evidence.
-- **Phase 15 foundation:** Builder Run 6 adds Build/router lifecycle integration to Run 5's deterministic exact-Build production preset and launch previews. Phase 15 remains incomplete; Phase 16 later adds Remote Nodes / Controller Mode.
+- **Phase 15 foundation:** Builder Run 10 adds Runtime/Dashboard integration to the Build/router lifecycle, model switching, process/GPU/log awareness, and configuration-facing console. Phase 15 is In Progress; Run 11 remains real-machine/build compatibility/failure-path certification and closure. No Phase 16 work is implied here.
 
 The legacy compatibility surface still stores a model-bound launch profile:
 
@@ -71,7 +71,7 @@ Laptop
   └── development/inference clients may access llama.cpp over Tailscale
 ```
 
-Planned Phase 15 deployed operation is:
+Current Phase 15 deployed operation is:
 
 ```text
 Laptop browser
@@ -485,7 +485,7 @@ Switch build & restart router
 
 for a configuration requiring another executable. It must neither imply that every model change restarts llama.cpp nor that every model can switch without a restart.
 
-The Models page should distinguish discovered artifacts from configured models. The Builds page should show dependent configured models before a build is changed or removed. The Runtime page should focus on router/build state and model availability. The existing Profiles page remains a historical/current configuration editor until migration design determines its target name and compatibility behavior.
+The Models page should distinguish discovered artifacts from configured models. The Builds page should show dependent configured models before a build is changed or removed. The Runtime page owns router lifecycle, active router configuration, actual launch command, and Configured Model selection. The Dashboard provides a high-level active Build/loaded-model/resource summary. Profiles owns Configured Model editing; Models owns artifact/model view and observation; Builds owns stable readiness and presets. `/api/profiles` and `activeProfileId` remain compatibility only.
 
 ## 15. Completed Phase History
 
@@ -520,13 +520,13 @@ Phase 14 remains a UI restructuring phase. It does not implement the router, mig
 
 ## 17. Phase 15 - llama.cpp Router Integration
 
-**Status:** Foundation, Build/router lifecycle, model/Build switching, and process/GPU/log awareness implemented through Builder Run 8. Phase 15 is not complete.
+**Status:** In Progress. Foundation, Build/router lifecycle, model/Build switching, process/GPU/log awareness, configuration-facing console, and Runtime/Dashboard integration implemented through Builder Run 10. Phase 15 is not complete.
 
 ### Goal
 
 Evolve the one-profile/one-server runtime into one ObsidianLM-managed llama.cpp router for one selected build, with generated per-model presets and safe cross-build replacement on the stable `:8085` endpoint.
 
-Run 5 added deterministic exact-executable, capability-aware production presets, atomic derived-artifact generation, freshness evaluation, and separate read-only preset/launch previews. Run 6 added production launch through a Build/router `RuntimeManager`, controlled cache/environment, managed port preflight/ownership, and strict `/health`/`/models` reconciliation. Run 7 added explicit same-Build model loading and safe cross-Build replacement. Run 8 adds live parent-PID and exact-Build child classification, proven-child GPU attribution, combined managed-runtime VRAM, and router-forwarded child-log metadata. It does not claim Phase 15 completion.
+Run 5 added deterministic exact-executable, capability-aware production presets, atomic derived-artifact generation, freshness evaluation, and separate read-only preset/launch previews. Run 6 added production launch through a Build/router `RuntimeManager`, controlled cache/environment, managed port preflight/ownership, and strict `/health`/`/models` reconciliation. Run 7 added explicit same-Build model loading and safe cross-Build replacement. Run 8 adds live parent-PID and exact-Build child classification, proven-child GPU attribution, combined managed-runtime VRAM, and router-forwarded child-log metadata. Run 9 adds the configuration-facing console. Run 10 integrates `RouterRuntimeState` directly into App shell, Runtime, and Dashboard, including active router configuration, actual launch command, Configured Model drawer, and high-level active Build/loaded-model/resource summary. It does not claim Phase 15 completion.
 
 ### Forward-compatible ownership constraint
 
@@ -549,8 +549,8 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 6. **Model and Build switching:** **Implemented in Run 7.** Same-Build selection uses `POST /models/load` and bounded `/models` observation without restarting the router or issuing normal unload requests. Explicit cross-Build selection preflights the target before stopping the source, verifies exit and port release, revalidates and starts the target on the stable endpoint, then loads the requested model. There is no automatic rollback.
 7. **Process/GPU/log awareness:** **Implemented in Run 8.** Current children require direct ancestry and exact active-Build executable evidence; alias/port metadata maps only proven children through the launch-time alias map. GPU and forwarded-log attribution reuse that proof. Previous/unknown processes remain read-only and no child control authority was added.
 8. **Profiles/Models/Builds UI:** **Implemented in Run 9.** Profiles edits authoritative Configured Models; Models separates Configured Models from persistent/discovered Artifacts and uses Router Runtime for live model state; Builds separates stable registered Builds from discovery and exposes validation, dependencies, preset generation, and launch previews. Same-Build model loading and cross-Build restart actions are explicit.
-9. **Runtime/Dashboard integration:** Run 10. Integrate router and model observations into Runtime and Dashboard views without creating a data-plane proxy.
-10. **Real-machine certification and closure:** Run 11. Validate official, custom, and compatibility builds; same-build autoload/eviction; cross-build restart; multimodal/text-only configurations; service restart; failure recovery; and direct client access.
+9. **Runtime/Dashboard integration:** **Implemented in Run 10.** App shell, Runtime, and Dashboard use `RouterRuntimeState` directly. Runtime owns managed router lifecycle, active router configuration, actual launch command, and Configured Model drawer; Dashboard owns the high-level active Build/loaded-model/resource summary. Run 8 GPU/process/log attribution is integrated read-only. Readiness counts/checks use authoritative Configured Models, stable registered Builds, and router-eligible Builds; discovery remains evidence.
+10. **Real-machine certification and closure:** **Run 11 remains.** Validate official, custom, and compatibility builds; same-build autoload/eviction; cross-build restart; multimodal/text-only configurations; service restart; failure recovery; and direct client access.
 
 ### Safety requirements
 
@@ -857,4 +857,4 @@ These remain implementation-time design decisions and are not resolved by this c
 
 ## 22. Next Step
 
-Phase 14 is complete. Begin Phase 15 with the architecture/contracts and migration-foundation work required before router runtime implementation.
+Phase 14 is complete. Phase 15 is In Progress through Builder Run 10; Run 11 remains real-machine/build compatibility/failure-path certification and closure. Do not claim Phase 15 complete or infer Phase 16 scope from this status.

@@ -1,121 +1,52 @@
-import type { CommandSpec, GpuDevice, ProfileValidationResponse, RuntimeProfile } from "@obsidianlm/shared";
-import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type GpuMonitoringStatus, type ProfileListResponse, type ReadinessResponse, type RuntimeHealthResponse, type RuntimeLogsResponse, type RuntimeState } from "../api";
-
-export type RuntimeStateResponse = {
-  state: RuntimeState;
-  warnings: string[];
-};
-
-export type RuntimeCommandResponse = {
-  command: CommandSpec;
-};
+import type { CommandSpec, ConfiguredModelDetails, LlamaCppBuildDetails, ProcessListResponse, RouterRuntimeResponse } from "@obsidianlm/shared";
+import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type GpuMonitoringStatus, type ReadinessResponse, type RuntimeHealthResponse, type RuntimeLogsResponse } from "../api";
 
 export type DashboardData = {
-  runtimeState: RuntimeState | null;
-  runtimeWarnings: string[];
+  runtime: RouterRuntimeResponse | null;
   runtimeCommand: CommandSpec | null;
+  configuredModels: ConfiguredModelDetails[];
+  builds: LlamaCppBuildDetails[];
   runtimeLogs: RuntimeLogsResponse["logs"];
   gpuStatus: GpuMonitoringStatus | null;
-  profiles: ProfileListResponse["profiles"];
   readiness: ReadinessResponse | null;
   runtimeHealth: RuntimeHealthResponse | null;
-  usedProfileCommandFallback: boolean;
+  processes: ProcessListResponse | null;
   hasToken: boolean;
   loadedAt: string | null;
 };
 
-export type InspectorValidationRow = {
-  label: string;
-  status: "ok" | "warning" | "error" | "empty";
-  detail: string;
-};
-
-export type DashboardInspectorData = {
-  profile: RuntimeProfile | null;
-  validation: ProfileValidationResponse | null;
-  hasToken: boolean;
-};
-
-export const emptyDashboardInspectorData: DashboardInspectorData = {
-  profile: null,
-  validation: null,
-  hasToken: false
-};
-
 export const emptyDashboardData: DashboardData = {
-  runtimeState: null,
-  runtimeWarnings: [],
-  runtimeCommand: null,
-  runtimeLogs: [],
-  gpuStatus: null,
-  profiles: [],
-  readiness: null,
-  runtimeHealth: null,
-  usedProfileCommandFallback: false,
-  hasToken: false,
-  loadedAt: null
+  runtime: null, runtimeCommand: null, configuredModels: [], builds: [], runtimeLogs: [], gpuStatus: null,
+  readiness: null, runtimeHealth: null, processes: null, hasToken: false, loadedAt: null
 };
 
 async function protectedFetch<T>(url: string, token: string): Promise<T | null> {
-  try {
-    return await fetchJson<T>(url, undefined, { token });
-  } catch {
-    return null;
-  }
+  try { return await fetchJson<T>(url, undefined, { token }); } catch { return null; }
 }
 
-export async function fetchDashboardData(activeProfileIdFallback: string | null = null): Promise<DashboardData> {
+/** Router, configured models, and builds are the required runtime authority. */
+export async function fetchDashboardData(): Promise<DashboardData> {
   const token = readStoredAdminToken();
-  if (!token) {
-    return { ...emptyDashboardData };
-  }
-
-  const [runtimeResponse, logsResponse, gpuStatus, profilesResponse, readiness, runtimeHealth] = await Promise.all([
-    protectedFetch<RuntimeStateResponse>(API_ENDPOINTS.runtime.state, token),
+  if (!token) return { ...emptyDashboardData };
+  const [runtime, configured, builds] = await Promise.all([
+    protectedFetch<RouterRuntimeResponse>(API_ENDPOINTS.runtime.state, token),
+    protectedFetch<{ configuredModels: ConfiguredModelDetails[] }>(API_ENDPOINTS.configuredModels.list, token),
+    protectedFetch<{ builds: LlamaCppBuildDetails[] }>(API_ENDPOINTS.builds.list, token)
+  ]);
+  const catalog = runtime?.routerState.status === "running"
+    ? await protectedFetch<{ routerState: RouterRuntimeResponse["routerState"] }>(API_ENDPOINTS.runtime.catalog, token)
+    : null;
+  const [command, logs, gpuStatus, readiness, runtimeHealth, processes] = await Promise.all([
+    protectedFetch<{ command: CommandSpec }>(API_ENDPOINTS.runtime.command, token),
     protectedFetch<RuntimeLogsResponse>(API_ENDPOINTS.runtime.logs(24), token),
     protectedFetch<GpuMonitoringStatus>(API_ENDPOINTS.monitoring.gpu, token),
-    protectedFetch<ProfileListResponse>(API_ENDPOINTS.profiles.list, token),
     protectedFetch<ReadinessResponse>(API_ENDPOINTS.readiness, token),
-    protectedFetch<RuntimeHealthResponse>(API_ENDPOINTS.runtime.health, token)
+    protectedFetch<RuntimeHealthResponse>(API_ENDPOINTS.runtime.health, token),
+    protectedFetch<ProcessListResponse>(API_ENDPOINTS.processes.llama, token)
   ]);
-
-  const runtimeCommandResponse = await protectedFetch<RuntimeCommandResponse>(API_ENDPOINTS.runtime.command, token);
-  const activeProfileId = runtimeResponse?.state.activeProfileId ?? activeProfileIdFallback;
-  const fallbackProfile = activeProfileId ? profilesResponse?.profiles.find((profile) => profile.id === activeProfileId) : null;
-  const fallbackCommandResponse = runtimeCommandResponse ? null : fallbackProfile ? await protectedFetch<RuntimeCommandResponse>(API_ENDPOINTS.profiles.command(fallbackProfile.id), token) : null;
-
   return {
-    runtimeState: runtimeResponse?.state ?? null,
-    runtimeWarnings: runtimeResponse?.warnings ?? [],
-    runtimeCommand: runtimeCommandResponse?.command ?? fallbackCommandResponse?.command ?? null,
-    runtimeLogs: logsResponse?.logs ?? [],
-    gpuStatus,
-    profiles: profilesResponse?.profiles ?? [],
-    readiness,
-    runtimeHealth,
-    usedProfileCommandFallback: !runtimeCommandResponse && Boolean(fallbackCommandResponse),
-    hasToken: true,
-    loadedAt: new Date().toISOString()
-  };
-}
-
-export async function fetchDashboardInspectorData(activeProfileId: string | null = null): Promise<DashboardInspectorData> {
-  const token = readStoredAdminToken();
-  if (!token) {
-    return { ...emptyDashboardInspectorData };
-  }
-
-  const [validationResponse, profileDetailResponse] = await Promise.all([
-    activeProfileId ? protectedFetch<ProfileValidationResponse>(API_ENDPOINTS.profiles.validate(activeProfileId), token) : null,
-    activeProfileId ? protectedFetch<{ profile: RuntimeProfile }>(API_ENDPOINTS.profiles.detail(activeProfileId), token) : null
-  ]);
-
-  const profile = profileDetailResponse?.profile ?? null;
-  const validation = validationResponse ?? null;
-
-  return {
-    profile,
-    validation,
-    hasToken: true
+    runtime: runtime && catalog ? { ...runtime, routerState: catalog.routerState } : runtime,
+    runtimeCommand: command?.command ?? null, configuredModels: configured?.configuredModels ?? [], builds: builds?.builds ?? [],
+    runtimeLogs: logs?.logs ?? [], gpuStatus, readiness, runtimeHealth, processes, hasToken: true, loadedAt: new Date().toISOString()
   };
 }

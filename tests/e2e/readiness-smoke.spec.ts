@@ -45,9 +45,9 @@ test.describe("dashboard readiness", () => {
     await expect(page.getByText("Control and monitor your local llama.cpp runtimes with precision.")).toBeVisible();
     await expect(page.getByRole("button", { name: /Restart/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Stop/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Start runtime/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Open Runtime to start/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Quick Actions" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Active Profile Details" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Active Runtime Details" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Recent Events" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Health Checklist" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Resource Snapshot" })).toBeVisible();

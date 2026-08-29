@@ -10,7 +10,7 @@ The implemented Phases 1-13 used one model-bound profile per managed `llama-serv
 profile = llama-server build + GGUF model + model arguments + endpoint
 ```
 
-The Phase 15 foundation, production router lifecycle, model/Build switching, process/GPU/log awareness, and configuration-facing operator console are implemented through Builder Run 9. `RuntimeManager` selects one validated Build, generates/uses its derived preset, launches one managed router, and persists current lifecycle authority in `router-runtime-state.json`. ObsidianLM remains the control plane; it is not a general inference proxy.
+The Phase 15 foundation, production router lifecycle, model/Build switching, process/GPU/log awareness, and configuration-facing operator console are implemented through Builder Run 10. App shell, Runtime, and Dashboard use `RouterRuntimeState` directly; `RuntimeManager` selects one validated Build, generates/uses its derived preset, launches one managed router, and persists current lifecycle authority in `router-runtime-state.json`. ObsidianLM remains the control plane; it is not a general inference proxy.
 
 ```text
 Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
@@ -18,7 +18,7 @@ Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
 OpenCode / Illustria / local clients → llama.cpp :8085/v1
 ```
 
-Profile compatibility start now starts the mapped Build and loads its mapped model when stopped, or switches models in place when the same Build is running. It never hides a cross-Build restart. Direct same-Build selection uses the router management API and preserves the router PID/runtime ID; explicit cross-Build selection performs preflight, stop, port release, target start, and target load on the same endpoint. Run 8 classifies a router child as managed only from current in-memory router ownership, direct parent evidence, and the exact active Build executable path. It attributes GPU memory and child-prefixed logs only after that proof; previous and unknown processes remain read-only candidates. Run 9 makes Profiles edit authoritative Configured Models, Models distinguish configurations from persistent/discovered Artifacts, and Builds distinguish stable registered Builds from discovery. Runtime and Dashboard integration remains Run 10.
+Profile compatibility start now starts the mapped Build and loads its mapped model when stopped, or switches models in place when the same Build is running. It never hides a cross-Build restart. Direct same-Build selection uses backend `switch-model` with no restart and preserves the router PID/runtime ID; explicit cross-Build selection uses backend `switch-build`/restart, performing preflight, stop, port release, target start, and target load on the same endpoint, with no automatic rollback. Runtime owns this managed router lifecycle and the Configured Model drawer. Run 8 classifies a router child as managed only from current in-memory router ownership, direct parent evidence, and the exact active Build executable path. It attributes GPU memory and child-prefixed logs only after that proof; previous and unknown processes remain read-only candidates. Run 9 makes Profiles edit authoritative Configured Models, Models distinguish configurations from persistent/discovered Artifacts, and Builds distinguish stable registered Builds from discovery. Run 10 integrates Runtime and Dashboard with direct router state.
 
 ## Package Manager
 
@@ -338,7 +338,7 @@ Phase 13 adds readiness, browser smoke, and real-use validation guidance.
 
 Implemented:
 
-- `GET /api/readiness` summarizes setup state, discovery counts, profile count, managed port conflict state, GPU monitor availability, active runtime state, storage warnings, blocking checks, warnings, and recommended next actions.
+- `GET /api/readiness` summarizes setup state, authoritative Configured Model counts, stable registered Build counts, router-eligible Build counts, managed port conflict state, GPU monitor availability, active runtime state, storage warnings, blocking checks, warnings, and recommended next actions. Readiness counts/checks are authoritative for Configured Models, registered Builds, and router-eligible Builds; discovery remains evidence.
 - Readiness is protected after admin setup like other control endpoints and returns sanitized count/status data instead of local absolute paths, token hashes, command lines, or raw runtime paths.
 - The dashboard includes a Readiness / Setup Checklist panel with blocking checks, warnings, discovery counts, empty-state guidance, and next actions.
 - Playwright browser smoke tests run against isolated `.tmp/e2e-data` and `.tmp/e2e-logs` on port `18090` and do not require real GGUF files, llama.cpp tools, GPU, Tailscale, or llama-server.
@@ -365,7 +365,7 @@ Follow `docs/validation/local-real-smoke.md` for the manual checklist before rel
 
 Phase 14 is complete. The operator console now has focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Visible navigation contains no placeholder page. Build discovery remains bounded, Jobs remain one-shot tools, runtime SSE stays bearer-authenticated, and process/telemetry surfaces remain read-only for unknown or external processes.
 
-Phase 14's profile-bound behavior remains historical compatibility behavior. Phase 15 Run 6 uses a Build/router runtime; `activeProfileId` is a legacy projection only. `router-runtime-state.json` is current lifecycle authority. `runtime-state.json` is preserved legacy evidence and is not rewritten by the router lifecycle.
+Phase 14's profile-bound behavior remains historical compatibility behavior. Phase 15 uses a Build/router runtime; `activeProfileId` and `/api/profiles` are compatibility surfaces only. `router-runtime-state.json` is current lifecycle authority. `runtime-state.json` is preserved legacy evidence and is not rewritten by the router lifecycle.
 
 ## Phase 15 Foundation and Planned Router Evolution
 
@@ -373,9 +373,9 @@ The implemented Phase 15 foundation establishes schema-v2 authority and explicit
 
 `phase15-domain.json` is authoritative for configuration. Its canonical revision changes only when stored authoritative content changes. The strict v1-to-v2 upgrade was verified with backup and atomic replacement; valid v2 ignores `profiles.json` changes. `profiles.json` is retained as legacy migration/recovery material and is never rewritten by Profile API after cutover. A separate `LegacyProfileCompatibilityBinding` preserves legacy IDs and `host`/`port`; Profile API operations project/translate through one domain transaction. Runtime lifecycle authority is `router-runtime-state.json`; `runtime-state.json` remains preserved legacy evidence.
 
-Run 6 adds production router launch and managed environment use after Run 4 validation and Run 5 preset generation. Run 7 adds model and Build switching. Static Build evidence/classification remains independent of managed eligibility.
+Run 6 adds production router launch and managed environment use after Run 4 validation and Run 5 preset generation. Run 7 adds model and Build switching. Run 8 integrates read-only GPU/process/log attribution. Run 9 adds the configuration-facing console. Run 10 integrates direct `RouterRuntimeState` into App shell, Runtime, and Dashboard. Static Build evidence/classification remains independent of managed eligibility.
 
-The planned router evolution will adopt llama.cpp's built-in router/preset capability while preserving ObsidianLM's conservative single-managed-runtime policy:
+The implemented router integration uses llama.cpp's built-in router/preset capability while preserving ObsidianLM's conservative single-managed-runtime policy. Run 11 remains real-machine/build compatibility and failure-path certification and closure:
 
 ```text
 ObsidianLM
@@ -685,13 +685,13 @@ Open the built UI/API at `http://localhost:8090`.
 
 From the UI:
 
-1. Select a profile from the Profiles view (the compatibility projection of authoritative domain state).
+1. Select a Configured Model from Profiles (the `/api/profiles` compatibility projection of authoritative domain state).
 2. Review the generated command preview.
 3. Run validation.
 4. Start the profile.
 5. Connect external tools directly to llama.cpp at `http://localhost:8085/v1` unless your profile uses a different port.
 
-These steps retain the legacy Profile workflow for compatibility. Current managed runtime start selects a Build and launches its router; Profile start then loads its mapped model when stopped or switches it in place under the same Build. It returns `build_switch_required` for another Build. Restart reuses the same Build and does not restore a prior loaded model automatically.
+These steps retain the legacy Profile workflow for compatibility. Current managed runtime start selects a Build and launches its router; Profile start then loads its mapped model when stopped or switches it in place under the same Build. It returns `build_switch_required` for another Build. Restart reuses the same Build and does not restore a prior loaded model automatically. The Runtime view shows the active router configuration and actual launch command; the Dashboard summarizes active Build, loaded model, and resources at a high level.
 
 View runtime logs in the dashboard **Logs** panel. It streams live output while a managed runtime is running and can refresh recent persisted runtime logs from disk. The **Jobs** panel shows job logs separately.
 

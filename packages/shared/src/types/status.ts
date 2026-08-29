@@ -1,8 +1,12 @@
 import type { StartupDetectionSummary } from "./detection.js";
 import type { CompactGpuStatus } from "./gpu.js";
 import type { RuntimeStatus, RuntimeType } from "./runtime-state.js";
+import type { LlamaCppBuildId } from "./model-configuration.js";
+import type { RouterRuntimeId } from "./router.js";
 
 export interface ActiveRuntimeStatus {
+  runtimeId?: RouterRuntimeId | null;
+  buildId?: LlamaCppBuildId | null;
   type: RuntimeType;
   status: RuntimeStatus;
   pid: number | null;

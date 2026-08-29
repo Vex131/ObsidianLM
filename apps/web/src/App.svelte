@@ -12,12 +12,8 @@
   import SettingsPage from "./lib/pages/SettingsPage.svelte";
   import SystemPage from "./lib/pages/SystemPage.svelte";
   import { defaultShellStatus, type ShellStatusSummary, type ShellStatusTone } from "./lib/layout/shell-status";
-  import { API_ENDPOINTS, fetchJson, publicFetchJson, readStoredAdminToken, type RuntimeState, type StatusResponse } from "./lib/api";
-
-  type RuntimeStateResponse = {
-    state: RuntimeState;
-    warnings: string[];
-  };
+  import { API_ENDPOINTS, fetchJson, publicFetchJson, readStoredAdminToken, type StatusResponse } from "./lib/api";
+  import type { RouterRuntimeResponse } from "@obsidianlm/shared";
 
   const pageLabels = {
     "#dashboard": "Dashboard",
@@ -50,11 +46,10 @@
   let activeHash = "#dashboard";
   let status: StatusResponse | null = null;
   let statusRequestFailed = false;
-  let runtimeState: RuntimeState | null = null;
-  let runtimeWarnings: string[] = [];
+  let routerRuntime: RouterRuntimeResponse | null = null;
   let now = Date.now();
 
-  $: shellStatus = buildShellStatus(status, statusRequestFailed, runtimeState, now);
+  $: shellStatus = buildShellStatus(status, statusRequestFailed, routerRuntime, now);
 
   function parsePortLabel(apiUrl: string | null | undefined): string | null {
     if (!apiUrl) {
@@ -88,7 +83,7 @@
     return `${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
   }
 
-  function runtimeSummary(runtimeStatus: RuntimeState["status"] | NonNullable<StatusResponse["activeRuntime"]>["status"] | undefined): Pick<ShellStatusSummary, "runtimeLabel" | "runtimeTone"> {
+  function runtimeSummary(runtimeStatus: RouterRuntimeResponse["routerState"]["status"] | undefined): Pick<ShellStatusSummary, "runtimeLabel" | "runtimeTone"> {
     const normalizedStatus = runtimeStatus ?? "stopped";
     const toneByStatus: Record<string, ShellStatusTone> = {
       running: "green",
@@ -118,13 +113,13 @@
   function buildShellStatus(
     currentStatus: StatusResponse | null,
     requestFailed: boolean,
-    currentRuntime: RuntimeState | null,
+    currentRuntime: RouterRuntimeResponse | null,
     currentTime: number
   ): ShellStatusSummary {
     const serviceLabel = currentStatus ? "Service healthy" : requestFailed ? "Service offline" : defaultShellStatus.serviceLabel;
     const serviceTone = currentStatus ? "green" : requestFailed ? "red" : defaultShellStatus.serviceTone;
-    const runtime = runtimeSummary(currentRuntime?.status ?? currentStatus?.activeRuntime?.status);
-    const portLabel = parsePortLabel(currentStatus?.activeRuntime?.apiUrl) ?? (currentStatus?.managedLlamaPort ? String(currentStatus.managedLlamaPort) : "—");
+    const runtime = runtimeSummary(currentRuntime?.routerState.status);
+    const portLabel = currentRuntime?.routerState.port ? String(currentRuntime.routerState.port) : (currentStatus?.managedLlamaPort ? String(currentStatus.managedLlamaPort) : "—");
 
     return {
       serviceLabel,
@@ -132,8 +127,8 @@
       runtimeLabel: runtime.runtimeLabel,
       runtimeTone: runtime.runtimeTone,
       portLabel,
-      uptimeLabel: formatUptime(currentRuntime?.startedAt, currentTime),
-      warningCount: (currentStatus?.warnings?.length ?? 0) + (currentStatus?.detection?.warnings?.length ?? 0),
+      uptimeLabel: formatUptime(currentRuntime?.routerState.startedAt, currentTime),
+      warningCount: (currentStatus?.warnings?.length ?? 0) + (currentStatus?.detection?.warnings?.length ?? 0) + (currentRuntime?.warnings?.length ?? 0) + (currentRuntime?.routerState.warnings?.length ?? 0),
       versionLabel: currentStatus?.version ? `v${currentStatus.version.replace(/^v/, "")}` : defaultShellStatus.versionLabel
     };
   }
@@ -148,18 +143,14 @@
     }
 
     if (!readStoredAdminToken()) {
-      runtimeState = null;
-      runtimeWarnings = [];
+      routerRuntime = null;
       return;
     }
 
     try {
-      const runtimeResponse = await fetchJson<RuntimeStateResponse>(API_ENDPOINTS.runtime.state);
-      runtimeState = runtimeResponse.state;
-      runtimeWarnings = runtimeResponse.warnings ?? [];
+      routerRuntime = await fetchJson<RouterRuntimeResponse>(API_ENDPOINTS.runtime.state);
     } catch {
-      runtimeState = null;
-      runtimeWarnings = [];
+      routerRuntime = null;
     }
   }
 
@@ -191,9 +182,9 @@
 
 <AppShell {activeHash} {shellStatus}>
   {#if activeHash === "#dashboard"}
-    <DashboardPage {shellStatus} {status} {runtimeState} {runtimeWarnings} />
+    <DashboardPage {routerRuntime} />
   {:else if activeHash === "#runtime"}
-    <RuntimePage {shellStatus} {status} {runtimeState} {runtimeWarnings} />
+    <RuntimePage {routerRuntime} />
   {:else if activeHash === "#profiles"}
     <ProfilesPage />
   {:else if activeHash === "#models"}
@@ -211,6 +202,6 @@
   {:else if activeHash === "#system"}
     <SystemPage />
   {:else}
-    <DashboardPage {shellStatus} {status} {runtimeState} {runtimeWarnings} />
+    <DashboardPage {routerRuntime} />
   {/if}
 </AppShell>

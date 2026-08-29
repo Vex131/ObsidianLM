@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import type { DiscoveryWarning, ReadinessCheck, ReadinessResponse, RuntimeProfile } from "@obsidianlm/shared";
+import { isBuildEligibleForManagedInference, type DiscoveryWarning, type ReadinessCheck, type ReadinessResponse } from "@obsidianlm/shared";
 import { getStorageWarnings, loadProfilesReadOnly, loadSettingsReadOnly } from "../config/storage.js";
+import { loadPhase15Domain } from "../config/phase15-domain.js";
 import { discoverLlamaBuilds } from "../discovery/llama-builds.js";
 import { discoverModels } from "../discovery/models.js";
 import { discoverToolInputs } from "../discovery/tool-inputs.js";
@@ -25,10 +26,6 @@ function runtimeMessage(status: ReadinessResponse["runtime"]["status"], active: 
   return null;
 }
 
-function hasProfiles(profiles: RuntimeProfile[]): boolean {
-  return profiles.length > 0;
-}
-
 function check(id: string, label: string, status: ReadinessCheck["status"], message: string, count?: number): ReadinessCheck {
   return { id, label, status, message, ...(count === undefined ? {} : { count }) };
 }
@@ -44,14 +41,15 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
   app.get("/api/readiness", async (): Promise<ReadinessResponse> => {
     const checkedAt = new Date().toISOString();
     const settings = await loadSettingsReadOnly();
-    const [models, builds, toolInputs, profiles] = await Promise.all([discoverModels(settings), discoverLlamaBuilds(settings), discoverToolInputs(settings), loadProfilesReadOnly()]);
-    const state = runtimeManager.getState();
+    const [models, builds, toolInputs, profiles, domain] = await Promise.all([discoverModels(settings), discoverLlamaBuilds(settings), discoverToolInputs(settings), loadProfilesReadOnly(), loadPhase15Domain()]);
+    const routerState = runtimeManager.getRouterState();
     const port = await detectPort(settings.managedLlamaPort, "127.0.0.1");
-    const portStatus = classifyPortStatus(port, state.pid);
+    const portStatus = classifyPortStatus(port, routerState.pid);
     const awareness = await runtimeManager.refreshProcessAwareness();
     const gpuStatus = await getGpuMonitoringStatus(awareness.available === false ? null : awareness.processes, gpuMonitorOptions);
-    const runtimeActive = state.status !== "stopped" && state.status !== "unknown_previous_runtime";
-    const activeProfile = runtimeManager.getActiveProfile() ?? profiles.find((profile) => profile.id === state.activeProfileId) ?? null;
+    const runtimeActive = ["starting", "running", "stopping"].includes(routerState.status);
+    const activeProfile = routerState.compatibilityProfileId ? profiles.find((profile) => profile.id === routerState.compatibilityProfileId) ?? null : null;
+    const eligibleBuilds = domain.builds.filter(isBuildEligibleForManagedInference);
     const benchCount = builds.builds.reduce((count, build) => count + build.tools.filter((tool) => tool.kind === "bench" && tool.exists).length, 0);
     const perplexityCount = builds.builds.reduce((count, build) => count + build.tools.filter((tool) => tool.kind === "perplexity" && tool.exists).length, 0);
     const storageWarnings = getStorageWarnings();
@@ -67,10 +65,12 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
       check("llama-perplexity", "llama-perplexity tools", perplexityCount > 0 ? "pass" : "warning", perplexityCount > 0 ? `${perplexityCount} llama-perplexity tool(s) discovered.` : "Add or build llama-perplexity before running perplexity validation.", perplexityCount),
       check("tool-input-folders", "Tool input folders", settings.toolInputFolders.length > 0 ? "pass" : "warning", settings.toolInputFolders.length > 0 ? "At least one tool input folder is configured." : "Configure toolInputFolders before llama-perplexity validation."),
       check("tool-inputs", "Tool inputs", toolInputs.files.length > 0 ? "pass" : "warning", toolInputs.files.length > 0 ? `${toolInputs.files.length} tool input file(s) discovered.` : "Add a small local .txt, .raw, .jsonl, or .md input and rescan before llama-perplexity validation.", toolInputs.files.length),
-      check("profiles", "Profiles", hasProfiles(profiles) ? "pass" : "block", hasProfiles(profiles) ? `${profiles.length} profile(s) configured.` : "Create or import a llama.cpp server profile before starting runtime validation.", profiles.length),
+      check("configured-models", "Configured Models", domain.configuredModels.length > 0 ? "pass" : "block", domain.configuredModels.length > 0 ? `${domain.configuredModels.length} configured model(s) registered.` : "Register at least one configured model before starting runtime validation.", domain.configuredModels.length),
+      check("registered-builds", "Registered Builds", domain.builds.length > 0 ? "pass" : "block", domain.builds.length > 0 ? `${domain.builds.length} Build(s) registered.` : "Register at least one llama.cpp Build before starting runtime validation.", domain.builds.length),
+      check("eligible-builds", "Router-eligible Builds", eligibleBuilds.length > 0 ? "pass" : "block", eligibleBuilds.length > 0 ? `${eligibleBuilds.length} Build(s) are eligible for managed router inference.` : "Validate a registered Build for managed router inference.", eligibleBuilds.length),
       check("managed-port", "Managed port", portStatus.conflict ? "block" : "pass", portStatus.conflict ? portStatus.conflictMessage ?? "Managed llama.cpp port is already in use by another process." : `Managed llama.cpp port ${settings.managedLlamaPort} is available or owned by the current managed runtime.`),
       check("gpu-monitor", "GPU monitor", gpuStatus.available ? "pass" : "unavailable", gpuStatus.available ? `${gpuStatus.summary.gpuCount} NVIDIA GPU(s) visible.` : "GPU monitoring is unavailable or no NVIDIA GPU was detected; CPU-only validation can still proceed."),
-      check("runtime", "Managed router", runtimeActive ? "pass" : "warning", runtimeActive ? `Managed router state is ${state.status}.` : "No active managed router is running; start an eligible Build for router health validation."),
+      check("runtime", "Managed router", runtimeActive ? "pass" : "warning", runtimeActive ? `Managed router state is ${routerState.status}.` : "No active managed router is running; start an eligible Build for router health validation."),
       check("storage", "Storage", storageWarnings.length === 0 ? "pass" : "warning", storageWarnings.length === 0 ? "No storage warnings reported." : "Storage warnings were reported; review local data JSON backups.", storageWarnings.length)
     ];
 
@@ -86,6 +86,10 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
         toolInputFolders: settings.toolInputFolders.length > 0
       },
       counts: {
+        registeredArtifacts: domain.artifacts.length,
+        configuredModels: domain.configuredModels.length,
+        registeredBuilds: domain.builds.length,
+        eligibleBuilds: eligibleBuilds.length,
         ggufModels: models.models.length,
         serverBuilds: builds.builds.length,
         llamaBenchTools: benchCount,
@@ -107,13 +111,17 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
         message: gpuStatus.available ? "GPU monitoring is available." : "GPU monitoring is unavailable or no NVIDIA GPU was detected."
       },
       runtime: {
-        status: state.status,
+        runtimeId: routerState.activeRuntimeId,
+        buildId: routerState.activeBuildId,
+        loadedConfiguredModelIds: routerState.configuredModelStates.filter((model) => model.state === "loaded").map((model) => model.configuredModelId),
+        status: routerState.status,
         active: runtimeActive,
-        profileId: state.activeProfileId,
+        profileId: routerState.compatibilityProfileId ?? null,
         profileName: activeProfile?.name ?? null,
-        port: state.port,
+        port: routerState.port,
         health: runtimeActive ? "active" : "inactive",
-        message: runtimeMessage(state.status, runtimeActive)
+        routerHealth: routerState.health.state,
+        message: runtimeMessage(routerState.status, runtimeActive)
       },
       checks,
       blockingChecks,
