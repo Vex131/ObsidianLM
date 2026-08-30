@@ -184,6 +184,9 @@ export type {
 } from "./types/router.js";
 export type {
   ConfiguredModelDetailResponse,
+  ConfiguredModelDraft,
+  ConfiguredModelDraftPreviewRequest,
+  ConfiguredModelDraftPreviewResponse,
   ConfiguredModelDetails,
   ConfiguredModelListResponse,
   LlamaCppBuildCapabilitiesResponse,

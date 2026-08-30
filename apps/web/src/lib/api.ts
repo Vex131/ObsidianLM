@@ -128,6 +128,7 @@ export const API_ENDPOINTS = {
   configuredModels: {
     list: "/api/configured-models",
     create: "/api/configured-models",
+    preview: "/api/configured-models/preview",
     detail: (id: string) => `/api/configured-models/${enc(id)}`,
     update: (id: string) => `/api/configured-models/${enc(id)}`,
     duplicate: (id: string) => `/api/configured-models/${enc(id)}/duplicate`,

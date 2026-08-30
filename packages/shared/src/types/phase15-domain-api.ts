@@ -1,7 +1,7 @@
 import type { LlamaBuildCapabilitiesManifest } from "./discovery.js";
 import type { LlamaCppBuild } from "./llama-build.js";
 import type { ConfiguredModel, ConfiguredModelId, ModelArtifact } from "./model-configuration.js";
-import type { RouterRuntimeState } from "./router.js";
+import type { RouterLaunchPreview, RouterPresetPreview, RouterRuntimeState } from "./router.js";
 import type { RuntimeState, RuntimeWarning } from "./runtime-state.js";
 
 export interface ModelArtifactListItem extends ModelArtifact {
@@ -40,6 +40,18 @@ export interface ConfiguredModelListResponse {
 export interface ConfiguredModelDetailResponse {
   revision: string;
   model: ConfiguredModelDetails;
+}
+
+export type ConfiguredModelDraft = Omit<ConfiguredModel, "schemaVersion" | "id" | "referenceStatus" | "validationStatus" | "routerAlias"> & { routerAlias?: string };
+
+export interface ConfiguredModelDraftPreviewRequest {
+  draft: ConfiguredModelDraft;
+  existingId?: ConfiguredModelId;
+}
+
+export interface ConfiguredModelDraftPreviewResponse {
+  preset: RouterPresetPreview;
+  launch: RouterLaunchPreview;
 }
 
 export interface LlamaCppBuildDetails extends LlamaCppBuild {

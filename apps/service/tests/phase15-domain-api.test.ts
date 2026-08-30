@@ -206,6 +206,26 @@ test("router preset and launch APIs are authenticated, read-only until generatio
   await writeFile(expectedPath, `${preview.json().content}# manual edit\n`); const stale = await f.app.inject({ method: "GET", url: `/api/builds/${build.id}/router-preset/preview`, headers: f.auth }); assert.equal(stale.json().artifact.freshness, "stale"); assert.equal((await loadPhase15Domain(f.dir)).configuredModels[0]!.id, model.id);
 });
 
+test("configured model draft previews are read-only and use draft content", async (t) => {
+  const options: CreateServerOptions = { functionalRouterValidatorDependencies: { fingerprint: async () => "api-preview-fingerprint", staticProbe: async (build) => validationManifest(build.id), resourceAvailable: async () => true, managedPort: async () => 8085, probe: async ({ routerAlias }) => ({ launchAttempted: true, presetAccepted: true, healthVerified: true, modelsVerified: true, models: [{ id: routerAlias, status: "unloaded" }], classification: "eligible", reason: "fixture", warnings: [], failures: [], cleanup: { childTerminated: true, workspaceRemoved: true } }) }, routerPresetDependencies: { fingerprint: async () => "api-preview-fingerprint", capabilities: async (_server, id) => validationManifest(id) } };
+  const f = await fixture(t, options);
+  const build = (await f.app.inject({ method: "POST", url: "/api/builds/register", headers: f.auth, payload: { discoveryId: f.buildId } })).json().build;
+  const artifact = (await f.app.inject({ method: "POST", url: "/api/model-artifacts/register", headers: f.auth, payload: { discoveryId: f.modelId } })).json().artifact;
+  await f.app.inject({ method: "PATCH", url: `/api/model-artifacts/${artifact.id}`, headers: f.auth, payload: { kind: "model" } });
+  const model = (await f.app.inject({ method: "POST", url: "/api/configured-models", headers: f.auth, payload: { displayName: "Persisted", artifactId: artifact.id, buildId: build.id, enabled: true, llamaArgs: { ctxSize: 4096 } } })).json().model;
+  await f.app.inject({ method: "POST", url: `/api/builds/${build.id}/validate-router`, headers: f.auth, payload: { configuredModelId: model.id } });
+  const draft = { displayName: "Draft", artifactId: artifact.id, buildId: build.id, enabled: true, llamaArgs: { ctxSize: 8192 } };
+  const preview = await f.app.inject({ method: "POST", url: "/api/configured-models/preview", headers: f.auth, payload: { existingId: model.id, draft } });
+  assert.equal(preview.statusCode, 200);
+  assert.match(preview.json().preset.content, /ctx-size = 8192/); assert.equal(preview.json().launch.command.args.includes("--models-preset"), true);
+  assert.equal((await f.app.inject({ method: "GET", url: `/api/configured-models/${model.id}`, headers: f.auth })).json().model.llamaArgs.ctxSize, 4096);
+  const appended = await f.app.inject({ method: "POST", url: "/api/configured-models/preview", headers: f.auth, payload: { draft: { ...draft, displayName: "Temporary" } } });
+  assert.equal(appended.statusCode, 200); assert.equal(appended.json().preset.configuredModelIds.length, 2); assert.equal((await f.app.inject({ method: "GET", url: "/api/configured-models", headers: f.auth })).json().configuredModels.length, 1);
+  await assert.rejects(() => readFile(path.join(f.dir, "generated", "llama-router", `${build.id}.ini`)));
+  assert.equal((await f.app.inject({ method: "POST", url: "/api/configured-models/preview", headers: f.auth, payload: { existingId: model.id, draft: { ...draft, extraArgs: ["--model", "forged"] } } })).statusCode, 400);
+  assert.equal((await f.app.inject({ method: "POST", url: "/api/configured-models/preview", headers: f.auth, payload: { draft: 42 } })).statusCode, 400);
+});
+
 test("domain mutations serialize and failed atomic rename preserves bytes", async (t) => {
   const f = await fixture(t); const seed = await mutatePhase15Domain((s) => { const a = findOrRegisterLocalArtifactInSnapshot(s, f.model, { kind: "model", referenceStatus: "available" }); const b = findOrRegisterLegacyBuildInSnapshot(s, f.server, "available"); return { a, b }; }, f.dir); const input = { displayName: "Concurrent", artifactId: seed.result.a.id, buildId: seed.result.b.id, enabled: false } as any;
   const results = await Promise.all([mutatePhase15Domain((s) => createConfiguredModelInSnapshot(s, { ...input, displayName: "A" }), f.dir), mutatePhase15Domain((s) => createConfiguredModelInSnapshot(s, { ...input, displayName: "B" }), f.dir)]); assert.equal((await loadPhase15Domain(f.dir)).configuredModels.length, 2); assert.equal(results.length, 2);
