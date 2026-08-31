@@ -33,12 +33,15 @@ function setOrDeleteEnv(name: string, value: string | undefined): void {
 }
 
 async function makeFixture() {
-  const root = await mkdir(path.join(tmpdir(), `obsidianlm-phase7-${process.pid}-${Date.now()}`), { recursive: true });
+  const root = await mkdir(
+    path.join(tmpdir(), `obsidianlm-phase7-${process.pid}-${Date.now()}`),
+    { recursive: true },
+  );
   assert.ok(root);
   return {
     root,
     dataDir: path.join(root, "custom-data"),
-    logsDir: path.join(root, "custom-logs")
+    logsDir: path.join(root, "custom-logs"),
   };
 }
 
@@ -88,7 +91,13 @@ test("environment overrides win over service-mode defaults and directories are c
   assert.equal(paths.logsDir, fixture.logsDir);
 
   await ensureAppDirectories();
-  await Promise.all([access(paths.dataDir), access(paths.logsDir), access(paths.runtimeLogsDir), access(paths.jobLogsDir), access(paths.serviceLogsDir)]);
+  await Promise.all([
+    access(paths.dataDir),
+    access(paths.logsDir),
+    access(paths.runtimeLogsDir),
+    access(paths.jobLogsDir),
+    access(paths.serviceLogsDir),
+  ]);
 });
 
 test("legacy OBSIDIANLM_LOGS_DIR remains a log-dir override alias", async (t) => {
@@ -125,20 +134,46 @@ test("status response exposes service-mode labels without local paths", async (t
 });
 
 test("Windows service scripts and template stay wrapper-local and machine-neutral", async () => {
-  const rootPackage = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  for (const scriptName of ["service:install", "service:uninstall", "service:start", "service:stop", "service:restart", "service:status"]) {
-    assert.match(rootPackage.scripts[scriptName], /^powershell -NoProfile -ExecutionPolicy Bypass -File scripts\/windows\//u);
+  const rootPackage = JSON.parse(
+    await readFile(path.join(repoRoot, "package.json"), "utf8"),
+  );
+  for (const scriptName of [
+    "service:install",
+    "service:uninstall",
+    "service:start",
+    "service:stop",
+    "service:restart",
+    "service:status",
+  ]) {
+    assert.match(
+      rootPackage.scripts[scriptName],
+      /^powershell -NoProfile -ExecutionPolicy Bypass -File scripts\/windows\//u,
+    );
   }
 
   const scriptDir = path.join(repoRoot, "scripts", "windows");
-  const files = ["common-service.ps1", "install-service.ps1", "uninstall-service.ps1", "start-service.ps1", "stop-service.ps1", "restart-service.ps1", "status-service.ps1", "obsidianlm-service.xml"];
-  const contents = await Promise.all(files.map((file) => readFile(path.join(scriptDir, file), "utf8")));
+  const files = [
+    "common-service.ps1",
+    "install-service.ps1",
+    "uninstall-service.ps1",
+    "start-service.ps1",
+    "stop-service.ps1",
+    "restart-service.ps1",
+    "status-service.ps1",
+    "obsidianlm-service.xml",
+  ];
+  const contents = await Promise.all(
+    files.map((file) => readFile(path.join(scriptDir, file), "utf8")),
+  );
   const allText = contents.join("\n");
 
   assert.match(allText, /Set-StrictMode -Version Latest/u);
   assert.match(allText, /Assert-ObsidianServiceOwned/u);
   assert.match(allText, /Get-ServiceExecutablePath/u);
-  assert.match(allText, /\[string\]::Equals\(\$serviceExecutable, \$script:WrapperExePath/u);
+  assert.match(
+    allText,
+    /\[string\]::Equals\(\$serviceExecutable, \$script:WrapperExePath/u,
+  );
   assert.equal(/StartsWith\(\$script:WrapperExePath/u.test(allText), false);
   assert.match(allText, /ObsidianLM Runtime Manager/u);
   assert.match(allText, /obsidianlm-service\.exe/u);
@@ -146,10 +181,23 @@ test("Windows service scripts and template stay wrapper-local and machine-neutra
   assert.match(allText, /OBSIDIANLM_DATA_DIR/u);
   assert.match(allText, /OBSIDIANLM_LOG_DIR/u);
   assert.equal(/C:\\Users\\/u.test(allText), false);
-  assert.equal(/Invoke-WebRequest|Start-BitsTransfer|curl\.exe/u.test(allText), false);
+  assert.equal(
+    /Invoke-WebRequest|Start-BitsTransfer|curl\.exe/u.test(allText),
+    false,
+  );
 
-  for (const file of ["start-service.ps1", "stop-service.ps1", "restart-service.ps1", "status-service.ps1", "uninstall-service.ps1"]) {
+  for (const file of [
+    "start-service.ps1",
+    "stop-service.ps1",
+    "restart-service.ps1",
+    "status-service.ps1",
+    "uninstall-service.ps1",
+  ]) {
     const text = await readFile(path.join(scriptDir, file), "utf8");
-    assert.match(text, /Assert-ObsidianServiceInstalled/u, `${file} must verify ownership before service operations`);
+    assert.match(
+      text,
+      /Assert-ObsidianServiceInstalled/u,
+      `${file} must verify ownership before service operations`,
+    );
   }
 });

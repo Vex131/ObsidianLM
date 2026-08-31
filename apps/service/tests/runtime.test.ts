@@ -30,9 +30,9 @@ const representativeProfile: LlamaCppProfile = {
     threadsBatch: 16,
     contBatching: true,
     metrics: true,
-    webui: true
+    webui: true,
   },
-  extraArgs: ["--timeout", "3600"]
+  extraArgs: ["--timeout", "3600"],
 };
 
 test("buildLlamaCppServerCommand maps profile fields to llama-server args", () => {
@@ -78,7 +78,7 @@ test("buildLlamaCppServerCommand maps profile fields to llama-server args", () =
     "--metrics",
     "--webui",
     "--timeout",
-    "3600"
+    "3600",
   ]);
   assert.match(command.displayCommand, /llama-server\.exe/);
   assert.match(command.displayCommand, /--model/);
@@ -89,35 +89,78 @@ test("buildLlamaCppServerCommand emits sparse structured overrides before extra 
   const command = buildLlamaCppServerCommand({
     ...representativeProfile,
     llamaArgs: { ctxSize: 4096, metrics: false },
-    flagOverrides: [{ flag: "--zeta" }, { flag: "--alpha", values: ["one", "two"] }],
-    extraArgs: ["--tail"]
+    flagOverrides: [
+      { flag: "--zeta" },
+      { flag: "--alpha", values: ["one", "two"] },
+    ],
+    extraArgs: ["--tail"],
   });
-  assert.deepEqual(command.args, ["--model", representativeProfile.modelPath, "--host", "0.0.0.0", "--port", "8085", "--ctx-size", "4096", "--alpha", "one", "two", "--zeta", "--tail"]);
+  assert.deepEqual(command.args, [
+    "--model",
+    representativeProfile.modelPath,
+    "--host",
+    "0.0.0.0",
+    "--port",
+    "8085",
+    "--ctx-size",
+    "4096",
+    "--alpha",
+    "one",
+    "two",
+    "--zeta",
+    "--tail",
+  ]);
 });
 
 test("validateProfile rejects malformed and conflicting structured overrides", async () => {
   const result = await validateProfile({
     ...representativeProfile,
-    flagOverrides: [{ flag: "--model" }, { flag: "--ctx-size", values: ["4096"] }, { flag: "bad flag" }]
+    flagOverrides: [
+      { flag: "--model" },
+      { flag: "--ctx-size", values: ["4096"] },
+      { flag: "bad flag" },
+    ],
   });
   assert.equal(result.valid, false);
   assert.ok(result.errors.some((error) => error.includes("required --model")));
-  assert.ok(result.errors.some((error) => error.includes("conflicts with llamaArgs.ctxSize")));
-  assert.ok(result.errors.some((error) => error.includes("must be a flag name")));
+  assert.ok(
+    result.errors.some((error) =>
+      error.includes("conflicts with llamaArgs.ctxSize"),
+    ),
+  );
+  assert.ok(
+    result.errors.some((error) => error.includes("must be a flag name")),
+  );
 });
 
 test("validateProfile rejects short aliases that conflict with managed arguments", async () => {
-  const modelConflict = await validateProfile({ ...representativeProfile, flagOverrides: [{ flag: "-m", values: ["other.gguf"] }] }, { strictPaths: false });
-  assert.ok(modelConflict.errors.some((error) => error.includes("required -m")));
+  const modelConflict = await validateProfile(
+    {
+      ...representativeProfile,
+      flagOverrides: [{ flag: "-m", values: ["other.gguf"] }],
+    },
+    { strictPaths: false },
+  );
+  assert.ok(
+    modelConflict.errors.some((error) => error.includes("required -m")),
+  );
 
-  const contextConflict = await validateProfile({ ...representativeProfile, flagOverrides: [{ flag: "-c", values: ["2048"] }] }, { strictPaths: false });
-  assert.ok(contextConflict.errors.some((error) => error.includes("llamaArgs.ctxSize")));
+  const contextConflict = await validateProfile(
+    {
+      ...representativeProfile,
+      flagOverrides: [{ flag: "-c", values: ["2048"] }],
+    },
+    { strictPaths: false },
+  );
+  assert.ok(
+    contextConflict.errors.some((error) => error.includes("llamaArgs.ctxSize")),
+  );
 });
 
 test("validateProfile returns clear errors for missing buildPath", async () => {
   const result = await validateProfile({
     ...representativeProfile,
-    buildPath: ""
+    buildPath: "",
   });
 
   assert.equal(result.valid, false);
@@ -127,7 +170,7 @@ test("validateProfile returns clear errors for missing buildPath", async () => {
 test("validateProfile returns clear errors for missing modelPath", async () => {
   const result = await validateProfile({
     ...representativeProfile,
-    modelPath: ""
+    modelPath: "",
   });
 
   assert.equal(result.valid, false);
@@ -137,11 +180,15 @@ test("validateProfile returns clear errors for missing modelPath", async () => {
 test("validateProfile rejects unsupported runtimeType", async () => {
   const result = await validateProfile({
     ...representativeProfile,
-    runtimeType: "ollama"
+    runtimeType: "ollama",
   });
 
   assert.equal(result.valid, false);
-  assert.ok(result.errors.includes("Unsupported runtimeType. Phase 1 only supports llama.cpp."));
+  assert.ok(
+    result.errors.includes(
+      "Unsupported runtimeType. Phase 1 only supports llama.cpp.",
+    ),
+  );
 });
 
 test("validateProfile rejects malformed llamaArgs values", async () => {
@@ -149,12 +196,14 @@ test("validateProfile rejects malformed llamaArgs values", async () => {
     ...representativeProfile,
     llamaArgs: {
       ...representativeProfile.llamaArgs,
-      ctxSize: "bad"
-    }
+      ctxSize: "bad",
+    },
   });
 
   assert.equal(result.valid, false);
-  assert.ok(result.errors.includes("llamaArgs.ctxSize must be a number when provided."));
+  assert.ok(
+    result.errors.includes("llamaArgs.ctxSize must be a number when provided."),
+  );
 });
 
 test("RuntimeManager stop does not kill anything without an in-memory child", async () => {

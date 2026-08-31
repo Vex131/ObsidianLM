@@ -2,7 +2,7 @@ import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 import type { AppSettings, DiscoveredLlamaCppBuild, DiscoveredLlamaCppTool, DiscoveredLlamaCppToolKind, DiscoveryWarning, LlamaBuildDiscoveryResponse } from "@obsidianlm/shared";
 import { loadSettings } from "../config/storage.js";
-import { friendlyNameFromFolder, stableId } from "./helpers.js";
+import { normalizePathForCompare, stableId } from "./helpers.js";
 
 export const maxLlamaBuildDiscoveryDepth = 6;
 export const maxLlamaBuildVisitedDirectories = 2_000;
@@ -19,19 +19,7 @@ const knownTools: Record<string, DiscoveredLlamaCppToolKind> = {
   "llama-perplexity": "perplexity"
 };
 
-function buildName(discoveryRoot: string, folder: string): { name: string; buildRootHint: string } {
-  const relativeFolder = path.relative(discoveryRoot, folder);
-  const segments = relativeFolder.split(path.sep).filter(Boolean);
-  const generic = new Set(["bin", "build", "release", "debug", "out", "dist", "install", "x64", "x86", "arm64"]);
-  const meaningful = segments.find((segment) => !generic.has(segment.toLowerCase()));
-  const hint = meaningful ? path.join(discoveryRoot, meaningful) : discoveryRoot;
-  return {
-    name: friendlyNameFromFolder(meaningful ?? path.basename(discoveryRoot)),
-    buildRootHint: hint
-  };
-}
-
-async function scanBuildFolder(folder: string, currentPath: string, depth: number, state: { visitedDirectories: number; maxVisitedWarning: boolean }, buildMap: Map<string, { discoveryRoot: string; tools: DiscoveredLlamaCppTool[] }>, warnings: DiscoveryWarning[]): Promise<void> {
+async function scanBuildFolder(folder: string, currentPath: string, depth: number, state: { visitedDirectories: number; maxVisitedWarning: boolean }, tools: DiscoveredLlamaCppTool[], warnings: DiscoveryWarning[]): Promise<void> {
   if (state.visitedDirectories >= maxLlamaBuildVisitedDirectories) {
     if (!state.maxVisitedWarning) {
       warnings.push({ code: "max_visited_directories_reached", message: `Stopped llama.cpp discovery after visiting ${maxLlamaBuildVisitedDirectories} directories.`, folder, path: currentPath });
@@ -71,7 +59,7 @@ async function scanBuildFolder(folder: string, currentPath: string, depth: numbe
         warnings.push({ code: "folder_unreadable", message: `Could not read ${entryPath}: ${error instanceof Error ? error.message : "unknown error"}`, folder, path: entryPath });
         continue;
       }
-      await scanBuildFolder(folder, entryPath, depth + 1, state, buildMap, warnings);
+      await scanBuildFolder(folder, entryPath, depth + 1, state, tools, warnings);
       continue;
     }
 
@@ -84,9 +72,31 @@ async function scanBuildFolder(folder: string, currentPath: string, depth: numbe
       continue;
     }
 
-    const build = buildMap.get(currentPath) ?? { discoveryRoot: folder, tools: [] };
-    build.tools.push({ kind, fileName: entry.name, path: entryPath, exists: true });
-    buildMap.set(currentPath, build);
+    tools.push({ kind, fileName: entry.name, path: entryPath, exists: true });
+  }
+}
+
+function serverPriority(candidate: string, tool: DiscoveredLlamaCppTool): [number, number, string] {
+  const relative = path.relative(candidate, tool.path);
+  const location = relative === tool.fileName ? 0 : path.dirname(relative).toLowerCase() === "bin" ? 1 : 2;
+  return [location, tool.fileName.toLowerCase().endsWith(".exe") ? 0 : 1, normalizePathForCompare(tool.path)];
+}
+
+function comparePriority(left: [number, number, string], right: [number, number, string]): number {
+  return left[0] - right[0] || left[1] - right[1] || left[2].localeCompare(right[2]);
+}
+
+async function candidatesForRoot(root: string, warnings: DiscoveryWarning[]): Promise<string[]> {
+  try {
+    const entries = await readdir(root, { withFileTypes: true });
+    const rootHasServer = entries.some((entry) => entry.isFile() && knownTools[entry.name.toLowerCase()] === "server");
+    const bin = entries.find((entry) => entry.isDirectory() && !entry.isSymbolicLink() && entry.name.toLowerCase() === "bin");
+    const binHasServer = bin && (await readdir(path.join(root, bin.name), { withFileTypes: true })).some((entry) => entry.isFile() && knownTools[entry.name.toLowerCase()] === "server");
+    if (rootHasServer || binHasServer) return [root];
+    return entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && entry.name.toLowerCase() !== "bin").map((entry) => path.join(root, entry.name)).sort((a, b) => a.localeCompare(b));
+  } catch (error) {
+    warnings.push({ code: "folder_unreadable", message: `Could not read ${root}: ${error instanceof Error ? error.message : "unknown error"}`, folder: root, path: root });
+    return [];
   }
 }
 
@@ -94,7 +104,7 @@ export async function discoverLlamaBuilds(settingsOverride?: AppSettings): Promi
   const settings = settingsOverride ?? (await loadSettings());
   const detectedAt = new Date().toISOString();
   const warnings: DiscoveryWarning[] = [];
-  const buildMap = new Map<string, { discoveryRoot: string; tools: DiscoveredLlamaCppTool[] }>();
+  const builds: DiscoveredLlamaCppBuild[] = [];
   const scanState = { visitedDirectories: 0, maxVisitedWarning: false };
 
   for (const folder of settings.llamaCppFolders) {
@@ -116,30 +126,26 @@ export async function discoverLlamaBuilds(settingsOverride?: AppSettings): Promi
       continue;
     }
 
-    await scanBuildFolder(folder, folder, 0, scanState, buildMap, warnings);
-  }
-
-  const builds: DiscoveredLlamaCppBuild[] = [];
-  for (const [folder, build] of buildMap) {
-    const sortedTools = build.tools.sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path));
-    for (const server of sortedTools.filter((tool) => tool.kind === "server")) {
+    for (const candidate of await candidatesForRoot(folder, warnings)) {
+      const tools: DiscoveredLlamaCppTool[] = [];
+      await scanBuildFolder(candidate, candidate, 0, scanState, tools, warnings);
+      const sortedTools = tools.sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path));
+      const servers = sortedTools.filter((tool) => tool.kind === "server").sort((a, b) => comparePriority(serverPriority(candidate, a), serverPriority(candidate, b)));
+      const server = servers[0];
       if (builds.length >= maxLlamaBuildResults) {
         if (!warnings.some((warning) => warning.code === "max_build_results_reached")) warnings.push({ code: "max_build_results_reached", message: `Stopped llama.cpp discovery after ${maxLlamaBuildResults} builds.` });
         break;
       }
-      const metadata = buildName(build.discoveryRoot, path.dirname(server.path));
-      const associatedTools = [server, ...sortedTools.filter((tool) => tool.kind !== "server")]
-        .sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path));
       builds.push({
-        id: stableId(server.path),
-        name: metadata.name,
-        folder,
-        serverPath: server.path,
-        tools: associatedTools,
+        id: stableId(normalizePathForCompare(candidate)),
+        name: path.basename(candidate),
+        folder: candidate,
+        ...(server ? { serverPath: server.path, ...(servers.length > 1 ? { warnings: [`Multiple llama-server executables were found; using ${path.relative(candidate, server.path)}.`] } : {}) } : { serverPath: "", status: "missing", warnings: ["llama-server.exe not found (possibly broken build)."] }),
+        tools: server ? [server, ...sortedTools.filter((tool) => tool !== server && tool.kind !== "server")] : sortedTools,
         detectedAt,
-        discoveryRoot: build.discoveryRoot,
-        buildRootHint: metadata.buildRootHint,
-        relativeServerPath: path.relative(build.discoveryRoot, server.path)
+        discoveryRoot: folder,
+        buildRootHint: candidate,
+        ...(server ? { relativeServerPath: path.relative(candidate, server.path) } : {})
       });
     }
   }

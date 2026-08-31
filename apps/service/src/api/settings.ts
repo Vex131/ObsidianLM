@@ -4,6 +4,7 @@ import { loadSettings, saveSettings } from "../config/storage.js";
 import { normalizeFolderList } from "../discovery/helpers.js";
 import { sanitizeSettingsForApi } from "./sanitize.js";
 import { RuntimeManager } from "../runtime/manager.js";
+import { synchronizeDiscoveryCatalog } from "../discovery/catalog-sync.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -29,6 +30,7 @@ export async function registerSettingsRoutes(app: FastifyInstance, runtimeManage
     };
 
     await saveSettings(nextSettings);
+    await synchronizeDiscoveryCatalog();
     return { settings: sanitizeSettingsForApi(nextSettings) };
   });
 

@@ -10,7 +10,6 @@ export interface AppSettings {
   modelFolders: string[];
   llamaCppFolders: string[];
   toolInputFolders: string[];
-  adminTokenHash: string | null;
 }
 
 export interface RuntimeSettingsUpdate {

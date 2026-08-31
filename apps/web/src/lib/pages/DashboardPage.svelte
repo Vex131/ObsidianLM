@@ -4,7 +4,7 @@
   import Icon from "../components/Icon.svelte";
   import StatusDot from "../components/StatusDot.svelte";
   import type { RouterRuntimeResponse } from "@obsidianlm/shared";
-  import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type GpuMonitoringStatus, type RuntimeActionResult } from "../api";
+  import { API_ENDPOINTS, fetchJson, type GpuMonitoringStatus, type RuntimeActionResult } from "../api";
   import { emptyDashboardData, fetchDashboardData, type DashboardData } from "../dashboard/dashboard-data";
   import { createCompletionAwarePoller, type CompletionAwarePoller } from "../polling";
   import {
@@ -36,7 +36,6 @@
   $: routerStatus = router?.status ?? "unknown";
   $: isRunning = routerStatus === "running";
   $: isTransitioning = routerStatus === "starting" || routerStatus === "stopping";
-  $: hasToken = dashboardData.hasToken || Boolean(readStoredAdminToken());
   $: activeBuild = dashboardData.builds.find((build) => build.id === router?.activeBuildId) ?? null;
   $: modelStates = router?.configuredModelStates ?? [];
   $: loadedStates = modelStates.filter((entry) => entry.state === "loaded");
@@ -65,7 +64,7 @@
   }
 
   async function runRuntimeAction(action: "restart" | "stop") {
-    if (actionPending || !hasToken) {
+    if (actionPending) {
       return;
     }
 
@@ -240,8 +239,8 @@
                <span class="mini-pill"><StatusDot tone={runtimeTone} />{router?.health.state ?? routerStatus}</span>
             </div>
             <div class="control-grid">
-              <button class:primary={isRunning} class:disabled={!isRunning || actionPending || isTransitioning || !hasToken} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning || !hasToken} on:click={() => runRuntimeAction("restart")}><Icon name="refresh" size={16} />Restart router</button>
-              <button class:disabled={!isRunning || actionPending || isTransitioning || !hasToken} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning || !hasToken} on:click={() => runRuntimeAction("stop")}><Icon name="stop" size={16} />Stop router</button>
+              <button class:primary={isRunning} class:disabled={!isRunning || actionPending || isTransitioning} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning} on:click={() => runRuntimeAction("restart")}><Icon name="refresh" size={16} />Restart router</button>
+              <button class:disabled={!isRunning || actionPending || isTransitioning} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning} on:click={() => runRuntimeAction("stop")}><Icon name="stop" size={16} />Stop router</button>
               {#if !isRunning}
                  <a class="btn wide" href="#runtime"><Icon name="terminal" size={16} />Open Runtime to start</a>
               {/if}
@@ -261,7 +260,7 @@
         <div class="panel-head compact"><h2 class="section-title">Quick Actions</h2></div>
         <div class="quick-grid">
           <a class="quick-action" href="#profiles"><div class="quick-icon"><Icon name="zap" size={20} /></div><div class="quick-text"><strong>Manage configurations</strong><span>Profiles</span></div></a>
-          <a class="quick-action" href="#models"><div class="quick-icon"><Icon name="load" size={20} /></div><div class="quick-text"><strong>Browse models</strong><span>Inspect GGUF artifacts</span></div></a>
+          <a class="quick-action" href="#models"><div class="quick-icon"><Icon name="load" size={20} /></div><div class="quick-text"><strong>Browse models</strong><span>Inspect primary models</span></div></a>
           <a class="quick-action" href="#builds"><div class="quick-icon"><Icon name="terminal" size={20} /></div><div class="quick-text"><strong>Inspect Builds</strong><span>Builds</span></div></a>
           <a class="quick-action" href="#jobs"><div class="quick-icon cyan"><Icon name="shield" size={20} /></div><div class="quick-text"><strong>Run jobs</strong><span>Jobs</span></div></a>
         </div>
@@ -308,7 +307,7 @@
               </div>
             {/each}
           {:else}
-            <div class="empty-state">{hasToken ? "No runtime log entries recorded yet." : "Load an admin token to show protected runtime logs."}</div>
+            <div class="empty-state">No runtime log entries recorded yet.</div>
           {/if}
         </div>
       </section>
@@ -343,7 +342,7 @@
               </div>
             {/each}
           {:else}
-            <div class="device-card unavailable"><div class="device-head"><div class="device-title"><Icon name="gpu" size={18} /><strong>GPU telemetry</strong></div><div class="device-role">Unavailable</div></div><div class="empty-state compact-empty">{hasToken ? "No GPU devices reported by monitoring." : "Admin token required for detailed GPU monitoring."}</div></div>
+            <div class="device-card unavailable"><div class="device-head"><div class="device-title"><Icon name="gpu" size={18} /><strong>GPU telemetry</strong></div><div class="device-role">Unavailable</div></div><div class="empty-state compact-empty">No GPU devices reported by monitoring.</div></div>
           {/if}
         </div>
       </section>

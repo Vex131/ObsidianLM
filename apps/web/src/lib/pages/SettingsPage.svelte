@@ -2,17 +2,9 @@
   import { onMount } from "svelte";
   import PageHeader from "../components/PageHeader.svelte";
   import Panel from "../components/Panel.svelte";
-  import StatusBadge from "../components/StatusBadge.svelte";
   import {
     API_ENDPOINTS,
-    clearStoredAdminToken,
     fetchJson,
-    publicFetchJson,
-    readStoredAdminToken,
-    setupAdminToken,
-    verifyAdminToken,
-    writeStoredAdminToken,
-    type AuthStatusResponse,
     type PortStatus,
     type RuntimeSettingsResponse,
     type RuntimeSettingsUpdate
@@ -20,9 +12,6 @@
 
   type FolderKey = "modelFolders" | "llamaCppFolders" | "toolInputFolders";
 
-  let auth: AuthStatusResponse | null = null;
-  let token = "";
-  let confirm = "";
   let modelFolders: string[] = [];
   let llamaCppFolders: string[] = [];
   let toolInputFolders: string[] = [];
@@ -30,7 +19,6 @@
   let portStatus: PortStatus | null = null;
   let message = "";
   let saving = false;
-  let unlocked = false;
 
   $: folderGroups = [
     { key: "modelFolders" as const, label: "Model folders", values: modelFolders },
@@ -39,14 +27,6 @@
   ];
 
   async function load() {
-    unlocked = Boolean(readStoredAdminToken());
-    try {
-      auth = await publicFetchJson<AuthStatusResponse>(API_ENDPOINTS.auth.status);
-    } catch {
-      auth = null;
-    }
-
-    if (!readStoredAdminToken()) return;
     try {
       const response = await fetchJson<RuntimeSettingsResponse>(API_ENDPOINTS.settings.get);
       modelFolders = response.settings.modelFolders;
@@ -55,48 +35,8 @@
       port = String(response.settings.managedLlamaPort);
       portStatus = await fetchJson<PortStatus>(API_ENDPOINTS.monitoring.ports(response.settings.managedLlamaPort));
     } catch (error) {
-      message = error instanceof Error ? error.message : "Could not load protected settings";
+      message = error instanceof Error ? error.message : "Could not load settings";
     }
-  }
-
-  async function authenticate() {
-    if (!auth || !token) {
-      message = "Enter an admin token.";
-      return;
-    }
-    try {
-      if (!auth.configured) {
-        if (token !== confirm) {
-          message = "Token confirmation does not match.";
-          return;
-        }
-        await setupAdminToken(token);
-      } else {
-        await verifyAdminToken(token);
-        writeStoredAdminToken(token);
-        unlocked = true;
-      }
-      token = confirm = "";
-      message = "Admin access is available in this browser.";
-      await load();
-    } catch (error) {
-      token = confirm = "";
-      message = error instanceof Error ? error.message : "Authentication failed";
-    }
-  }
-
-  async function logout() {
-    try {
-      await fetchJson(API_ENDPOINTS.auth.logout, { method: "POST" });
-    } catch {
-      // Local removal still locks this browser if the acknowledgement fails.
-    }
-    clearStoredAdminToken();
-    unlocked = false;
-    modelFolders = llamaCppFolders = toolInputFolders = [];
-    port = "";
-    portStatus = null;
-    message = "This browser is locked. Server authentication remains configured.";
   }
 
   async function saveFolders() {
@@ -166,28 +106,10 @@
 </script>
 
 <main class="page-surface settings-page" aria-label="Settings">
-  <PageHeader title="Settings" subtitle="Authentication, service-machine discovery roots, and the managed runtime port." />
+  <PageHeader title="Settings" subtitle="Service-machine discovery roots and the managed runtime port." />
   <p class="notice" role="status" aria-live="polite">{message}</p>
 
   <div class="settings-grid">
-    <Panel title="Authentication / session">
-      <div class="panel-content">
-        {#if auth}
-          <StatusBadge label={auth.configured ? (unlocked ? "Unlocked locally" : "Browser locked") : "Setup required"} tone={unlocked ? "green" : "amber"} />
-          {#if unlocked}
-            <p>Admin access is available in this browser. The stored token is never displayed.</p>
-            <button class="btn" type="button" on:click={() => void logout()}>Forget token / Lock this browser</button>
-          {:else}
-            <label>Admin token<input bind:value={token} type="password" autocomplete={auth.configured ? "current-password" : "new-password"} /></label>
-            {#if !auth.configured}<label>Confirm admin token<input bind:value={confirm} type="password" autocomplete="new-password" /></label>{/if}
-            <button class="btn primary" type="button" on:click={() => void authenticate()}>{auth.configured ? "Unlock / Verify" : "Create admin token"}</button>
-          {/if}
-        {:else}
-          <p>Authentication status is unavailable.</p>
-        {/if}
-      </div>
-    </Panel>
-
     <Panel title="Managed runtime port">
       <div class="panel-content">
         <label>Port<input bind:value={port} inputmode="numeric" aria-describedby="managed-port-help" /></label>
@@ -197,7 +119,7 @@
           {:else}Current port status is unavailable.{/if}
         </small>
         <p>Stop an active managed runtime before changing this port.</p>
-        <button class="btn primary" type="button" disabled={saving || !unlocked} on:click={() => void savePort()}>Save managed port</button>
+        <button class="btn primary" type="button" disabled={saving} on:click={() => void savePort()}>Save managed port</button>
       </div>
     </Panel>
   </div>
@@ -217,7 +139,7 @@
           {/each}
         </section>
       {/each}
-      <div class="save-row"><button class="btn primary" type="button" disabled={saving || !unlocked} on:click={() => void saveFolders()}>Save discovery folders</button><a href="#models">Models</a><a href="#builds">Builds</a><a href="#jobs">Jobs</a></div>
+      <div class="save-row"><button class="btn primary" type="button" disabled={saving} on:click={() => void saveFolders()}>Save discovery folders</button><a href="#models">Models</a><a href="#builds">Builds</a><a href="#jobs">Jobs</a></div>
     </div>
   </Panel>
 </main>

@@ -24,7 +24,7 @@
     "service:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/status-service.ps1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.62.0",
     "concurrently": "^9.1.2"
   }
 }

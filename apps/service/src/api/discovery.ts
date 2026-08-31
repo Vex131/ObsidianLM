@@ -7,12 +7,13 @@ import { inspectGgufMetadata } from "../discovery/gguf-metadata.js";
 import { discoverToolInputs } from "../discovery/tool-inputs.js";
 import { createProfileFromDiscovery, validateCreateProfileRequest } from "../discovery/profile-factory.js";
 import { normalizePathForCompare } from "../discovery/helpers.js";
+import { synchronizeDiscoveryCatalog } from "../discovery/catalog-sync.js";
 import { listProfiles } from "../runtime/profiles.js";
 
 export async function registerDiscoveryRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/discovery/models", async () => discoverModels());
 
-  app.post("/api/discovery/models/rescan", async () => discoverModels());
+  app.post("/api/discovery/models/rescan", async () => synchronizeDiscoveryCatalog());
 
   app.get("/api/discovery/models/usage", async () => {
     const [discovery, profiles] = await Promise.all([discoverModels(), listProfiles()]);
@@ -39,7 +40,7 @@ export async function registerDiscoveryRoutes(app: FastifyInstance): Promise<voi
 
   app.get("/api/discovery/llama-builds", async () => discoverLlamaBuilds());
 
-  app.post("/api/discovery/llama-builds/rescan", async () => discoverLlamaBuilds());
+  app.post("/api/discovery/llama-builds/rescan", async () => synchronizeDiscoveryCatalog());
 
   app.get("/api/discovery/llama-builds/usage", async () => {
     const [discovery, profiles] = await Promise.all([discoverLlamaBuilds(), listProfiles()]);
@@ -63,6 +64,7 @@ export async function registerDiscoveryRoutes(app: FastifyInstance): Promise<voi
     if (!build) {
       return reply.status(404).send({ error: "not_found", message: "Discovered llama.cpp build not found." });
     }
+    if (!build.serverPath) return reply.status(409).send({ error: "unavailable", message: "Discovered build has no llama-server executable." });
     return getLlamaBuildCapabilities(build);
   });
 

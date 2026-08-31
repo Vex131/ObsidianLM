@@ -3,7 +3,7 @@
   import type { ConfiguredModelDetails, RouterRuntimeResponse, RuntimeLogEntry } from "@obsidianlm/shared";
   import PageHeader from "../components/PageHeader.svelte";
   import Icon from "../components/Icon.svelte";
-  import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type RuntimeActionResult } from "../api";
+  import { API_ENDPOINTS, fetchJson, type RuntimeActionResult } from "../api";
   import { emptyDashboardData, fetchDashboardData, type DashboardData } from "../dashboard/dashboard-data";
   import { createCompletionAwarePoller, type CompletionAwarePoller } from "../polling";
   import { formatNumber, formatTimestamp, inferLogTone } from "../dashboard/dashboard-format";
@@ -31,7 +31,6 @@
   $: routerStatus = router?.status ?? "stopped";
   $: isRunning = routerStatus === "running";
   $: isTransitioning = routerStatus === "starting" || routerStatus === "stopping";
-  $: hasToken = dashboardData.hasToken || Boolean(readStoredAdminToken());
   $: loadedStates = router?.configuredModelStates.filter((entry) => entry.state === "loaded") ?? [];
   $: activeLoadStates = router?.configuredModelStates.filter((entry) => entry.state === "loaded" || entry.state === "loading") ?? [];
   $: routerPolicyWarning = activeLoadStates.length > 1 ? `Router policy permits one loaded or loading model; ${activeLoadStates.length} are reported.` : "";
@@ -64,7 +63,7 @@
   }
 
   async function runRouterAction(action: "restart" | "stop") {
-    if (actionPending || !hasToken) return;
+    if (actionPending) return;
     actionPending = true;
     actionMessage = "";
     try {
@@ -79,7 +78,7 @@
   }
 
   async function runSelectedModel() {
-    if (!selectedModel || actionPending || !hasToken || !modelAvailable(selectedModel) || modelRouterState(selectedModel) === "loaded") return;
+    if (!selectedModel || actionPending || !modelAvailable(selectedModel) || modelRouterState(selectedModel) === "loaded") return;
     actionPending = true;
     actionMessage = "";
     try {
@@ -189,8 +188,8 @@
         <div class="hero-side"><div class="runtime-control">
           <div class="control-title-row"><strong>Router controls</strong><span class="mini-pill">{routerStatus}</span></div>
           <div class="control-grid">
-            <button class:primary={isRunning} class:disabled={!isRunning || actionPending || isTransitioning || !hasToken} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning || !hasToken} on:click={() => runRouterAction("restart")}><Icon name="refresh" size={16} />Restart router</button>
-            <button class:danger={isRunning} class:disabled={!isRunning || actionPending || isTransitioning || !hasToken} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning || !hasToken} on:click={() => runRouterAction("stop")}><Icon name="stop" size={16} />Stop router</button>
+            <button class:primary={isRunning} class:disabled={!isRunning || actionPending || isTransitioning} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning} on:click={() => runRouterAction("restart")}><Icon name="refresh" size={16} />Restart router</button>
+            <button class:danger={isRunning} class:disabled={!isRunning || actionPending || isTransitioning} class="btn" type="button" disabled={!isRunning || actionPending || isTransitioning} on:click={() => runRouterAction("stop")}><Icon name="stop" size={16} />Stop router</button>
           </div>
           <div class="runtime-micro"><span>PID</span><span>{router?.pid ?? "—"}</span><span>Build</span><span>{activeBuild?.displayName ?? router?.activeBuildId ?? "—"}</span><span>Managed proven children</span><span>{provenChildCount}</span><span>Last started</span><span>{router?.startedAt ? formatTimestamp(router.startedAt) : "—"}</span></div>
           {#if actionMessage}<p class="warning" aria-live="polite">{actionMessage}</p>{/if}
@@ -213,7 +212,7 @@
       </section>
 
       <section class="panel events-card" aria-label="Recent runtime logs"><div class="panel-head compact"><h2 class="section-title">Recent Runtime Logs</h2><a href="#logs">Open full Logs</a></div><div class="event-stream tall">
-        {#if recentLogs.length > 0}{#each recentLogs as log}<div class="event-line"><span class="event-time">{formatTimestamp(log.timestamp)}</span><span class={`event-type ${logToneClass(log)}`}>{logLabel(log)}</span>{#if logModel(log)}<span class="tag">{logModel(log)}</span>{/if}<span class="event-message" title={log.message}>{log.message}</span></div>{/each}{:else}<div class="empty-state">{hasToken ? "No runtime log entries recorded yet." : "Load an admin token to show protected runtime logs."}</div>{/if}
+        {#if recentLogs.length > 0}{#each recentLogs as log}<div class="event-line"><span class="event-time">{formatTimestamp(log.timestamp)}</span><span class={`event-type ${logToneClass(log)}`}>{logLabel(log)}</span>{#if logModel(log)}<span class="tag">{logModel(log)}</span>{/if}<span class="event-message" title={log.message}>{log.message}</span></div>{/each}{:else}<div class="empty-state">No runtime log entries recorded yet.</div>{/if}
       </div></section>
     </div>
     <div class="right-column">
@@ -229,8 +228,8 @@
     <div class="drawer-head"><div class="drawer-title"><strong>{isRunning ? "Switch Configured Model" : "Select Configured Model"}</strong><span>Same Build switches model; a different Build restarts the router.</span></div><button class="drawer-close" type="button" aria-label="Close configured model picker" on:click={() => drawerOpen = false}><Icon name="x" size={18} /></button></div>
     <div class="drawer-search-wrap"><input class="drawer-search" bind:value={modelSearch} type="search" placeholder="Search display name, alias, Build, artifact, or context..." /></div>
     <div class="profile-list">
-      {#if filteredModels.length > 0}{#each filteredModels as model}<button class:active={model.id === selectedModelId} class="profile-option" type="button" disabled={!modelAvailable(model)} on:click={() => selectedModelId = model.id}><span class="profile-option-top"><strong>{model.displayName}</strong><span class="mini-pill">{modelRouterState(model)}</span></span><span class="profile-option-meta"><span class="tag">{model.build?.displayName ?? "Build unavailable"}</span><span class="tag">{modelKind(model)}</span><span class="tag">{model.enabled ? "enabled" : "disabled"}</span><span class="tag">{formatNumber(model.llamaArgs?.ctxSize)} ctx</span></span><small class:warning={!modelAvailable(model)}>validation {model.validation.status}; artifact {model.validation.references.artifact}; build {model.validation.references.build}</small></button>{/each}{:else}<div class="empty-state">{hasToken ? "No configured models match this search." : "Load an admin token to list configured models."}</div>{/if}
+      {#if filteredModels.length > 0}{#each filteredModels as model}<button class:active={model.id === selectedModelId} class="profile-option" type="button" disabled={!modelAvailable(model)} on:click={() => selectedModelId = model.id}><span class="profile-option-top"><strong>{model.displayName}</strong><span class="mini-pill">{modelRouterState(model)}</span></span><span class="profile-option-meta"><span class="tag">{model.build?.displayName ?? "Build unavailable"}</span><span class="tag">{modelKind(model)}</span><span class="tag">{model.enabled ? "enabled" : "disabled"}</span><span class="tag">{formatNumber(model.llamaArgs?.ctxSize)} ctx</span></span><small class:warning={!modelAvailable(model)}>validation {model.validation.status}; artifact {model.validation.references.artifact}; build {model.validation.references.build}</small></button>{/each}{:else}<div class="empty-state">No configured models match this search.</div>{/if}
     </div>
-    <div class="drawer-actions"><span class="drawer-note">{selectedModel ? `${selectedModel.displayName}: ${configuredModelActionLabel(selectedModel, dashboardData.runtime)}` : "Choose a configured model."}</span><button class:primary={Boolean(selectedModel)} class="btn" type="button" disabled={!selectedModel || !modelAvailable(selectedModel) || modelRouterState(selectedModel) === "loaded" || actionPending || !hasToken} on:click={runSelectedModel}>{actionPending ? "Working…" : selectedModel ? configuredModelActionLabel(selectedModel, dashboardData.runtime) : "Select model"}</button></div>
+    <div class="drawer-actions"><span class="drawer-note">{selectedModel ? `${selectedModel.displayName}: ${configuredModelActionLabel(selectedModel, dashboardData.runtime)}` : "Choose a configured model."}</span><button class:primary={Boolean(selectedModel)} class="btn" type="button" disabled={!selectedModel || !modelAvailable(selectedModel) || modelRouterState(selectedModel) === "loaded" || actionPending} on:click={runSelectedModel}>{actionPending ? "Working…" : selectedModel ? configuredModelActionLabel(selectedModel, dashboardData.runtime) : "Select model"}</button></div>
   </aside>
 {/if}

@@ -1,9 +1,4 @@
 import type {
-  AdminTokenRequest,
-  AuthLogoutResponse,
-  AuthSetupResponse,
-  AuthStatusResponse,
-  AuthVerifyResponse,
   CreateProfileFromDiscoveryRequest,
   CreateProfileFromDiscoveryResponse,
   DiscoverySettingsUpdate,
@@ -46,18 +41,10 @@ import type {
    ServiceLogsResponse
 } from "@obsidianlm/shared";
 
-export const adminTokenStorageKey = "obsidianlm.adminToken";
-
 const enc = encodeURIComponent;
 
 export const API_ENDPOINTS = {
   status: "/api/status",
-  auth: {
-    status: "/api/auth/status",
-    setup: "/api/auth/setup",
-    verify: "/api/auth/verify",
-    logout: "/api/auth/logout"
-  },
   settings: {
     get: "/api/settings",
     updateDiscoveryFolders: "/api/settings/discovery-folders",
@@ -120,8 +107,6 @@ export const API_ENDPOINTS = {
   modelArtifacts: {
     list: "/api/model-artifacts",
     detail: (id: string) => `/api/model-artifacts/${enc(id)}`,
-    register: "/api/model-artifacts/register",
-    reconcile: (id: string) => `/api/model-artifacts/${enc(id)}/reconcile`,
     update: (id: string) => `/api/model-artifacts/${enc(id)}`,
     delete: (id: string) => `/api/model-artifacts/${enc(id)}`
   },
@@ -138,8 +123,6 @@ export const API_ENDPOINTS = {
   builds: {
     list: "/api/builds",
     detail: (id: string) => `/api/builds/${enc(id)}`,
-    register: "/api/builds/register",
-    reconcile: (id: string) => `/api/builds/${enc(id)}/reconcile`,
     validateRouter: (id: string) => `/api/builds/${enc(id)}/validate-router`,
     capabilities: (id: string) => `/api/builds/${enc(id)}/capabilities`,
     update: (id: string) => `/api/builds/${enc(id)}`,
@@ -163,37 +146,6 @@ export const API_ENDPOINTS = {
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
-export interface ApiFetchOptions {
-  token?: string | null;
-  onUnauthorized?: () => void;
-}
-
-let authConfigured: boolean | undefined;
-let authConfigurationError: string | undefined;
-let authWaiters: Array<() => void> = [];
-
-export function setAuthConfigured(configured: boolean | undefined): void {
-  authConfigured = configured;
-  authConfigurationError = undefined;
-  if (configured !== undefined) {
-    const waiters = authWaiters;
-    authWaiters = [];
-    waiters.forEach((resolve) => resolve());
-  }
-}
-
-export function setAuthConfigurationUnavailable(message: string): void {
-  authConfigured = undefined;
-  authConfigurationError = message;
-  const waiters = authWaiters;
-  authWaiters = [];
-  waiters.forEach((resolve) => resolve());
-}
-
-export function isSetupRequiredError(statusCode: number, data: unknown): boolean {
-  return statusCode === 423 && Boolean(data && typeof data === "object" && "error" in data && data.error === "setup_required");
-}
-
 export class ApiRequestError extends Error {
   readonly statusCode: number;
   readonly url: string;
@@ -209,34 +161,7 @@ export class ApiRequestError extends Error {
 }
 
 export function friendlyRequestError(statusCode: number, fallback?: string): string {
-  if (statusCode === 401 || statusCode === 403) {
-    return "Invalid token";
-  }
-  if (statusCode === 423) {
-    return fallback || "Admin token setup is required";
-  }
   return fallback || `Request failed with ${statusCode}`;
-}
-
-function storageAvailable(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
-
-export function readStoredAdminToken(): string | null {
-  return storageAvailable() ? window.localStorage.getItem(adminTokenStorageKey) : null;
-}
-
-export function writeStoredAdminToken(token: string): void {
-  if (storageAvailable()) {
-    window.localStorage.setItem(adminTokenStorageKey, token);
-  }
-  setAuthConfigured(true);
-}
-
-export function clearStoredAdminToken(): void {
-  if (storageAvailable()) {
-    window.localStorage.removeItem(adminTokenStorageKey);
-  }
 }
 
 async function readResponseData(response: Response): Promise<unknown> {
@@ -256,7 +181,7 @@ function messageFromData(data: unknown): string | undefined {
   return data && typeof data === "object" && "message" in data && typeof data.message === "string" ? data.message : undefined;
 }
 
-export async function publicFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   const data = await readResponseData(response);
 
@@ -267,65 +192,8 @@ export async function publicFetchJson<T>(url: string, init?: RequestInit): Promi
   return data as T;
 }
 
-export async function fetchJson<T>(url: string, init?: RequestInit, options: ApiFetchOptions = {}): Promise<T> {
-  if (authConfigured === undefined && !authConfigurationError) {
-    await new Promise<void>((resolve) => authWaiters.push(resolve));
-  }
-  if (authConfigurationError) {
-    throw new ApiRequestError(503, url, authConfigurationError, { error: "auth_status_unavailable" });
-  }
-  if (authConfigured === false) {
-    throw new ApiRequestError(423, url, "Admin token setup is required", { code: "setup_required" });
-  }
-  const headers = new Headers(init?.headers);
-  const token = options.token === undefined ? readStoredAdminToken() : options.token;
-
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(url, { ...init, headers });
-  const data = await readResponseData(response);
-
-  if (!response.ok) {
-    if (isSetupRequiredError(response.status, data)) {
-      setAuthConfigured(false);
-    }
-    if (response.status === 401 || response.status === 403) {
-      clearStoredAdminToken();
-      options.onUnauthorized?.();
-    }
-    throw new ApiRequestError(response.status, url, friendlyRequestError(response.status, messageFromData(data)), data);
-  }
-
-  return data as T;
-}
-
-export async function setupAdminToken(token: string): Promise<AuthSetupResponse> {
-  const response = await publicFetchJson<AuthSetupResponse>(API_ENDPOINTS.auth.setup, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token } satisfies AdminTokenRequest)
-  });
-  writeStoredAdminToken(token);
-  return response;
-}
-
-export async function verifyAdminToken(token: string): Promise<AuthVerifyResponse> {
-  return publicFetchJson<AuthVerifyResponse>(API_ENDPOINTS.auth.verify, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token } satisfies AdminTokenRequest)
-  });
-}
-
 export type {
-  AdminTokenRequest,
   AppSettings,
-  AuthLogoutResponse,
-  AuthSetupResponse,
-  AuthStatusResponse,
-  AuthVerifyResponse,
   CreateProfileFromDiscoveryRequest,
   CreateProfileFromDiscoveryResponse,
   DiscoverySettingsUpdate,

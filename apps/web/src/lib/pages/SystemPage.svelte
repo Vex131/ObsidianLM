@@ -9,7 +9,6 @@
 
   $: status = $applicationStatus.status;
   let readiness: ReadinessResponse | null = null;
-  $: auth = $applicationStatus.auth;
   let settings: RuntimeSettingsResponse | null = null;
   let message = "";
   let loading = false;
@@ -67,7 +66,6 @@
     managedLlamaPort: status?.managedLlamaPort,
     runtimeStatus: status?.activeRuntime?.status ?? "stopped",
     gpu: status?.gpu,
-    authConfigured: auth?.configured,
     readiness: readiness ? { ok: readiness.ok, counts: readiness.counts, checks: readiness.checks.map(({ id, status: checkStatus, count }) => ({ id, status: checkStatus, count })) } : null,
     warnings: warningMessages
   }, null, 2);
@@ -96,7 +94,6 @@
         <dt>Log location mode</dt><dd>{status?.logDirMode ?? "—"}</dd>
         <dt>Runtime</dt><dd>{status?.activeRuntime?.status ?? "stopped"}</dd>
         <dt>GPU monitoring</dt><dd>{status?.gpu.available ? `${status.gpu.gpuCount} GPU(s)` : "Unavailable"}</dd>
-        <dt>Authentication</dt><dd>{auth?.configured ? "Configured" : "Setup required"}</dd>
         <dt>Startup policy</dt><dd>{settings?.settings.startupMode ?? "—"}</dd>
         <dt>Stale process policy</dt><dd>{settings?.settings.staleProcessPolicy ?? "—"}</dd>
       </dl>

@@ -15,7 +15,7 @@ import {
   type RouterCatalogEntry,
   type RouterLaunchPreview,
   type RouterModelState,
-  type RouterPresetPreview
+  type RouterPresetPreview,
 } from "@obsidianlm/shared";
 import {
   phase15CompletedMigration,
@@ -25,10 +25,13 @@ import {
   phase15MissingReferenceConfigurations,
   phase15MissingProjectorConfiguration,
   phase15MultimodalFixture,
-  phase15RepeatedMigrationInput
+  phase15RepeatedMigrationInput,
 } from "./fixtures/phase15-migration.js";
 
-const localResource = (locator: string) => ({ owner: { scope: "local" as const }, locator });
+const localResource = (locator: string) => ({
+  owner: { scope: "local" as const },
+  locator,
+});
 
 test("artifact, configured-model, and build identities remain distinct", () => {
   const artifactId = createModelArtifactId("same-resource");
@@ -56,7 +59,11 @@ test("router aliases are conservative, stable after storage, and collision-safe"
   assert.ok(isRouterAlias(second));
   assert.ok(second.length <= 64);
 
-  const configured = { id: firstId, displayName: "Renamed", routerAlias: first };
+  const configured = {
+    id: firstId,
+    displayName: "Renamed",
+    routerAlias: first,
+  };
   assert.equal(configured.routerAlias, first);
 });
 
@@ -78,13 +85,13 @@ test("managed inference eligibility requires functional router evidence", () => 
         status: "candidate",
         evidence: { modelsPreset: true, modelsMax: true, modelsAutoload: true },
         missingRequiredFlags: [],
-        compatibilityHints: []
+        compatibilityHints: [],
       },
-      warnings: []
+      warnings: [],
     },
     managedInferenceEligibility: "eligible",
     warnings: [],
-    failures: []
+    failures: [],
   };
   assert.equal(isBuildEligibleForManagedInference(base), false);
   assert.equal(base.staticEvidence?.kind, "static");
@@ -103,8 +110,8 @@ test("managed inference eligibility requires functional router evidence", () => 
       catalogBoundaryVerified: true,
       requiredBehaviorVerified: true,
       warnings: [],
-      failures: []
-    }
+      failures: [],
+    },
   };
   assert.equal(isBuildEligibleForManagedInference(unlaunched), false);
 
@@ -122,13 +129,16 @@ test("managed inference eligibility requires functional router evidence", () => 
       catalogBoundaryVerified: true,
       requiredBehaviorVerified: true,
       warnings: [],
-      failures: []
-    }
+      failures: [],
+    },
   };
   assert.equal(isBuildEligibleForManagedInference(eligible), true);
   assert.equal(eligible.functionalEvidence?.kind, "functional");
   assert.notEqual(eligible.classification, eligible.functionalEvidence?.kind);
-  assert.notEqual(eligible.staticEvidence?.kind, eligible.functionalEvidence?.kind);
+  assert.notEqual(
+    eligible.staticEvidence?.kind,
+    eligible.functionalEvidence?.kind,
+  );
 });
 
 test("router catalog ownership and lifecycle states preserve control-plane boundaries", () => {
@@ -136,20 +146,35 @@ test("router catalog ownership and lifecycle states preserve control-plane bound
     routerIdentifier: "managed-model",
     ownership: "managed",
     configuredModelId: createConfiguredModelId("managed-model"),
-    state: "loaded"
+    state: "loaded",
   };
   const external: RouterCatalogEntry = {
     routerIdentifier: "cache-visible-model",
     ownership: "external",
     state: "unloaded",
-    rawEvidence: { source: "cache" }
+    rawEvidence: { source: "cache" },
   };
-  const states = new Set<RouterModelState>(["unloaded", "loading", "loaded", "sleeping", "unavailable", "failed", "unknown"]);
+  const states = new Set<RouterModelState>([
+    "unloaded",
+    "loading",
+    "loaded",
+    "sleeping",
+    "unavailable",
+    "failed",
+    "unknown",
+  ]);
 
   assert.equal(managed.ownership, "managed");
   assert.equal(external.ownership, "external");
   assert.equal("configuredModelId" in external, false);
-  for (const required of ["unloaded", "loading", "loaded", "sleeping", "unavailable"] as const) assert.ok(states.has(required));
+  for (const required of [
+    "unloaded",
+    "loading",
+    "loaded",
+    "sleeping",
+    "unavailable",
+  ] as const)
+    assert.ok(states.has(required));
 });
 
 test("generated presets are derived artifacts distinct from router launch commands", () => {
@@ -164,20 +189,25 @@ test("generated presets are derived artifacts distinct from router launch comman
     freshness: "current",
     validationState: "not_validated",
     warnings: [],
-    errors: []
+    errors: [],
   };
   const launch: RouterLaunchPreview = {
     kind: "router_launch",
     artifact,
     policy: { modelsMax: 1, modelsAutoload: true },
-    command: { executable: "/fixtures/llama-server", args: ["--models-preset", artifact.resource.locator], displayCommand: "fixture", commandHash: "fixture" }
+    command: {
+      executable: "/fixtures/llama-server",
+      args: ["--models-preset", artifact.resource.locator],
+      displayCommand: "fixture",
+      commandHash: "fixture",
+    },
   };
   const preset: RouterPresetPreview = {
     kind: "model_preset",
     buildId: artifact.buildId,
     artifact,
     content: "[fixture]",
-    configuredModelIds: [createConfiguredModelId("fixture")]
+    configuredModelIds: [createConfiguredModelId("fixture")],
   };
 
   assert.equal(artifact.authority, "derived");
@@ -186,33 +216,82 @@ test("generated presets are derived artifacts distinct from router launch comman
 });
 
 test("migration fixtures preserve duplicate configurations and custom arguments", () => {
-  const duplicateMappings = phase15ExpectedIdentityMappings.filter((mapping) => mapping.legacyProfileId.startsWith("duplicate-"));
+  const duplicateMappings = phase15ExpectedIdentityMappings.filter((mapping) =>
+    mapping.legacyProfileId.startsWith("duplicate-"),
+  );
   assert.equal(duplicateMappings.length, 2);
-  assert.equal(duplicateMappings[0]?.artifactId, duplicateMappings[1]?.artifactId);
-  assert.notEqual(duplicateMappings[0]?.configuredModelId, duplicateMappings[1]?.configuredModelId);
+  assert.equal(
+    duplicateMappings[0]?.artifactId,
+    duplicateMappings[1]?.artifactId,
+  );
+  assert.notEqual(
+    duplicateMappings[0]?.configuredModelId,
+    duplicateMappings[1]?.configuredModelId,
+  );
 
-  const differentBuild = phase15ExpectedIdentityMappings.find((mapping) => mapping.legacyProfileId === "different-build");
+  const differentBuild = phase15ExpectedIdentityMappings.find(
+    (mapping) => mapping.legacyProfileId === "different-build",
+  );
   assert.equal(differentBuild?.artifactId, duplicateMappings[0]?.artifactId);
   assert.notEqual(differentBuild?.buildId, duplicateMappings[0]?.buildId);
 
-  const custom = phase15LegacyProfiles.find((profile) => profile.id === "custom-arguments");
-  assert.deepEqual(custom?.flagOverrides, [{ flag: "--custom-flag", values: ["safe-value"] }]);
+  const custom = phase15LegacyProfiles.find(
+    (profile) => profile.id === "custom-arguments",
+  );
+  assert.deepEqual(custom?.flagOverrides, [
+    { flag: "--custom-flag", values: ["safe-value"] },
+  ]);
   assert.deepEqual(custom?.extraArgs, ["--future-option", "preserve-me"]);
   assert.equal(custom?.llamaArgs?.ctxSize, 32768);
-  const customMapping = phase15CompletedMigration.mappings.find((mapping) => mapping.legacyProfileId === "custom-arguments");
-  assert.deepEqual(customMapping?.preservedFields, ["llamaArgs", "flagOverrides", "extraArgs"]);
+  const customMapping = phase15CompletedMigration.mappings.find(
+    (mapping) => mapping.legacyProfileId === "custom-arguments",
+  );
+  assert.deepEqual(customMapping?.preservedFields, [
+    "llamaArgs",
+    "flagOverrides",
+    "extraArgs",
+  ]);
 });
 
 test("missing references, repeat detection, and interrupted recovery remain explicit", () => {
-  assert.deepEqual(phase15CompletedMigration.invalidReferences.map((reference) => reference.kind).sort(), ["build", "model", "projector"]);
+  assert.deepEqual(
+    phase15CompletedMigration.invalidReferences
+      .map((reference) => reference.kind)
+      .sort(),
+    ["build", "model", "projector"],
+  );
   assert.equal(phase15MissingReferenceConfigurations.length, 2);
-  assert.ok(phase15MissingReferenceConfigurations.every((configuration) => !configuration.enabled && configuration.validationStatus === "invalid"));
-  assert.equal(phase15MissingReferenceConfigurations.find((configuration) => configuration.displayName === "missing-model")?.referenceStatus.artifact, "missing");
-  assert.equal(phase15MissingReferenceConfigurations.find((configuration) => configuration.displayName === "missing-build")?.referenceStatus.build, "missing");
-  assert.equal(phase15MissingProjectorConfiguration.projector?.validationStatus, "invalid");
+  assert.ok(
+    phase15MissingReferenceConfigurations.every(
+      (configuration) =>
+        !configuration.enabled && configuration.validationStatus === "invalid",
+    ),
+  );
+  assert.equal(
+    phase15MissingReferenceConfigurations.find(
+      (configuration) => configuration.displayName === "missing-model",
+    )?.referenceStatus.artifact,
+    "missing",
+  );
+  assert.equal(
+    phase15MissingReferenceConfigurations.find(
+      (configuration) => configuration.displayName === "missing-build",
+    )?.referenceStatus.build,
+    "missing",
+  );
+  assert.equal(
+    phase15MissingProjectorConfiguration.projector?.validationStatus,
+    "invalid",
+  );
   assert.equal(phase15MissingProjectorConfiguration.enabled, false);
-  assert.equal(phase15RepeatedMigrationInput.priorMigration?.status, "completed");
-  assert.equal(phase15RepeatedMigrationInput.sourceRevision, phase15RepeatedMigrationInput.priorMigration?.sourceRevision);
+  assert.equal(
+    phase15RepeatedMigrationInput.priorMigration?.status,
+    "completed",
+  );
+  assert.equal(
+    phase15RepeatedMigrationInput.sourceRevision,
+    phase15RepeatedMigrationInput.priorMigration?.sourceRevision,
+  );
   assert.equal(phase15InterruptedMigration.status, "interrupted");
   assert.equal(phase15InterruptedMigration.backup?.verified, true);
   assert.equal(phase15InterruptedMigration.recoverable, true);
@@ -224,29 +303,36 @@ test("one artifact supports text-only and explicit projector configurations", ()
     id: phase15MultimodalFixture.modelArtifactId,
     resource: localResource(phase15MultimodalFixture.legacyProfile.modelPath),
     kind: "model",
-    referenceStatus: "available"
+    referenceStatus: "available",
   };
   const base: ConfiguredModel = {
     schemaVersion: MODEL_CONFIGURATION_SCHEMA_VERSION,
     id: phase15MultimodalFixture.textConfiguredModelId,
     displayName: "Vision model text-only",
-    routerAlias: createRouterAlias("Vision model text-only", phase15MultimodalFixture.textConfiguredModelId),
+    routerAlias: createRouterAlias(
+      "Vision model text-only",
+      phase15MultimodalFixture.textConfiguredModelId,
+    ),
     artifactId: artifact.id,
     buildId: createLlamaCppBuildId("vision-build"),
     enabled: true,
     referenceStatus: { artifact: "available", build: "available" },
-    validationStatus: "not_validated"
+    validationStatus: "not_validated",
   };
   const vision: ConfiguredModel = {
     ...base,
     id: phase15MultimodalFixture.visionConfiguredModelId,
     displayName: "Vision model projector A",
-    routerAlias: createRouterAlias("Vision model projector A", phase15MultimodalFixture.visionConfiguredModelId, [base.routerAlias]),
+    routerAlias: createRouterAlias(
+      "Vision model projector A",
+      phase15MultimodalFixture.visionConfiguredModelId,
+      [base.routerAlias],
+    ),
     projector: {
       artifactId: phase15MultimodalFixture.projectorArtifactId,
       selection: phase15MultimodalFixture.selection,
-      validationStatus: "not_validated"
-    }
+      validationStatus: "not_validated",
+    },
   };
 
   assert.equal(base.artifactId, vision.artifactId);

@@ -1,9 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { isBuildEligibleForManagedInference, type DiscoveryWarning, type ReadinessCheck, type ReadinessResponse } from "@obsidianlm/shared";
 import { getStorageWarnings, loadProfilesReadOnly, loadSettingsReadOnly } from "../config/storage.js";
-import { loadPhase15Domain } from "../config/phase15-domain.js";
-import { discoverLlamaBuilds } from "../discovery/llama-builds.js";
-import { discoverModels } from "../discovery/models.js";
+import { synchronizeDiscoveryCatalog } from "../discovery/catalog-sync.js";
 import { discoverToolInputs } from "../discovery/tool-inputs.js";
 import { getGpuMonitoringStatus, type GpuMonitorOptions } from "../monitoring/gpu-monitor.js";
 import { classifyPortStatus, detectPort } from "../process/port-detector.js";
@@ -41,7 +39,9 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
   app.get("/api/readiness", async (): Promise<ReadinessResponse> => {
     const checkedAt = new Date().toISOString();
     const settings = await loadSettingsReadOnly();
-    const [models, builds, toolInputs, profiles, domain] = await Promise.all([discoverModels(settings), discoverLlamaBuilds(settings), discoverToolInputs(settings), loadProfilesReadOnly(), loadPhase15Domain()]);
+    const [catalog, toolInputs, profiles] = await Promise.all([synchronizeDiscoveryCatalog(), discoverToolInputs(settings), loadProfilesReadOnly()]);
+    const models = { models: catalog.models, warnings: [] }; const builds = { builds: catalog.builds, warnings: [] };
+    const domain = await (await import("../config/phase15-domain.js")).loadPhase15Domain();
     const routerState = runtimeManager.getRouterState();
     const port = await detectPort(settings.managedLlamaPort, "127.0.0.1");
     const portStatus = classifyPortStatus(port, routerState.pid);
@@ -56,18 +56,17 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
     const discoveryWarnings = [...models.warnings, ...builds.warnings, ...toolInputs.warnings].map(warningMessage);
 
     const checks = [
-      check("admin-token", "Admin token", settings.adminTokenHash ? "pass" : "block", settings.adminTokenHash ? "Admin token is configured." : "Complete first-run admin token setup."),
       check("model-folders", "Model folders", settings.modelFolders.length > 0 ? "pass" : "block", settings.modelFolders.length > 0 ? "At least one model folder is configured." : "Configure modelFolders before real validation."),
-      check("gguf-models", "GGUF models", models.models.length > 0 ? "pass" : "block", models.models.length > 0 ? `${models.models.length} GGUF model(s) discovered.` : "Rescan after adding at least one GGUF model to a configured model folder.", models.models.length),
+       check("gguf-models", "Models discovered", models.models.length > 0 ? "pass" : "block", models.models.length > 0 ? `${models.models.length} GGUF model(s) discovered.` : "Rescan after adding at least one GGUF model to a configured model folder.", models.models.length),
       check("llama-folders", "llama.cpp folders", settings.llamaCppFolders.length > 0 ? "pass" : "block", settings.llamaCppFolders.length > 0 ? "At least one llama.cpp folder is configured." : "Configure llamaCppFolders before real validation."),
-      check("server-builds", "llama-server builds", builds.builds.length > 0 ? "pass" : "block", builds.builds.length > 0 ? `${builds.builds.length} llama-server build(s) discovered.` : "Rescan after adding a llama.cpp build with llama-server.", builds.builds.length),
+       check("server-builds", "Builds discovered", builds.builds.length > 0 ? "pass" : "block", builds.builds.length > 0 ? `${builds.builds.length} llama-server build(s) discovered.` : "Rescan after adding a llama.cpp build with llama-server.", builds.builds.length),
       check("llama-bench", "llama-bench tools", benchCount > 0 ? "pass" : "warning", benchCount > 0 ? `${benchCount} llama-bench tool(s) discovered.` : "Add or build llama-bench before running benchmark validation.", benchCount),
       check("llama-perplexity", "llama-perplexity tools", perplexityCount > 0 ? "pass" : "warning", perplexityCount > 0 ? `${perplexityCount} llama-perplexity tool(s) discovered.` : "Add or build llama-perplexity before running perplexity validation.", perplexityCount),
       check("tool-input-folders", "Tool input folders", settings.toolInputFolders.length > 0 ? "pass" : "warning", settings.toolInputFolders.length > 0 ? "At least one tool input folder is configured." : "Configure toolInputFolders before llama-perplexity validation."),
       check("tool-inputs", "Tool inputs", toolInputs.files.length > 0 ? "pass" : "warning", toolInputs.files.length > 0 ? `${toolInputs.files.length} tool input file(s) discovered.` : "Add a small local .txt, .raw, .jsonl, or .md input and rescan before llama-perplexity validation.", toolInputs.files.length),
-      check("configured-models", "Configured Models", domain.configuredModels.length > 0 ? "pass" : "block", domain.configuredModels.length > 0 ? `${domain.configuredModels.length} configured model(s) registered.` : "Register at least one configured model before starting runtime validation.", domain.configuredModels.length),
-      check("registered-builds", "Registered Builds", domain.builds.length > 0 ? "pass" : "block", domain.builds.length > 0 ? `${domain.builds.length} Build(s) registered.` : "Register at least one llama.cpp Build before starting runtime validation.", domain.builds.length),
-      check("eligible-builds", "Router-eligible Builds", eligibleBuilds.length > 0 ? "pass" : "block", eligibleBuilds.length > 0 ? `${eligibleBuilds.length} Build(s) are eligible for managed router inference.` : "Validate a registered Build for managed router inference.", eligibleBuilds.length),
+       check("configured-models", "Configured Models", domain.configuredModels.length > 0 ? "pass" : "block", domain.configuredModels.length > 0 ? `${domain.configuredModels.length} configured model(s).` : "Configure a discovered model before starting runtime validation.", domain.configuredModels.length),
+       check("discovered-builds", "Builds discovered", domain.builds.length > 0 ? "pass" : "block", domain.builds.length > 0 ? `${domain.builds.length} Build(s) discovered.` : "Add a llama.cpp Build to a configured discovery root.", domain.builds.length),
+       check("eligible-builds", "Router-capable/eligible Builds", eligibleBuilds.length > 0 ? "pass" : "block", eligibleBuilds.length > 0 ? `${eligibleBuilds.length} Build(s) are eligible for managed router inference.` : "Validate a discovered Build for managed router inference.", eligibleBuilds.length),
       check("managed-port", "Managed port", portStatus.conflict ? "block" : "pass", portStatus.conflict ? portStatus.conflictMessage ?? "Managed llama.cpp port is already in use by another process." : `Managed llama.cpp port ${settings.managedLlamaPort} is available or owned by the current managed runtime.`),
       check("gpu-monitor", "GPU monitor", gpuStatus.available ? "pass" : "unavailable", gpuStatus.available ? `${gpuStatus.summary.gpuCount} NVIDIA GPU(s) visible.` : "GPU monitoring is unavailable or no NVIDIA GPU was detected; CPU-only validation can still proceed."),
       check("runtime", "Managed router", runtimeActive ? "pass" : "warning", runtimeActive ? `Managed router state is ${routerState.status}.` : "No active managed router is running; start an eligible Build for router health validation."),
@@ -80,15 +79,14 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
       ok: blockingChecks.length === 0,
       checkedAt,
       configured: {
-        adminToken: Boolean(settings.adminTokenHash),
         modelFolders: settings.modelFolders.length > 0,
         llamaCppFolders: settings.llamaCppFolders.length > 0,
         toolInputFolders: settings.toolInputFolders.length > 0
       },
       counts: {
-        registeredArtifacts: domain.artifacts.length,
+         discoveredArtifacts: domain.artifacts.length,
         configuredModels: domain.configuredModels.length,
-        registeredBuilds: domain.builds.length,
+         discoveredBuilds: domain.builds.length,
         eligibleBuilds: eligibleBuilds.length,
         ggufModels: models.models.length,
         serverBuilds: builds.builds.length,

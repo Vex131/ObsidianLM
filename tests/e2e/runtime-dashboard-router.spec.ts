@@ -1,7 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const now = "2026-08-28T12:00:00.000Z";
-const token = "e2e-admin-token";
 const builds = [
   { id: "build-a", displayName: "Build A", resource: { owner: { scope: "local" }, locator: "C:/llama/a" }, server: { owner: { scope: "local" }, locator: "C:/llama/a/llama-server.exe" }, classification: "official", tools: [], managedInferenceEligibility: "eligible", configuredModelIds: ["model-a", "model-b"], validationInProgress: false },
   { id: "build-b", displayName: "Build B", resource: { owner: { scope: "local" }, locator: "C:/llama/b" }, server: { owner: { scope: "local" }, locator: "C:/llama/b/llama-server.exe" }, classification: "official", tools: [], managedInferenceEligibility: "eligible", configuredModelIds: ["model-c"], validationInProgress: false }
@@ -19,7 +18,6 @@ function runtime(status: "running" | "stopped" | "failed" = "running") {
 }
 
 async function fixture(page: Page, options: { state?: "running" | "stopped" | "failed"; switchError?: boolean } = {}) {
-  await page.addInitScript((value) => localStorage.setItem("obsidianlm.adminToken", value), token);
   let current = runtime(options.state ?? "running");
   const requests: { path: string; method: string; body: unknown }[] = [];
   await page.route("**/api/**", async (route: Route) => {
@@ -28,7 +26,6 @@ async function fixture(page: Page, options: { state?: "running" | "stopped" | "f
     const method = route.request().method();
     if (path === "/api/profiles" || path.startsWith("/api/profiles/")) requests.push({ path, method, body: null });
     if (path.startsWith("/api/runtime/") && method !== "GET") requests.push({ path, method, body: route.request().postDataJSON() });
-    if (path === "/api/auth/status") return route.fulfill({ json: { configured: true } });
     if (path === "/api/runtime" || path === "/api/runtime/catalog") return route.fulfill({ json: path.endsWith("catalog") ? { routerState: current.routerState } : current });
     if (path === "/api/configured-models") return route.fulfill({ json: { revision: "r1", configuredModels: models } });
     if (path === "/api/builds") return route.fulfill({ json: { revision: "r1", builds } });

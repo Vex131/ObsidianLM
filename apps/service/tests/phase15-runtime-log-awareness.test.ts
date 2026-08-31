@@ -6,7 +6,12 @@ import { RuntimeManager } from "../src/runtime/manager.js";
 
 type OutputHarness = {
   processAwareness: DetectedProcess[];
-  captureOutput(stream: "stdout" | "stderr", data: Buffer, child?: unknown, runtimeId?: unknown): void;
+  captureOutput(
+    stream: "stdout" | "stderr",
+    data: Buffer,
+    child?: unknown,
+    runtimeId?: unknown,
+  ): void;
   flushPartialOutput(): void;
 };
 
@@ -33,7 +38,7 @@ function child(port: number): DetectedProcess {
     ownership: "proven",
     configuredModelId: "model_a",
     routerAlias: "alias-a" as RouterAlias,
-    childPort: port
+    childPort: port,
   };
 }
 
@@ -41,10 +46,18 @@ test("runtime output distinguishes router, proven child, and unknown child-prefi
   const { logs, output } = harness();
   output.processAwareness = [child(39015)];
 
-  output.captureOutput("stdout", Buffer.from("srv main: listening\n[39015] slot print_timing: ok\n[39016] unknown output\n"));
+  output.captureOutput(
+    "stdout",
+    Buffer.from(
+      "srv main: listening\n[39015] slot print_timing: ok\n[39016] unknown output\n",
+    ),
+  );
 
   const entries = logs.getRecentFromMemory();
-  assert.deepEqual(entries.map((entry) => entry.origin), ["router", "router_child", "router_child_candidate"]);
+  assert.deepEqual(
+    entries.map((entry) => entry.origin),
+    ["router", "router_child", "router_child_candidate"],
+  );
   assert.equal(entries[1].message, "slot print_timing: ok");
   assert.equal(entries[1].pid, 200);
   assert.equal(entries[1].configuredModelId, "model_a");
@@ -72,7 +85,10 @@ test("runtime output reassembles split prefixes and keeps stdout and stderr tail
 
 test("unterminated runtime output is bounded and subsequent lines remain visible", () => {
   const { logs, output } = harness();
-  output.captureOutput("stdout", Buffer.from(`${"x".repeat(70 * 1024)}\nnext line\n`));
+  output.captureOutput(
+    "stdout",
+    Buffer.from(`${"x".repeat(70 * 1024)}\nnext line\n`),
+  );
 
   const entries = logs.getRecentFromMemory();
   assert.equal(entries.length, 2);
@@ -85,9 +101,18 @@ test("output from a replaced router identity cannot inherit target runtime attri
   const { logs, output } = harness();
   const source = {};
   const target = {};
-  Object.assign(output, { child: target, routerState: { activeRuntimeId: "router_target" }, processAwareness: [child(39015)] });
+  Object.assign(output, {
+    child: target,
+    routerState: { activeRuntimeId: "router_target" },
+    processAwareness: [child(39015)],
+  });
 
-  output.captureOutput("stdout", Buffer.from("[39015] stale source line\n"), source, "router_source");
+  output.captureOutput(
+    "stdout",
+    Buffer.from("[39015] stale source line\n"),
+    source,
+    "router_source",
+  );
 
   assert.deepEqual(logs.getRecentFromMemory(), []);
 });

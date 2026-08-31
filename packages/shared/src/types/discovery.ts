@@ -75,6 +75,8 @@ export interface DiscoveredLlamaCppBuild {
   name: string;
   folder: string;
   serverPath: string;
+  status?: "available" | "missing";
+  warnings?: string[];
   tools: DiscoveredLlamaCppTool[];
   detectedAt: string;
   discoveryRoot?: string;

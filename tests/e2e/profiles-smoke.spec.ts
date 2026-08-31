@@ -2,17 +2,15 @@ import { expect, test, type Page } from "@playwright/test";
 
 const artifact = { id: "artifact-1", discoveryId: "discovered-model", resource: { owner: { scope: "local" }, locator: "C:/models/vision.gguf" }, kind: "model", referenceStatus: "available", configuredModelIds: ["configured-1"] };
 const projector = { id: "artifact-mmproj", discoveryId: "discovered-projector", resource: { owner: { scope: "local" }, locator: "C:/models/mmproj.gguf" }, kind: "mmproj", referenceStatus: "available", configuredModelIds: ["configured-1"] };
-const build = { id: "build-1", discoveryId: "discovered-build", displayName: "Fixture llama.cpp", resource: { owner: { scope: "local" }, locator: "C:/llama" }, server: { owner: { scope: "local" }, locator: "C:/llama/llama-server.exe" }, classification: "custom", tools: [], managedInferenceEligibility: "eligible", configuredModelIds: ["configured-1"], validationInProgress: false, staticEvidence: { routerFlags: { status: "candidate" }, warnings: [], assessedAt: "2026-08-28T00:00:00Z" }, functionalEvidence: { state: "eligible", launchAttempted: true, presetAccepted: true, healthVerified: true, modelsVerified: true, catalogBoundaryVerified: true, requiredBehaviorVerified: true, warnings: [], failures: [] } };
+const build = { id: "build-1", discoveryId: "discovered-build", displayName: "Fixture llama.cpp", resource: { owner: { scope: "local" }, locator: "C:/llama" }, server: { owner: { scope: "local" }, locator: "C:/llama/llama-server.exe" }, classification: "custom", tools: [{ kind: "server", fileName: "llama-server.exe", path: "C:/llama/llama-server.exe", exists: true }], managedInferenceEligibility: "eligible", configuredModelIds: ["configured-1"], validationInProgress: false, staticEvidence: { routerFlags: { status: "candidate" }, warnings: [], assessedAt: "2026-08-28T00:00:00Z" }, functionalEvidence: { state: "eligible", launchAttempted: true, presetAccepted: true, healthVerified: true, modelsVerified: true, catalogBoundaryVerified: true, requiredBehaviorVerified: true, warnings: [], failures: [] } };
 const alternateBuild = { ...build, id: "build-2", discoveryId: "alternate-build", displayName: "Alternate llama.cpp", resource: { owner: { scope: "local" }, locator: "C:/llama-alt" }, server: { owner: { scope: "local" }, locator: "C:/llama-alt/llama-server.exe" }, configuredModelIds: [] };
 const model = { id: "configured-1", displayName: "Vision profile", routerAlias: "vision", artifactId: artifact.id, buildId: build.id, enabled: true, artifact, build, projector, projectorAssociation: { artifactId: projector.id, selection: "explicit", validationStatus: "not_validated" }, projectorCandidates: [{ artifactId: projector.id, basis: "filename", confidence: "high" }], llamaArgs: { ctxSize: 4096 }, flagOverrides: [{ flag: "--legacy-flag", values: ["preserve-me"] }], extraArgs: ["--unsupported-legacy"], warnings: ["Unsupported legacy value preserved."], validation: { structural: true, references: { artifact: "available", build: "available" }, status: "not_validated", managedInferenceEligibility: "eligible" } };
 
 async function mockProfiles(page: Page, calls: string[], previewBodies: Array<Record<string, unknown>>) {
-  await page.addInitScript(() => localStorage.setItem("obsidianlm.adminToken", "e2e-token"));
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
     calls.push(`${method} ${url.pathname}`);
-    if (url.pathname === "/api/auth/status") return route.fulfill({ json: { configured: true, authRequired: true } });
     if (method === "GET" && url.pathname === "/api/configured-models") return route.fulfill({ json: { revision: 1, configuredModels: [model] } });
     if (method === "POST" && url.pathname === "/api/configured-models/preview") {
       const request = route.request().postDataJSON() as { draft: { routerAlias: string; llamaArgs: { ctxSize?: number }; buildId: string } };
@@ -50,7 +48,7 @@ test("Profiles uses configured-model routes and presents the reference editor co
   await expect(page.getByText("vision · 4K context")).toBeVisible();
   await expect(page.getByLabel("Router alias")).toHaveValue("vision");
   await expect(page.getByLabel("Display name")).toHaveValue("Vision profile");
-  await expect(page.getByLabel("Model Artifact")).toHaveValue(artifact.id);
+  await expect(page.locator(".resource-grid select").first()).toHaveValue(artifact.id);
   await expect(page.getByLabel("llama.cpp Build")).toHaveValue(build.id);
   await expect(page.getByLabel("Projector / MMProj")).toHaveValue(projector.id);
   await expect(page.getByText("Unsupported legacy value preserved.")).toBeVisible();
@@ -89,7 +87,7 @@ test("Profiles uses configured-model routes and presents the reference editor co
   expect(errors).toEqual([]);
 });
 
-test("New profile stays sparse until Model Artifact and Build resolve capabilities", async ({ page }) => {
+test("New profile stays sparse until Model and Build resolve capabilities", async ({ page }) => {
   const calls: string[] = [];
   const previewBodies: Array<Record<string, unknown>> = [];
   await mockProfiles(page, calls, previewBodies);
@@ -98,7 +96,7 @@ test("New profile stays sparse until Model Artifact and Build resolve capabiliti
   await expect(page.getByRole("heading", { name: "New profile", exact: true })).toBeVisible();
   await expect(page.getByLabel("Context size")).toHaveCount(0);
   await expect(page.getByText(/Configuration controls depend on the selected Build capability manifest/)).toBeVisible();
-  await page.getByLabel("Model Artifact").selectOption(artifact.id);
+  await page.locator(".choice-grid select").first().selectOption(artifact.id);
   await page.getByLabel("llama.cpp Build").selectOption(build.id);
   await expect(page.getByLabel("Context size")).toBeVisible();
   await expect(page.getByLabel("Context size")).toHaveValue("");

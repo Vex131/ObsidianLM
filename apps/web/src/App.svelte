@@ -12,7 +12,7 @@
   import SettingsPage from "./lib/pages/SettingsPage.svelte";
   import SystemPage from "./lib/pages/SystemPage.svelte";
   import { defaultShellStatus, type ShellStatusSummary, type ShellStatusTone } from "./lib/layout/shell-status";
-  import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type StatusResponse } from "./lib/api";
+  import { API_ENDPOINTS, fetchJson, type StatusResponse } from "./lib/api";
   import { applicationStatus } from "./lib/app-status";
   import { createCompletionAwarePoller, type CompletionAwarePoller } from "./lib/polling";
   import type { RouterRuntimeResponse } from "@obsidianlm/shared";
@@ -137,11 +137,6 @@
   }
 
   async function refreshShellRuntime() {
-    if (!readStoredAdminToken()) {
-      routerRuntime = null;
-      return;
-    }
-
     try {
       routerRuntime = await fetchJson<RouterRuntimeResponse>(API_ENDPOINTS.runtime.state);
     } catch {

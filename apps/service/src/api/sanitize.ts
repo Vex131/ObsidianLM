@@ -24,8 +24,5 @@ export function sanitizeDetectionForApi(summary: StartupDetectionSummary): Start
 }
 
 export function sanitizeSettingsForApi(settings: AppSettings): AppSettings {
-  return {
-    ...settings,
-    adminTokenHash: null
-  };
+  return settings;
 }

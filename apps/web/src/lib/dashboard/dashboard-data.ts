@@ -1,5 +1,5 @@
 import type { CommandSpec, ConfiguredModelDetails, LlamaCppBuildDetails, ProcessListResponse, RouterRuntimeResponse } from "@obsidianlm/shared";
-import { API_ENDPOINTS, fetchJson, readStoredAdminToken, type GpuMonitoringStatus, type ReadinessResponse, type RuntimeHealthResponse, type RuntimeLogsResponse } from "../api";
+import { API_ENDPOINTS, fetchJson, type GpuMonitoringStatus, type ReadinessResponse, type RuntimeHealthResponse, type RuntimeLogsResponse } from "../api";
 
 export type DashboardData = {
   runtime: RouterRuntimeResponse | null;
@@ -11,42 +11,39 @@ export type DashboardData = {
   readiness: ReadinessResponse | null;
   runtimeHealth: RuntimeHealthResponse | null;
   processes: ProcessListResponse | null;
-  hasToken: boolean;
   loadedAt: string | null;
 };
 
 export const emptyDashboardData: DashboardData = {
   runtime: null, runtimeCommand: null, configuredModels: [], builds: [], runtimeLogs: [], gpuStatus: null,
-  readiness: null, runtimeHealth: null, processes: null, hasToken: false, loadedAt: null
+  readiness: null, runtimeHealth: null, processes: null, loadedAt: null
 };
 
-async function protectedFetch<T>(url: string, token: string): Promise<T | null> {
-  try { return await fetchJson<T>(url, undefined, { token }); } catch { return null; }
+async function optionalFetch<T>(url: string): Promise<T | null> {
+  try { return await fetchJson<T>(url); } catch { return null; }
 }
 
 /** Router, configured models, and builds are the required runtime authority. */
 export async function fetchDashboardData(): Promise<DashboardData> {
-  const token = readStoredAdminToken();
-  if (!token) return { ...emptyDashboardData };
   const [runtime, configured, builds] = await Promise.all([
-    protectedFetch<RouterRuntimeResponse>(API_ENDPOINTS.runtime.state, token),
-    protectedFetch<{ configuredModels: ConfiguredModelDetails[] }>(API_ENDPOINTS.configuredModels.list, token),
-    protectedFetch<{ builds: LlamaCppBuildDetails[] }>(API_ENDPOINTS.builds.list, token)
+    optionalFetch<RouterRuntimeResponse>(API_ENDPOINTS.runtime.state),
+    optionalFetch<{ configuredModels: ConfiguredModelDetails[] }>(API_ENDPOINTS.configuredModels.list),
+    optionalFetch<{ builds: LlamaCppBuildDetails[] }>(API_ENDPOINTS.builds.list)
   ]);
   const catalog = runtime?.routerState.status === "running"
-    ? await protectedFetch<{ routerState: RouterRuntimeResponse["routerState"] }>(API_ENDPOINTS.runtime.catalog, token)
+    ? await optionalFetch<{ routerState: RouterRuntimeResponse["routerState"] }>(API_ENDPOINTS.runtime.catalog)
     : null;
   const [command, logs, gpuStatus, readiness, runtimeHealth, processes] = await Promise.all([
-    protectedFetch<{ command: CommandSpec }>(API_ENDPOINTS.runtime.command, token),
-    protectedFetch<RuntimeLogsResponse>(API_ENDPOINTS.runtime.logs(24), token),
-    protectedFetch<GpuMonitoringStatus>(API_ENDPOINTS.monitoring.gpu, token),
-    protectedFetch<ReadinessResponse>(API_ENDPOINTS.readiness, token),
-    protectedFetch<RuntimeHealthResponse>(API_ENDPOINTS.runtime.health, token),
-    protectedFetch<ProcessListResponse>(API_ENDPOINTS.processes.llama, token)
+    optionalFetch<{ command: CommandSpec }>(API_ENDPOINTS.runtime.command),
+    optionalFetch<RuntimeLogsResponse>(API_ENDPOINTS.runtime.logs(24)),
+    optionalFetch<GpuMonitoringStatus>(API_ENDPOINTS.monitoring.gpu),
+    optionalFetch<ReadinessResponse>(API_ENDPOINTS.readiness),
+    optionalFetch<RuntimeHealthResponse>(API_ENDPOINTS.runtime.health),
+    optionalFetch<ProcessListResponse>(API_ENDPOINTS.processes.llama)
   ]);
   return {
     runtime: runtime && catalog ? { ...runtime, routerState: catalog.routerState } : runtime,
     runtimeCommand: command?.command ?? null, configuredModels: configured?.configuredModels ?? [], builds: builds?.builds ?? [],
-    runtimeLogs: logs?.logs ?? [], gpuStatus, readiness, runtimeHealth, processes, hasToken: true, loadedAt: new Date().toISOString()
+    runtimeLogs: logs?.logs ?? [], gpuStatus, readiness, runtimeHealth, processes, loadedAt: new Date().toISOString()
   };
 }

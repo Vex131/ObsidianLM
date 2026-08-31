@@ -47,22 +47,35 @@ async function makeFixture(t: TestContext) {
   process.env.OBSIDIANLM_DATA_DIR = dataDir;
   process.env.OBSIDIANLM_LOG_DIR = logsDir;
   delete process.env.OBSIDIANLM_LOGS_DIR;
-  return { root, dataDir, logsDir, runtimeLogsDir: path.join(logsDir, "runtimes") };
+  return {
+    root,
+    dataDir,
+    logsDir,
+    runtimeLogsDir: path.join(logsDir, "runtimes"),
+  };
 }
 
-function logEntry(id: number, message = `line-${id}`, source: RuntimeLogEntry["source"] = "stdout"): Omit<RuntimeLogEntry, "origin"> {
+function logEntry(
+  id: number,
+  message = `line-${id}`,
+  source: RuntimeLogEntry["source"] = "stdout",
+): Omit<RuntimeLogEntry, "origin"> {
   return {
     id,
     sequence: id,
     timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, id % 60)).toISOString(),
     source,
     stream: source,
-    message
+    message,
   };
 }
 
 async function writeJsonl(filePath: string, entries: object[]): Promise<void> {
-  await writeFile(filePath, `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`, "utf8");
+  await writeFile(
+    filePath,
+    `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+    "utf8",
+  );
 }
 
 async function createRuntimeApp(logs = new RuntimeLogBuffer()) {
@@ -87,21 +100,40 @@ test("RuntimeLogBuffer reads recent structured entries from the runtime log file
   await makeFixture(t);
   const logs = new RuntimeLogBuffer();
   const logFile = await logs.startLogFile("daily-profile");
-  await writeJsonl(logFile, [logEntry(1, "first"), logEntry(2, "second", "stderr"), logEntry(3, "third", "system")]);
+  await writeJsonl(logFile, [
+    logEntry(1, "first"),
+    logEntry(2, "second", "stderr"),
+    logEntry(3, "third", "system"),
+  ]);
 
   const recent = await logs.getRecent(2);
 
-  assert.deepEqual(recent.map((entry) => entry.message), ["second", "third"]);
-  assert.deepEqual(recent.map((entry) => entry.source), ["stderr", "system"]);
+  assert.deepEqual(
+    recent.map((entry) => entry.message),
+    ["second", "third"],
+  );
+  assert.deepEqual(
+    recent.map((entry) => entry.source),
+    ["stderr", "system"],
+  );
   assert.equal(recent[0]?.stream, "stderr");
-  assert.deepEqual(recent.map((entry) => entry.origin), ["unknown", "unknown"]);
+  assert.deepEqual(
+    recent.map((entry) => entry.origin),
+    ["unknown", "unknown"],
+  );
 });
 
 test("RuntimeLogBuffer persists and restores additive child attribution metadata", async (t) => {
   await makeFixture(t);
   const logs = new RuntimeLogBuffer();
   await logs.startLogFile("router_metadata");
-  logs.add("stdout", "child line", { origin: "router_child", pid: 200, childPort: 39015, configuredModelId: "model_a", routerAlias: "alias-a" });
+  logs.add("stdout", "child line", {
+    origin: "router_child",
+    pid: 200,
+    childPort: 39015,
+    configuredModelId: "model_a",
+    routerAlias: "alias-a",
+  });
 
   const deadline = Date.now() + 1000;
   let recent = await logs.getRecent(1);
@@ -132,7 +164,7 @@ test("RuntimeLogBuffer applies default and maximum recent-log limits", async (t)
   const logFile = await logs.startLogFile("limit-profile");
   await writeJsonl(
     logFile,
-    Array.from({ length: 2105 }, (_, index) => logEntry(index + 1))
+    Array.from({ length: 2105 }, (_, index) => logEntry(index + 1)),
   );
 
   const defaultRecent = await logs.getRecent();
@@ -158,13 +190,19 @@ test("RuntimeLogBuffer returns an empty safe response when the active log file i
 test("RuntimeLogBuffer combines persisted runtime logs with memory-only system entries", async (t) => {
   const fixture = await makeFixture(t);
   await mkdir(fixture.runtimeLogsDir, { recursive: true });
-  await writeJsonl(path.join(fixture.runtimeLogsDir, "2026-01-01-runtime.jsonl"), [logEntry(1, "persisted runtime line")]);
+  await writeJsonl(
+    path.join(fixture.runtimeLogsDir, "2026-01-01-runtime.jsonl"),
+    [logEntry(1, "persisted runtime line")],
+  );
   const logs = new RuntimeLogBuffer();
 
   logs.add("system", "memory-only startup warning");
   const recent = await logs.getRecent(10);
 
-  assert.deepEqual(recent.map((entry) => entry.message), ["persisted runtime line", "memory-only startup warning"]);
+  assert.deepEqual(
+    recent.map((entry) => entry.message),
+    ["persisted runtime line", "memory-only startup warning"],
+  );
 });
 
 test("RuntimeLogBuffer deduplicates memory entries already present in the active runtime log file", async (t) => {
@@ -179,7 +217,10 @@ test("RuntimeLogBuffer deduplicates memory entries already present in the active
     recent = await logs.getRecent(10);
   }
 
-  assert.deepEqual(recent.map((item) => item.message), [entry.message]);
+  assert.deepEqual(
+    recent.map((item) => item.message),
+    [entry.message],
+  );
 });
 
 test("runtime log files honor service-mode log directory overrides", async (t) => {
@@ -201,18 +242,29 @@ test("runtime log files honor service-mode log directory overrides", async (t) =
 test("GET /api/runtime/logs returns logs from runtime log storage and ignores traversal query params", async (t) => {
   const fixture = await makeFixture(t);
   await mkdir(fixture.runtimeLogsDir, { recursive: true });
-  const runtimeLogFile = path.join(fixture.runtimeLogsDir, "2026-01-01-runtime.jsonl");
+  const runtimeLogFile = path.join(
+    fixture.runtimeLogsDir,
+    "2026-01-01-runtime.jsonl",
+  );
   const outsideSecret = path.join(fixture.root, "secret.jsonl");
   await writeJsonl(runtimeLogFile, [logEntry(1, "safe runtime line")]);
-  await writeJsonl(outsideSecret, [logEntry(99, "do not leak this outside file")]);
+  await writeJsonl(outsideSecret, [
+    logEntry(99, "do not leak this outside file"),
+  ]);
 
   const { app } = await createRuntimeApp();
   t.after(async () => app.close());
 
-  const response = await app.inject({ method: "GET", url: `/api/runtime/logs?limit=5&file=${encodeURIComponent(`..${path.sep}secret.jsonl`)}` });
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/runtime/logs?limit=5&file=${encodeURIComponent(`..${path.sep}secret.jsonl`)}`,
+  });
   assert.equal(response.statusCode, 200);
   const body = response.json() as RuntimeLogsResponseBody;
-  assert.deepEqual(body.logs.map((entry) => entry.message), ["safe runtime line"]);
+  assert.deepEqual(
+    body.logs.map((entry) => entry.message),
+    ["safe runtime line"],
+  );
   assert.equal(JSON.stringify(body).includes("do not leak"), false);
 });
 
@@ -226,10 +278,16 @@ test("GET /api/runtime/logs/stream sends SSE headers, an initial connection even
   assert.ok(address);
 
   const controller = new AbortController();
-  const response = await fetch(`http://127.0.0.1:${address.port}/api/runtime/logs/stream?limit=1`, { signal: controller.signal });
+  const response = await fetch(
+    `http://127.0.0.1:${address.port}/api/runtime/logs/stream?limit=1`,
+    { signal: controller.signal },
+  );
 
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get("content-type")?.startsWith("text/event-stream"), true);
+  assert.equal(
+    response.headers.get("content-type")?.startsWith("text/event-stream"),
+    true,
+  );
   assert.equal(response.headers.get("cache-control"), "no-cache, no-transform");
   assert.equal(response.headers.get("connection"), "keep-alive");
 
@@ -241,14 +299,20 @@ test("GET /api/runtime/logs/stream sends SSE headers, an initial connection even
   assert.match(text, /event: connection\ndata: \{"ok":true,"state":/u);
 
   let listenerDeadline = Date.now() + 1000;
-  while ((logs as unknown as { listeners: Set<unknown> }).listeners.size !== 1 && Date.now() < listenerDeadline) {
+  while (
+    (logs as unknown as { listeners: Set<unknown> }).listeners.size !== 1 &&
+    Date.now() < listenerDeadline
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 
   logs.add("stdout", "streamed test line");
   let streamText = text;
   listenerDeadline = Date.now() + 1000;
-  while (!streamText.includes("streamed test line") && Date.now() < listenerDeadline) {
+  while (
+    !streamText.includes("streamed test line") &&
+    Date.now() < listenerDeadline
+  ) {
     const nextChunk = await reader.read();
     assert.equal(nextChunk.done, false);
     streamText += new TextDecoder().decode(nextChunk.value);
@@ -263,10 +327,16 @@ test("GET /api/runtime/logs/stream sends SSE headers, an initial connection even
   }
 
   const deadline = Date.now() + 1000;
-  while ((logs as unknown as { listeners: Set<unknown> }).listeners.size !== 0 && Date.now() < deadline) {
+  while (
+    (logs as unknown as { listeners: Set<unknown> }).listeners.size !== 0 &&
+    Date.now() < deadline
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  assert.equal((logs as unknown as { listeners: Set<unknown> }).listeners.size, 0);
+  assert.equal(
+    (logs as unknown as { listeners: Set<unknown> }).listeners.size,
+    0,
+  );
 });
 
 test("GET /api/runtime/logs/stream does not leak listeners when the client disconnects during history load", async (t) => {
@@ -279,12 +349,18 @@ test("GET /api/runtime/logs/stream does not leak listeners when the client disco
   assert.ok(address);
 
   const controller = new AbortController();
-  const response = await fetch(`http://127.0.0.1:${address.port}/api/runtime/logs/stream?limit=1`, { signal: controller.signal });
+  const response = await fetch(
+    `http://127.0.0.1:${address.port}/api/runtime/logs/stream?limit=1`,
+    { signal: controller.signal },
+  );
   const reader = response.body?.getReader();
   assert.ok(reader);
   const firstChunk = await reader.read();
   assert.equal(firstChunk.done, false);
-  assert.match(new TextDecoder().decode(firstChunk.value), /event: connection/u);
+  assert.match(
+    new TextDecoder().decode(firstChunk.value),
+    /event: connection/u,
+  );
 
   controller.abort();
   try {
@@ -295,8 +371,14 @@ test("GET /api/runtime/logs/stream does not leak listeners when the client disco
   logs.resolveRecent?.();
 
   const deadline = Date.now() + 1000;
-  while ((logs as unknown as { listeners: Set<unknown> }).listeners.size !== 0 && Date.now() < deadline) {
+  while (
+    (logs as unknown as { listeners: Set<unknown> }).listeners.size !== 0 &&
+    Date.now() < deadline
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  assert.equal((logs as unknown as { listeners: Set<unknown> }).listeners.size, 0);
+  assert.equal(
+    (logs as unknown as { listeners: Set<unknown> }).listeners.size,
+    0,
+  );
 });

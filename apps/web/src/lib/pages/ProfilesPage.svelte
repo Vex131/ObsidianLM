@@ -70,8 +70,13 @@
   let previewSignature = "";
   let impact: Array<[string, string]> = [];
 
-  $: primaryArtifacts = artifacts.filter((artifact) => artifact.kind === "model" || artifact.kind === "unknown");
-  $: projectors = artifacts.filter((artifact) => artifact.kind === "mmproj" || artifact.kind === "unknown");
+  const supportArtifact = (artifact: ModelArtifactListItem) => /(?:mmproj|projector|adapter|lora|imatrix)/i.test(artifact.resource.locator);
+  const buildName = (build: LlamaCppBuildDetails) => build.displayName;
+  const buildLabel = (build: LlamaCppBuildDetails) => builds.filter((item) => buildName(item) === buildName(build)).length > 1 ? `${buildName(build)} · ${build.resource.locator.replace(/[\\/]+$/, "").split(/[\\/]/).slice(-2, -1)[0] ?? build.resource.locator}` : buildName(build);
+  const artifactName = (artifact: ModelArtifactListItem) => artifact.metadata?.displayName ?? artifact.resource.locator.split(/[\\/]/).pop()?.replace(/\.gguf$/i, "") ?? artifact.id;
+  $: primaryArtifacts = artifacts.filter((artifact) => artifact.referenceStatus === "available" && (artifact.kind === "model" || (artifact.kind === "unknown" && !supportArtifact(artifact))));
+  $: projectors = artifacts.filter((artifact) => artifact.referenceStatus === "available" && artifact.kind === "mmproj");
+  $: availableBuilds = builds.filter((build) => build.tools.some((tool) => tool.kind === "server" && tool.exists));
   $: selectedArtifact = artifacts.find((artifact) => artifact.id === draft.artifactId);
   $: selectedBuild = builds.find((build) => build.id === draft.buildId);
   $: selectedProjector = artifacts.find((artifact) => artifact.id === draft.projectorId);
@@ -173,7 +178,7 @@
       draft.buildId = builds.find((entry) => entry.id === build || entry.discoveryId === build)?.id ?? "";
       if (draft.artifactId) deriveName();
       if (draft.buildId) void capabilities(draft.buildId);
-      if ((artifact && !draft.artifactId) || (build && !draft.buildId)) missingLink = "Requested legacy selection is missing; choose a registered replacement.";
+      if ((artifact && !draft.artifactId) || (build && !draft.buildId)) missingLink = "Requested legacy selection is missing; choose an available discovered replacement.";
     } else if (id) missingLink = "Requested configured model is missing.";
     else if (models[0]) void select(models[0]);
   }
@@ -323,7 +328,7 @@
   function modelState(model: ConfiguredModelDetails): string {
     if (!model.enabled) return "Disabled";
     if (model.validation.status === "invalid") return "Invalid";
-    if (model.validation.references.artifact !== "available") return "Missing artifact";
+    if (model.validation.references.artifact !== "available") return "Missing model";
     if (model.validation.references.build !== "available") return "Missing Build";
     const state = runtime?.routerState.configuredModelStates.find((entry) => entry.configuredModelId === model.id)?.state;
     return state ? state[0]!.toUpperCase() + state.slice(1) : "Available";
@@ -347,7 +352,7 @@
     const compare = (label: string, before: unknown, after: unknown, empty = "Inherited") => { if (JSON.stringify(before) !== JSON.stringify(after)) result.push({ label, before: displayValue(before, empty), after: displayValue(after, empty) }); };
     compare("Display name", selected.displayName, draft.displayName);
     compare("Router alias", selected.routerAlias, draft.routerAlias);
-    compare("Model artifact", selected.artifact?.metadata?.displayName ?? selected.artifactId, selectedArtifact?.metadata?.displayName ?? draft.artifactId, "None");
+    compare("Model", selected.artifact?.metadata?.displayName ?? selected.artifactId, selectedArtifact?.metadata?.displayName ?? draft.artifactId, "None");
     compare("Build", selected.build?.displayName ?? selected.buildId, selectedBuild?.displayName ?? draft.buildId, "None");
     compare("Projector", selected.projector?.metadata?.displayName ?? selected.projectorAssociation?.artifactId, selectedProjector?.metadata?.displayName ?? draft.projectorId, "None");
     compare("Enabled", selected.enabled, draft.enabled);
@@ -434,10 +439,10 @@
       <div class="editor-sections">
         {#if !editorReady}
           <section class="config-section progressive-section">
-            <div class="config-section-head"><div><h2>New profile</h2><p>Establish Model Artifact + Build before configuration controls are resolved.</p></div><span class="badge amber">Awaiting selection</span></div>
+            <div class="config-section-head"><div><h2>New profile</h2><p>Select a Model + Build before configuration controls are resolved.</p></div><span class="badge amber">Awaiting selection</span></div>
             <div class="config-body choice-grid">
-              <label class="field">Model Artifact<select bind:value={draft.artifactId} on:change={deriveName}><option value="">Select registered artifact</option>{#each primaryArtifacts as artifact}<option value={artifact.id}>{artifact.metadata?.displayName ?? artifact.resource.locator} ({artifact.referenceStatus})</option>{/each}</select></label>
-              <label class="field">llama.cpp Build<select bind:value={draft.buildId} on:change={() => capabilities(draft.buildId)}><option value="">Select registered Build</option>{#each builds as build}<option value={build.id}>{build.displayName} · {build.managedInferenceEligibility}</option>{/each}</select></label>
+              <label class="field">Model<select bind:value={draft.artifactId} on:change={deriveName}><option value="">Select model</option>{#each primaryArtifacts as artifact}<option value={artifact.id}>{artifactName(artifact)}</option>{/each}</select></label>
+              <label class="field">llama.cpp Build<select bind:value={draft.buildId} on:change={() => capabilities(draft.buildId)}><option value="">Select Build</option>{#each availableBuilds as build}<option value={build.id}>{buildLabel(build)}</option>{/each}</select></label>
               <p class="capability-note">Configuration controls depend on the selected Build capability manifest. Values begin as Inherited and remain absent from persisted overrides until changed.</p>
             </div>
           </section>
@@ -452,11 +457,11 @@
           </section>
 
           <section class="config-section">
-            <div class="config-section-head"><div><h2>Model, vision & build</h2><p>Registered resources owned by Models and Builds.</p></div></div>
+            <div class="config-section-head"><div><h2>Model, vision & build</h2><p>Auto-synced resources owned by Models and Builds.</p></div></div>
             <div class="config-body resource-grid">
-              <label class="field">Model Artifact<select bind:value={draft.artifactId}><option value="">Select registered artifact</option>{#each primaryArtifacts as artifact}<option value={artifact.id}>{artifact.metadata?.displayName ?? artifact.resource.locator} ({artifact.referenceStatus})</option>{/each}</select><small>{selectedArtifact?.resource.locator ?? "No artifact selected"}</small></label>
-              <label class="field">llama.cpp Build<select bind:value={draft.buildId} on:change={() => capabilities(draft.buildId)}><option value="">Select registered Build</option>{#each builds as build}<option value={build.id}>{build.displayName} · {build.managedInferenceEligibility}</option>{/each}</select><small>{selectedBuild?.server.locator ?? "No Build selected"}</small></label>
-              <label class="field">Projector / MMProj<select bind:value={draft.projectorId}><option value="">None · text only</option>{#each projectors as artifact}<option value={artifact.id}>{artifact.metadata?.displayName ?? artifact.resource.locator}</option>{/each}</select><small>{selectedProjector ? `Explicit projector · ${selectedProjector.referenceStatus}` : "Text-only configuration"}</small></label>
+              <label class="field">Model<select bind:value={draft.artifactId}><option value="">Select model</option>{#each primaryArtifacts as artifact}<option value={artifact.id}>{artifactName(artifact)}</option>{/each}</select><small>{selectedArtifact ? artifactName(selectedArtifact) : "No model selected"}</small></label>
+              <label class="field">llama.cpp Build<select bind:value={draft.buildId} on:change={() => capabilities(draft.buildId)}><option value="">Select Build</option>{#each availableBuilds as build}<option value={build.id}>{buildLabel(build)}</option>{/each}</select><small>{selectedBuild ? buildLabel(selectedBuild) : "No Build selected"}</small></label>
+              <label class="field">Projector / MMProj<select bind:value={draft.projectorId}><option value="">None · text only</option>{#each projectors as artifact}<option value={artifact.id}>{artifactName(artifact)}</option>{/each}</select><small>{selectedProjector ? `Explicit projector · ${selectedProjector.referenceStatus}` : "Text-only configuration"}</small></label>
               <div class="resource-links"><a href="#models">Open Models</a><a href="#builds">Open Builds</a></div>
             </div>
           </section>
@@ -520,7 +525,7 @@
       <section class="panel inspector-card validation-panel">
         <div class="inspector-head"><h2 class="section-title">Validation</h2><span class="badge {preview ? 'green' : previewError ? 'red' : 'amber'}">{previewBusy ? "Checking" : preview ? "Valid" : previewError ? "Review" : "Pending"}</span></div>
         <div class="validation-list">
-          <div><span>Artifact</span><strong class:ok={selectedArtifact?.referenceStatus === "available"}>{selectedArtifact?.referenceStatus === "available" ? "OK" : selectedArtifact?.referenceStatus ?? "Required"}</strong></div>
+          <div><span>Model</span><strong class:ok={selectedArtifact?.referenceStatus === "available"}>{selectedArtifact?.referenceStatus === "available" ? "OK" : selectedArtifact?.referenceStatus ?? "Required"}</strong></div>
           <div><span>Build</span><strong class:ok={selectedBuild?.managedInferenceEligibility === "eligible"}>{selectedBuild?.managedInferenceEligibility ?? "Required"}</strong></div>
           <div><span>Projector</span><strong class:ok={!draft.projectorId || selectedProjector?.referenceStatus === "available"}>{draft.projectorId ? selectedProjector?.referenceStatus ?? "Missing" : "None"}</strong></div>
           <div><span>Capabilities</span><strong class:ok={!!manifest}>{manifest ? "Loaded" : draft.buildId ? "Unavailable" : "Required"}</strong></div>
@@ -536,7 +541,7 @@
         <div class="preview-tabs" aria-label="Preview type"><button class:active={previewView === "preset"} aria-pressed={previewView === "preset"} type="button" on:click={() => previewView = "preset"}>Preset INI</button><button class:active={previewView === "launch"} aria-pressed={previewView === "launch"} type="button" on:click={() => previewView = "launch"}>Router launch</button></div>
         <div class="command-surface">
           <div class="command-label">{previewView === "preset" ? "Derived model-preset artifact" : "Managed router launch command"}</div>
-          <pre>{previewView === "preset" ? ((preview?.preset.content ?? previewError) || "Select Model Artifact + Build to preview.") : ((preview?.launch.command.displayCommand ?? previewError) || "Select Model Artifact + Build to preview.")}</pre>
+          <pre>{previewView === "preset" ? ((preview?.preset.content ?? previewError) || "Select Model + Build to preview.") : ((preview?.launch.command.displayCommand ?? previewError) || "Select Model + Build to preview.")}</pre>
         </div>
         <p class="inspector-note">The generated INI is derived from this configuration and is not authoritative editable data.</p>
       </section>

@@ -2,7 +2,6 @@ import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { defaultRouterRuntimeState, defaultRuntimeState, defaultSettings, type AppSettings, type JobRecord, type RouterRuntimeState, type RuntimeProfile, type RuntimeState } from "@obsidianlm/shared";
-import { isAdminTokenHash } from "../auth/admin-token.js";
 import { getDataDir } from "./paths.js";
 
 const jsonIndent = 2;
@@ -62,14 +61,14 @@ async function ensureJsonFile<T>(fileName: string, defaultValue: T): Promise<T> 
   }
 }
 
-function normalizeStoredSettings(settings: Partial<AppSettings>): AppSettings {
+function normalizeStoredSettings(settings: Partial<AppSettings> & { adminTokenHash?: unknown }): AppSettings {
+  const { adminTokenHash: _legacyAdminTokenHash, ...stored } = settings;
   return {
     ...defaultSettings,
-    ...settings,
-    modelFolders: Array.isArray(settings.modelFolders) ? settings.modelFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.modelFolders,
-    llamaCppFolders: Array.isArray(settings.llamaCppFolders) ? settings.llamaCppFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.llamaCppFolders,
-    toolInputFolders: Array.isArray(settings.toolInputFolders) ? settings.toolInputFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.toolInputFolders,
-    adminTokenHash: isAdminTokenHash(settings.adminTokenHash) ? settings.adminTokenHash : null
+    ...stored,
+    modelFolders: Array.isArray(stored.modelFolders) ? stored.modelFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.modelFolders,
+    llamaCppFolders: Array.isArray(stored.llamaCppFolders) ? stored.llamaCppFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.llamaCppFolders,
+    toolInputFolders: Array.isArray(stored.toolInputFolders) ? stored.toolInputFolders.filter((folder): folder is string => typeof folder === "string") : defaultSettings.toolInputFolders
   };
 }
 
@@ -169,7 +168,8 @@ async function writeJsonFile(fileName: string, value: unknown): Promise<void> {
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
-  await writeJsonFile("settings.json", settings);
+  const { adminTokenHash: _legacyAdminTokenHash, ...normalized } = settings as AppSettings & { adminTokenHash?: unknown };
+  await writeJsonFile("settings.json", normalized);
 }
 
 export async function saveProfiles(profiles: RuntimeProfile[]): Promise<void> {

@@ -13,9 +13,9 @@ export interface ReadinessCheck {
 }
 
 export interface ReadinessCounts {
-  registeredArtifacts?: number;
+  discoveredArtifacts?: number;
   configuredModels?: number;
-  registeredBuilds?: number;
+  discoveredBuilds?: number;
   eligibleBuilds?: number;
   ggufModels: number;
   serverBuilds: number;
@@ -26,7 +26,6 @@ export interface ReadinessCounts {
 }
 
 export interface ReadinessConfiguredState {
-  adminToken: boolean;
   modelFolders: boolean;
   llamaCppFolders: boolean;
   toolInputFolders: boolean;

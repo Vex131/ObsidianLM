@@ -11,8 +11,7 @@ export const defaultSettings: AppSettings = {
   staleProcessPolicy: "auto_stop_previous_managed_only",
   modelFolders: [],
   llamaCppFolders: [],
-  toolInputFolders: [],
-  adminTokenHash: null
+  toolInputFolders: []
 };
 
 export const defaultRuntimeState: RuntimeState = {

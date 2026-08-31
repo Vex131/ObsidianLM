@@ -16,7 +16,7 @@ export function typeLabel(model: DiscoveredModel, inspection?: GgufMetadataInspe
 
 export function isPrimaryModel(model: DiscoveredModel, inspection?: GgufMetadataInspection): boolean {
   if (inspection?.status === "invalid") return false;
-  return effectiveKind(model, inspection) === "model" || (!inspection && (model.artifactKindGuess ?? "unknown") === "unknown");
+  return effectiveKind(model, inspection) === "model" || (effectiveKind(model, inspection) === "unknown" && !/(?:mmproj|projector|adapter|lora|imatrix)/i.test(model.path));
 }
 
 export function artifactSignature(model: DiscoveredModel): string { return `${model.sizeBytes}:${model.modifiedAt}`; }
@@ -28,7 +28,7 @@ export function matchesModel(model: DiscoveredModel, inspection: GgufMetadataIns
   const normalized = query.trim().toLowerCase();
   const haystack = [model.name, model.fileName, model.path, model.folder, model.familyGuess, model.quantizationGuess, inspection?.architecture, inspection?.displayName].filter(Boolean).join(" ").toLowerCase();
   if (normalized && !haystack.includes(normalized)) return false;
-  if (tab === "models" && !(kind === "model" || kind === "unknown")) return false;
+  if (tab === "models" && !isPrimaryModel(model, inspection)) return false;
   if (tab === "projectors" && kind !== "mmproj") return false;
   if (tab === "other" && !(kind === "adapter" || kind === "imatrix" || kind === "other")) return false;
   if (family !== "all" && inspection?.architecture !== family && (model.familyGuess ?? "Unknown") !== family) return false;
