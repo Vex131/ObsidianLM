@@ -4,28 +4,19 @@
   import PageHeader from "../components/PageHeader.svelte";
   import { API_ENDPOINTS, fetchJson } from "../api";
 
-  let artifacts: ModelArtifactListItem[] = [], selected = "", query = "", message = "";
-  const supportName = (artifact: ModelArtifactListItem) => /(?:mmproj|projector|adapter|lora|imatrix)/i.test(artifact.resource.locator);
-  const primary = (artifact: ModelArtifactListItem) => artifact.kind === "model" || (artifact.kind === "unknown" && !supportName(artifact));
-  const name = (artifact: ModelArtifactListItem) => (artifact.metadata?.displayName ?? artifact.resource.locator.split(/[\\/]/).pop() ?? artifact.id).replace(/\.gguf$/i, "");
-  const folder = (locator: string) => locator.replace(/[\\/][^\\/]+$/, "");
-  const tokens = (locator: string) => new Set((locator.split(/[\\/]/).pop() ?? locator).toLowerCase().replace(/\.gguf$/i, "").split(/[^a-z0-9]+/).filter((token) => token.length > 2 && !/^(mmproj|projector|model|gguf|bf16|f16|q\d)$/i.test(token)));
-  const matchingProjectors = (artifact: ModelArtifactListItem) => {
-    const modelTokens = tokens(artifact.resource.locator);
-    return artifacts.filter((candidate) => candidate.kind === "mmproj" && candidate.referenceStatus === "available" && folder(candidate.resource.locator) === folder(artifact.resource.locator) && [...tokens(candidate.resource.locator)].some((token) => modelTokens.has(token)));
-  };
-  const visionCapable = (artifact: ModelArtifactListItem) => /vision|multimodal|clip|llava|mllama|qwen[^\s]*vl/i.test(`${artifact.metadata?.architecture ?? ""} ${name(artifact)}`) ? "Yes" : artifact.metadata?.architecture ? "No" : "Unknown";
-  const visionModule = (artifact: ModelArtifactListItem) => {
-    const matches = matchingProjectors(artifact);
-    if (matches.length) return matches.length === 1 ? "Installed" : "Installed (multiple candidates)";
-    return visionCapable(artifact) === "Yes" ? "Not found" : visionCapable(artifact) === "No" ? "Not required" : "Unknown";
-  };
+  type ArtifactAuthority = ModelArtifactListItem & { vision: { capability: "yes" | "no" | "unknown"; module: "installed" | "not_found" | "not_required" | "unknown" }; role: "base" | "projector" | "conflict" | "unassigned"; selectionStatus: "available" | "invalid" };
+  let artifacts: ArtifactAuthority[] = [], selected = "", query = "", message = "";
+  const supportName = (artifact: ArtifactAuthority) => /(?:mmproj|projector|adapter|lora|imatrix)/i.test(artifact.resource.locator);
+  const primary = (artifact: ArtifactAuthority) => artifact.role !== "conflict" && (artifact.kind === "model" || (artifact.kind === "unknown" && !supportName(artifact)));
+  const name = (artifact: ArtifactAuthority) => (artifact.metadata?.displayName ?? artifact.resource.locator.split(/[\\/]/).pop() ?? artifact.id).replace(/\.gguf$/i, "");
+  const visionCapable = (artifact: ArtifactAuthority) => ({ yes: "Yes", no: "No", unknown: "Unknown" }[artifact.vision.capability]);
+  const visionModule = (artifact: ArtifactAuthority) => ({ installed: "Installed", not_found: "Not found", not_required: "Not required", unknown: "Unknown" }[artifact.vision.module]);
   $: rows = artifacts.filter(primary).filter((artifact) => `${name(artifact)} ${artifact.resource.locator}`.toLowerCase().includes(query.toLowerCase()));
   $: current = rows.find((artifact) => artifact.id === selected) ?? null;
   async function load() {
     try {
       const artifactResponse = await fetchJson<ModelArtifactListResponse>(API_ENDPOINTS.modelArtifacts.list);
-      artifacts = artifactResponse.artifacts;
+      artifacts = artifactResponse.artifacts as ArtifactAuthority[];
       message = "";
     } catch (error) { message = error instanceof Error ? error.message : "Could not load model library."; }
   }

@@ -6,9 +6,8 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import fastify from "fastify";
 import { registerRuntimeRoutes } from "../src/api/runtime.js";
-import { registerSettingsRoutes } from "../src/api/settings.js";
 import { createServer } from "../src/server.js";
-import { ensureStorageFiles, loadSettings } from "../src/config/storage.js";
+import { ensureStorageFiles } from "../src/config/storage.js";
 import { RuntimeLogBuffer } from "../src/runtime/log-buffer.js";
 import { RuntimeManager } from "../src/runtime/manager.js";
 
@@ -62,6 +61,20 @@ test("runtime logs routes are available without credentials", async (t) => {
   });
   assert.equal(logsNoToken.statusCode, 200);
   assert.deepEqual(logsNoToken.json().logs, []);
+});
+
+test("local APIs and runtime actions are public while obsolete auth routes stay absent", async (t) => {
+  await makeFixture(t);
+  await ensureStorageFiles();
+  const app = await createServer();
+  t.after(() => app.close());
+  for (const url of ["/api/status", "/api/settings", "/api/profiles", "/api/model-artifacts", "/api/builds", "/api/runtime"]) {
+    assert.equal((await app.inject({ method: "GET", url })).statusCode, 200, url);
+  }
+  const runtimeAction = await app.inject({ method: "POST", url: "/api/runtime/stop" });
+  assert.ok(![401, 403, 423].includes(runtimeAction.statusCode));
+  assert.equal((await app.inject({ method: "GET", url: "/api/auth/status" })).statusCode, 404);
+  assert.equal((await app.inject({ method: "POST", url: "/api/auth/setup", payload: {} })).statusCode, 404);
 });
 
 test("runtime log stream sends valid SSE headers and events", async (t) => {

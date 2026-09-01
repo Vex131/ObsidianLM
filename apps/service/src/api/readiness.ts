@@ -50,6 +50,7 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
     const runtimeActive = ["starting", "running", "stopping"].includes(routerState.status);
     const activeProfile = routerState.compatibilityProfileId ? profiles.find((profile) => profile.id === routerState.compatibilityProfileId) ?? null : null;
     const eligibleBuilds = domain.builds.filter(isBuildEligibleForManagedInference);
+    const baseModelCount = models.models.filter((model) => model.artifactKindGuess === "model" || model.artifactKindGuess === "unknown").length;
     const benchCount = builds.builds.reduce((count, build) => count + build.tools.filter((tool) => tool.kind === "bench" && tool.exists).length, 0);
     const perplexityCount = builds.builds.reduce((count, build) => count + build.tools.filter((tool) => tool.kind === "perplexity" && tool.exists).length, 0);
     const storageWarnings = getStorageWarnings();
@@ -57,7 +58,7 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
 
     const checks = [
       check("model-folders", "Model folders", settings.modelFolders.length > 0 ? "pass" : "block", settings.modelFolders.length > 0 ? "At least one model folder is configured." : "Configure modelFolders before real validation."),
-       check("gguf-models", "Models discovered", models.models.length > 0 ? "pass" : "block", models.models.length > 0 ? `${models.models.length} GGUF model(s) discovered.` : "Rescan after adding at least one GGUF model to a configured model folder.", models.models.length),
+       check("gguf-models", "Base Models discovered", baseModelCount > 0 ? "pass" : "block", baseModelCount > 0 ? `${baseModelCount} base Model(s) discovered.` : "Rescan after adding at least one base GGUF Model to a configured model folder.", baseModelCount),
       check("llama-folders", "llama.cpp folders", settings.llamaCppFolders.length > 0 ? "pass" : "block", settings.llamaCppFolders.length > 0 ? "At least one llama.cpp folder is configured." : "Configure llamaCppFolders before real validation."),
        check("server-builds", "Builds discovered", builds.builds.length > 0 ? "pass" : "block", builds.builds.length > 0 ? `${builds.builds.length} llama-server build(s) discovered.` : "Rescan after adding a llama.cpp build with llama-server.", builds.builds.length),
       check("llama-bench", "llama-bench tools", benchCount > 0 ? "pass" : "warning", benchCount > 0 ? `${benchCount} llama-bench tool(s) discovered.` : "Add or build llama-bench before running benchmark validation.", benchCount),
@@ -88,7 +89,7 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
         configuredModels: domain.configuredModels.length,
          discoveredBuilds: domain.builds.length,
         eligibleBuilds: eligibleBuilds.length,
-        ggufModels: models.models.length,
+        ggufModels: baseModelCount,
         serverBuilds: builds.builds.length,
         llamaBenchTools: benchCount,
         llamaPerplexityTools: perplexityCount,

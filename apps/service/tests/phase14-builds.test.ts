@@ -6,7 +6,6 @@ import test, { type TestContext } from "node:test";
 import { defaultSettings } from "@obsidianlm/shared";
 import {
   ensureStorageFiles,
-  saveProfiles,
   saveSettings,
 } from "../src/config/storage.js";
 import {
@@ -41,25 +40,29 @@ const settingsFor = (folder: string) => ({
   ...defaultSettings,
   llamaCppFolders: [folder],
 });
-
-test("build discovery treats immediate children as build candidates and selects official/bin server priority", async (t) => {
+test("build discovery treats immediate children as build candidates and selects root/bin server priority", async (t) => {
   const { builds } = await fixture(t);
   const alpha = path.join(builds, "Alpha-AVX2", "bin");
   const beta = path.join(builds, "Beta", "bin");
+  const preferred = path.join(builds, "RootPreferred");
   await mkdir(alpha, { recursive: true });
   await mkdir(beta, { recursive: true });
+  await mkdir(path.join(preferred, "bin"), { recursive: true });
   await Promise.all([
+    writeFile(path.join(builds, "llama-server.exe"), "stray"),
     writeFile(path.join(alpha, "llama-server"), ""),
     writeFile(path.join(alpha, "llama-cli"), ""),
     writeFile(path.join(alpha, "llama-bench"), ""),
     writeFile(path.join(beta, "llama-server.exe"), ""),
     writeFile(path.join(beta, "llama-perplexity.exe"), ""),
+    writeFile(path.join(preferred, "llama-server"), ""),
+    writeFile(path.join(preferred, "bin", "llama-server.exe"), ""),
   ]);
   const result = await discoverLlamaBuilds(settingsFor(builds));
-  assert.equal(result.builds.length, 2);
+  assert.equal(result.builds.length, 3);
   assert.deepEqual(
     result.builds.map((build) => build.name),
-    ["Alpha-AVX2", "Beta"],
+    ["Alpha-AVX2", "Beta", "RootPreferred"],
   );
   const alphaBuild = result.builds[0]!;
   assert.equal(alphaBuild.discoveryRoot, builds);
@@ -73,6 +76,8 @@ test("build discovery treats immediate children as build candidates and selects 
     result.builds[1]!.tools.map((tool) => tool.kind),
     ["server", "perplexity"],
   );
+  assert.equal(result.builds[2]!.serverPath, path.join(preferred, "llama-server"));
+  assert.equal(result.builds.some((build) => build.folder === builds), false);
 });
 
 test("build discovery enforces depth and result bounds", async (t) => {
@@ -126,13 +131,15 @@ test("build discovery skips symlinked directories when supported", async (t) => 
   assert.equal(result.builds[0]!.serverPath, path.join(target, "llama-server"));
 });
 
-test("a configured build folder itself is a candidate", async (t) => {
+test("a configured build folder remains a library root when it has a stray server", async (t) => {
   const { builds } = await fixture(t);
   await writeFile(path.join(builds, "llama-server.exe"), "");
+  const child = path.join(builds, "child");
+  await mkdir(child);
   const result = await discoverLlamaBuilds(settingsFor(builds));
   assert.equal(result.builds.length, 1);
-  assert.equal(result.builds[0]!.folder, builds);
-  assert.equal(result.builds[0]!.name, path.basename(builds));
+  assert.equal(result.builds[0]!.folder, child);
+  assert.equal(result.builds[0]!.name, "child");
 });
 
 test("build discovery selects one server per candidate and exposes broken candidates", async (t) => {
@@ -282,48 +289,4 @@ test("origin and router classification require explicit executable evidence", as
     assert.equal(manifest.origin.classification, item.origin);
     assert.equal(manifest.router.status, item.router);
   }
-});
-
-test("build usage is path-normalized and lists missing profiles", async (t) => {
-  const { builds } = await fixture(t);
-  const serverPath = path.join(builds, "llama-server");
-  await writeFile(serverPath, "");
-  await ensureStorageFiles();
-  await saveSettings(settingsFor(builds));
-  await saveProfiles([
-    {
-      id: "used",
-      name: "Used",
-      runtimeType: "llama.cpp",
-      providerKind: "server",
-      buildPath: path.join(builds, ".", "llama-server"),
-      modelPath: "model.gguf",
-      host: "127.0.0.1",
-      port: 8085,
-    },
-    {
-      id: "missing",
-      name: "Missing",
-      runtimeType: "llama.cpp",
-      providerKind: "server",
-      buildPath: path.join(builds, "gone"),
-      modelPath: "model.gguf",
-      host: "127.0.0.1",
-      port: 8086,
-    },
-  ]);
-  const app = await createServer();
-  t.after(() => app.close());
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/discovery/llama-builds/usage",
-  });
-  assert.equal(response.statusCode, 200);
-  const body = response.json();
-  assert.equal(
-    body.usage[0].buildId,
-    (await discoverLlamaBuilds(settingsFor(builds))).builds[0]!.id,
-  );
-  assert.deepEqual(body.usage[0].profileIds, ["used"]);
-  assert.deepEqual(body.missingProfileIds, ["missing"]);
 });

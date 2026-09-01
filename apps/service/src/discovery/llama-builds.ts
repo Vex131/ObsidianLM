@@ -89,11 +89,10 @@ function comparePriority(left: [number, number, string], right: [number, number,
 async function candidatesForRoot(root: string, warnings: DiscoveryWarning[]): Promise<string[]> {
   try {
     const entries = await readdir(root, { withFileTypes: true });
-    const rootHasServer = entries.some((entry) => entry.isFile() && knownTools[entry.name.toLowerCase()] === "server");
-    const bin = entries.find((entry) => entry.isDirectory() && !entry.isSymbolicLink() && entry.name.toLowerCase() === "bin");
-    const binHasServer = bin && (await readdir(path.join(root, bin.name), { withFileTypes: true })).some((entry) => entry.isFile() && knownTools[entry.name.toLowerCase()] === "server");
-    if (rootHasServer || binHasServer) return [root];
-    return entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && entry.name.toLowerCase() !== "bin").map((entry) => path.join(root, entry.name)).sort((a, b) => a.localeCompare(b));
+    return entries
+      .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
+      .map((entry) => path.join(root, entry.name))
+      .sort((a, b) => a.localeCompare(b));
   } catch (error) {
     warnings.push({ code: "folder_unreadable", message: `Could not read ${root}: ${error instanceof Error ? error.message : "unknown error"}`, folder: root, path: root });
     return [];

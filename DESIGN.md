@@ -721,7 +721,6 @@ Must include:
 - Model folder
 - Startup behavior
 - Stale process policy
-- Auth/admin token settings later
 - Known Node connections, active Node selection, and connection removal when Phase 16 is implemented; credentials are never displayed in normal responses
 
 ### 10.8 Controller and Node Details (Phase 16 Planning)
@@ -1103,7 +1102,7 @@ Must include:
 - Detected executables/tools.
 - Build/version/compiler metadata if available.
 - Static router flag/preset capability evidence plus separate functional Build validation; current launch requires both.
-- Readiness counts/checks use authoritative Configured Models, stable registered Builds, and router-eligible Builds; discovery remains evidence.
+- Readiness counts/checks use authoritative Configured Models, stable cataloged Builds, and router-eligible Builds; discovery remains evidence.
 - Clear ineligible/unsupported state when a build lacks required router behavior; version labels alone are not proof of capability.
 - Official/custom/experimental/compatibility classification only when known or explicitly configured.
 - Dependent configured models and whether selecting one requires a router restart.

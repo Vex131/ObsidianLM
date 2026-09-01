@@ -70,12 +70,14 @@
   let previewSignature = "";
   let impact: Array<[string, string]> = [];
 
-  const supportArtifact = (artifact: ModelArtifactListItem) => /(?:mmproj|projector|adapter|lora|imatrix)/i.test(artifact.resource.locator);
-  const buildName = (build: LlamaCppBuildDetails) => build.displayName;
-  const buildLabel = (build: LlamaCppBuildDetails) => builds.filter((item) => buildName(item) === buildName(build)).length > 1 ? `${buildName(build)} · ${build.resource.locator.replace(/[\\/]+$/, "").split(/[\\/]/).slice(-2, -1)[0] ?? build.resource.locator}` : buildName(build);
+  type ArtifactAuthority = ModelArtifactListItem & { role: "base" | "projector" | "conflict" | "unassigned"; selectionStatus: "available" | "invalid" };
+  const supportArtifact = (artifact: ArtifactAuthority) => /(?:mmproj|projector|adapter|lora|imatrix)/i.test(artifact.resource.locator);
+  const buildFolder = (build: LlamaCppBuildDetails) => build.resource.locator.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || build.resource.locator;
+  const buildParent = (build: LlamaCppBuildDetails) => build.resource.locator.replace(/[\\/]+$/, "").split(/[\\/]/).slice(0, -1).join("/") || build.resource.locator;
+  const buildLabel = (build: LlamaCppBuildDetails) => builds.filter((item) => buildFolder(item) === buildFolder(build)).length > 1 ? `${buildFolder(build)} · ${buildParent(build)}` : buildFolder(build);
   const artifactName = (artifact: ModelArtifactListItem) => artifact.metadata?.displayName ?? artifact.resource.locator.split(/[\\/]/).pop()?.replace(/\.gguf$/i, "") ?? artifact.id;
-  $: primaryArtifacts = artifacts.filter((artifact) => artifact.referenceStatus === "available" && (artifact.kind === "model" || (artifact.kind === "unknown" && !supportArtifact(artifact))));
-  $: projectors = artifacts.filter((artifact) => artifact.referenceStatus === "available" && artifact.kind === "mmproj");
+  $: primaryArtifacts = (artifacts as ArtifactAuthority[]).filter((artifact) => artifact.referenceStatus === "available" && artifact.selectionStatus === "available" && artifact.role !== "conflict" && (artifact.kind === "model" || (artifact.kind === "unknown" && !supportArtifact(artifact))));
+  $: projectors = (artifacts as ArtifactAuthority[]).filter((artifact) => artifact.referenceStatus === "available" && artifact.selectionStatus === "available" && artifact.role !== "conflict" && artifact.kind === "mmproj");
   $: availableBuilds = builds.filter((build) => build.tools.some((tool) => tool.kind === "server" && tool.exists));
   $: selectedArtifact = artifacts.find((artifact) => artifact.id === draft.artifactId);
   $: selectedBuild = builds.find((build) => build.id === draft.buildId);

@@ -175,7 +175,7 @@ test("readiness summarizes partially configured discovery without exposing local
   await saveSettings({
     ...defaultSettings,
     modelFolders: [path.join(fixture.root, "missing-models")],
-    llamaCppFolders: [fixture.buildDir],
+    llamaCppFolders: [path.dirname(fixture.buildDir)],
     toolInputFolders: [],
     managedLlamaPort: 18091,
   });

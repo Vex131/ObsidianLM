@@ -6,6 +6,12 @@ import type { RuntimeState, RuntimeWarning } from "./runtime-state.js";
 
 export interface ModelArtifactListItem extends ModelArtifact {
   configuredModelIds: ConfiguredModelId[];
+  vision: {
+    capability: "yes" | "no" | "unknown";
+    module: "installed" | "not_found" | "not_required" | "unknown";
+  };
+  role: "base" | "projector" | "conflict" | "unassigned";
+  selectionStatus: "available" | "invalid";
 }
 
 export interface ModelArtifactListResponse {

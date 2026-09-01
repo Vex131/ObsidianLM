@@ -1,9 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const artifact = { id: "artifact-1", discoveryId: "discovered-model", resource: { owner: { scope: "local" }, locator: "C:/models/vision.gguf" }, kind: "model", referenceStatus: "available", configuredModelIds: ["configured-1"] };
-const projector = { id: "artifact-mmproj", discoveryId: "discovered-projector", resource: { owner: { scope: "local" }, locator: "C:/models/mmproj.gguf" }, kind: "mmproj", referenceStatus: "available", configuredModelIds: ["configured-1"] };
-const build = { id: "build-1", discoveryId: "discovered-build", displayName: "Fixture llama.cpp", resource: { owner: { scope: "local" }, locator: "C:/llama" }, server: { owner: { scope: "local" }, locator: "C:/llama/llama-server.exe" }, classification: "custom", tools: [{ kind: "server", fileName: "llama-server.exe", path: "C:/llama/llama-server.exe", exists: true }], managedInferenceEligibility: "eligible", configuredModelIds: ["configured-1"], validationInProgress: false, staticEvidence: { routerFlags: { status: "candidate" }, warnings: [], assessedAt: "2026-08-28T00:00:00Z" }, functionalEvidence: { state: "eligible", launchAttempted: true, presetAccepted: true, healthVerified: true, modelsVerified: true, catalogBoundaryVerified: true, requiredBehaviorVerified: true, warnings: [], failures: [] } };
-const alternateBuild = { ...build, id: "build-2", discoveryId: "alternate-build", displayName: "Alternate llama.cpp", resource: { owner: { scope: "local" }, locator: "C:/llama-alt" }, server: { owner: { scope: "local" }, locator: "C:/llama-alt/llama-server.exe" }, configuredModelIds: [] };
+const artifact = { id: "artifact-1", discoveryId: "discovered-model", resource: { owner: { scope: "local" }, locator: "C:/models/vision.gguf" }, kind: "model", role: "base", selectionStatus: "available", referenceStatus: "available", configuredModelIds: ["configured-1"] };
+const projector = { id: "artifact-mmproj", discoveryId: "discovered-projector", resource: { owner: { scope: "local" }, locator: "C:/models/mmproj.gguf" }, kind: "mmproj", role: "projector", selectionStatus: "available", referenceStatus: "available", configuredModelIds: ["configured-1"] };
+const unknownSupport = { id: "artifact-unknown-support", resource: { owner: { scope: "local" }, locator: "C:/models/unknown-projector.gguf" }, kind: "unknown", role: "unassigned", selectionStatus: "available", referenceStatus: "available", configuredModelIds: [] };
+const mismatched = { id: "artifact-mismatched", resource: { owner: { scope: "local" }, locator: "C:/models/mismatched.gguf" }, kind: "model", role: "conflict", selectionStatus: "invalid", referenceStatus: "available", configuredModelIds: [] };
+const missing = { id: "artifact-missing", resource: { owner: { scope: "local" }, locator: "C:/models/missing.gguf" }, kind: "model", role: "base", selectionStatus: "invalid", referenceStatus: "missing", configuredModelIds: ["configured-1"] };
+const build = { id: "build-1", discoveryId: "discovered-build", displayName: "Fixture llama.cpp", resource: { owner: { scope: "local" }, locator: "C:/roots/llama" }, server: { owner: { scope: "local" }, locator: "C:/roots/llama/llama-server.exe" }, classification: "custom", tools: [{ kind: "server", fileName: "llama-server.exe", path: "C:/roots/llama/llama-server.exe", exists: true }], managedInferenceEligibility: "eligible", configuredModelIds: ["configured-1"], validationInProgress: false, staticEvidence: { routerFlags: { status: "candidate" }, warnings: [], assessedAt: "2026-08-28T00:00:00Z" }, functionalEvidence: { state: "eligible", launchAttempted: true, presetAccepted: true, healthVerified: true, modelsVerified: true, catalogBoundaryVerified: true, requiredBehaviorVerified: true, warnings: [], failures: [] } };
+const alternateBuild = { ...build, id: "build-2", discoveryId: "alternate-build", displayName: "Alternate llama.cpp", resource: { owner: { scope: "local" }, locator: "C:/other/llama" }, server: { owner: { scope: "local" }, locator: "C:/other/llama/llama-server.exe" }, configuredModelIds: [] };
 const model = { id: "configured-1", displayName: "Vision profile", routerAlias: "vision", artifactId: artifact.id, buildId: build.id, enabled: true, artifact, build, projector, projectorAssociation: { artifactId: projector.id, selection: "explicit", validationStatus: "not_validated" }, projectorCandidates: [{ artifactId: projector.id, basis: "filename", confidence: "high" }], llamaArgs: { ctxSize: 4096 }, flagOverrides: [{ flag: "--legacy-flag", values: ["preserve-me"] }], extraArgs: ["--unsupported-legacy"], warnings: ["Unsupported legacy value preserved."], validation: { structural: true, references: { artifact: "available", build: "available" }, status: "not_validated", managedInferenceEligibility: "eligible" } };
 
 async function mockProfiles(page: Page, calls: string[], previewBodies: Array<Record<string, unknown>>) {
@@ -21,7 +24,7 @@ async function mockProfiles(page: Page, calls: string[], previewBodies: Array<Re
         launch: { kind: "router_launch", artifact: { authority: "derived", sourceRevision: `source-${context ?? "inherited"}`, validationState: "valid", freshness: "unknown", warnings: [], errors: [] }, command: { displayCommand: `C:/llama/llama-server.exe --models-preset generated/${request.draft.buildId}.ini` }, policy: { modelsMax: 1, modelsAutoload: true } }
       } });
     }
-    if (url.pathname === "/api/model-artifacts") return route.fulfill({ json: { revision: 1, artifacts: [artifact, projector] } });
+    if (url.pathname === "/api/model-artifacts") return route.fulfill({ json: { revision: 1, artifacts: [artifact, projector, unknownSupport, mismatched, missing] } });
     if (url.pathname === "/api/builds") return route.fulfill({ json: { revision: 1, builds: [build, alternateBuild] } });
     if (url.pathname === "/api/runtime") return route.fulfill({ json: { state: { status: "running", activeProfileId: null }, routerState: { status: "running", activeBuildId: build.id, generatedArtifact: { sourceRevision: "source-4096" }, configuredModelStates: [{ configuredModelId: model.id, state: "unloaded" }] }, warnings: [] } });
     if (url.pathname === `/api/builds/${build.id}/capabilities`) return route.fulfill({ json: { flags: [{ canonicalName: "--ctx-size", aliases: [] }, { canonicalName: "--batch-size", aliases: [] }, { canonicalName: "--custom-mode", aliases: [], valuePlaceholder: "MODE", choices: ["fast", "safe"], description: "Fixture custom mode." }], warnings: [] } });
@@ -51,6 +54,11 @@ test("Profiles uses configured-model routes and presents the reference editor co
   await expect(page.locator(".resource-grid select").first()).toHaveValue(artifact.id);
   await expect(page.getByLabel("llama.cpp Build")).toHaveValue(build.id);
   await expect(page.getByLabel("Projector / MMProj")).toHaveValue(projector.id);
+  await expect(page.locator(".resource-grid select").first()).not.toContainText("unknown-projector");
+  await expect(page.locator(".resource-grid select").first()).not.toContainText("mismatched");
+  await expect(page.locator(".resource-grid select").first()).not.toContainText("missing");
+  await expect(page.getByLabel("Projector / MMProj")).toContainText("mmproj");
+  await expect(page.getByLabel("llama.cpp Build")).toContainText("llama · C:/roots");
   await expect(page.getByText("Unsupported legacy value preserved.")).toBeVisible();
   await expect(page.getByText("--legacy-flag", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Host", { exact: true })).toHaveCount(0);

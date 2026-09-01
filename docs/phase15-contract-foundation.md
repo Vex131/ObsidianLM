@@ -27,7 +27,7 @@ Resource references include an owner scope. Run 1 uses local ownership but permi
 
 ## Persistent artifacts and builds
 
-- Persistent Model Artifacts and stable Builds are distinct from Phase 14 discovery results. Registration/reconciliation is explicit; IDs remain stable, dependent deletion is protected, and discovery candidates are never auto-selected.
+- Persistent Model Artifacts and stable Builds are distinct from Phase 14 discovery results. Configured folders synchronize automatically into the catalog; IDs remain stable, dependent deletion is protected, and discovery candidates are never auto-selected.
 - Configured Model CRUD, duplication, and revalidation are explicit operations. Projector associations are explicit and projected separately; candidates are never paired or selected automatically.
 
 Runtime and readiness authority:
@@ -35,7 +35,7 @@ Runtime and readiness authority:
 - App shell, Runtime, and Dashboard consume `RouterRuntimeState` directly rather than deriving lifecycle from an active Profile.
 - Runtime owns managed router lifecycle, active router configuration, actual router launch command, and the Configured Model drawer. Same-Build selection uses `switch-model` without restart; cross-Build selection uses backend `switch-build`/restart on the same endpoint and has no automatic rollback.
 - Dashboard presents a high-level active Build, loaded model, and resource summary. Run 8 GPU/process/log attribution is integrated read-only.
-- Readiness counts/checks are authoritative for Configured Models, stable registered Builds, and router-eligible Builds. Discovery remains evidence and does not establish readiness or eligibility.
+- Readiness counts/checks are authoritative for Configured Models, stable cataloged Builds, and router-eligible Builds. Discovery remains evidence and does not establish readiness or eligibility.
 
 ## Build eligibility
 

@@ -79,8 +79,6 @@ export type {
   StartupDetectionSummary
 } from "./types/detection.js";
 export type {
-  CreateProfileFromDiscoveryRequest,
-  CreateProfileFromDiscoveryResponse,
   DiscoveredLlamaCppBuild,
   DiscoveredLlamaCppTool,
   DiscoveredLlamaCppToolKind,
@@ -102,11 +100,9 @@ export type {
   LlamaBuildOriginSource,
   LlamaBuildRouterAssessment,
   LlamaBuildRouterStatus,
-  LlamaBuildUsageResponse,
   LlamaBuildVersionInfo,
   LlamaBuildDiscoveryResponse,
   ModelDiscoveryResponse,
-  ModelArtifactUsageResponse,
   ToolInputDiscoveryResponse
 } from "./types/discovery.js";
 export type {

@@ -6,7 +6,6 @@ import test, { type TestContext } from "node:test";
 import { defaultSettings } from "@obsidianlm/shared";
 import {
   ensureStorageFiles,
-  saveProfiles,
   saveSettings,
 } from "../src/config/storage.js";
 import {
@@ -102,7 +101,6 @@ test("GGUF inspection reads whitelisted model metadata and caches safely", async
     "Changed",
   );
 });
-
 test("GGUF inspection handles type/fallback, invalid, truncated, unsupported, and bounded arrays", async (t) => {
   const { models } = await fixture(t);
   const projector = path.join(models, "projector.gguf");
@@ -229,44 +227,4 @@ test("metadata endpoint resolves only discovered IDs without authentication", as
     url: "/api/discovery/models/not-a-model/metadata",
   });
   assert.equal(unknown.statusCode, 404);
-});
-
-test("model usage is matched by service path semantics", async (t) => {
-  const { models } = await fixture(t);
-  const file = path.join(models, "used.gguf");
-  await writeFile(file, gguf([]));
-  await ensureStorageFiles();
-  await saveSettings({ ...defaultSettings, modelFolders: [models] });
-  await saveProfiles([
-    {
-      id: "used",
-      name: "Used",
-      runtimeType: "llama.cpp",
-      providerKind: "server",
-      buildPath: "llama-server",
-      modelPath: file,
-      host: "127.0.0.1",
-      port: 8085,
-    },
-    {
-      id: "missing",
-      name: "Missing",
-      runtimeType: "llama.cpp",
-      providerKind: "server",
-      buildPath: "llama-server",
-      modelPath: path.join(models, "gone.gguf"),
-      host: "127.0.0.1",
-      port: 8085,
-    },
-  ]);
-  const app = await createServer();
-  t.after(() => app.close());
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/discovery/models/usage",
-  });
-  assert.equal(response.statusCode, 200);
-  const body = response.json();
-  assert.deepEqual(body.usage[0].profileIds, ["used"]);
-  assert.deepEqual(body.missingProfileIds, ["missing"]);
 });

@@ -81,7 +81,7 @@ export async function validateFunctionalRouterBuild(buildId: string, configuredM
     let probeFingerprint: string;
     try { probeFingerprint = await fingerprint(locator); } catch {
       const committed = await mutate((snapshot) => reconcileBuildFingerprintInSnapshot(snapshot, build.id, undefined, "Router validation was invalidated because the registered server executable is missing."));
-      throw new RouterValidationError("prerequisite", `The registered llama-server executable is unavailable; Build ${committed.result.id} remains not validated.`);
+      throw new RouterValidationError("prerequisite", `The resolved llama-server executable is unavailable; Build ${committed.result.id} remains not validated.`);
     }
     const manifest = await probeStatic(build);
     const postStaticFingerprint = await fingerprint(locator).catch(() => undefined);

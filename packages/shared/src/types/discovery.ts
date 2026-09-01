@@ -1,12 +1,9 @@
-import type { CommandSpec, LlamaCppArgs, LlamaCppFlagOverride, RuntimeProfile } from "./runtime-state.js";
-
 export interface DiscoveryWarning {
   code: string;
   message: string;
   folder?: string;
   path?: string;
 }
-
 export type GgufArtifactKind = "model" | "mmproj" | "adapter" | "imatrix" | "other" | "unknown";
 export type GgufArtifactKindSource = "metadata" | "filename" | "unknown";
 export type GgufMetadataStatus = "ready" | "partial" | "invalid" | "unsupported";
@@ -89,16 +86,6 @@ export interface ModelDiscoveryResponse {
   warnings: DiscoveryWarning[];
   scannedFolders: string[];
   detectedAt: string;
-}
-
-export interface ModelArtifactUsageResponse {
-  usage: Array<{ artifactId: string; profileIds: string[] }>;
-  missingProfileIds: string[];
-}
-
-export interface LlamaBuildUsageResponse {
-  usage: Array<{ buildId: string; profileIds: string[] }>;
-  missingProfileIds: string[];
 }
 
 export interface LlamaBuildDiscoveryResponse {
@@ -185,25 +172,4 @@ export interface DiscoverySettingsUpdate {
   modelFolders: string[];
   llamaCppFolders: string[];
   toolInputFolders: string[];
-}
-
-export interface CreateProfileFromDiscoveryRequest {
-  name: string;
-  modelPath: string;
-  buildPath: string;
-  host?: string;
-  port?: number;
-  llamaArgs?: LlamaCppArgs;
-  flagOverrides?: LlamaCppFlagOverride[];
-  extraArgs?: string[];
-}
-
-export interface CreateProfileFromDiscoveryResponse {
-  profile: RuntimeProfile;
-  command: CommandSpec;
-  validation: {
-    valid: boolean;
-    errors: string[];
-    warnings: string[];
-  };
 }

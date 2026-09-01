@@ -627,7 +627,7 @@ export class RuntimeManager {
     if (!model.enabled) throw new RuntimeSwitchError("configured_model_disabled", "The target Configured Model is disabled.");
     if (model.validationStatus !== "valid" || model.referenceStatus.artifact !== "available" || model.referenceStatus.build !== "available") throw new RuntimeSwitchError("prerequisite", "The target Configured Model is not structurally valid and available.");
     const build = domain.builds.find((entry) => entry.id === model.buildId);
-    if (!build) throw new RuntimeSwitchError("prerequisite", "The target Configured Model does not reference a registered Build.");
+    if (!build) throw new RuntimeSwitchError("prerequisite", "The target Configured Model does not reference a cataloged Build.");
     if (build.server.owner.scope !== "local") throw new RuntimeSwitchError("unsupported_scope", "Node-owned Builds cannot be executed by this local Controller.");
     return model;
   }

@@ -1,6 +1,4 @@
 import type {
-  CreateProfileFromDiscoveryRequest,
-  CreateProfileFromDiscoveryResponse,
   DiscoverySettingsUpdate,
   ExportProfilesResponse,
   ImportProfilesRequest,
@@ -12,10 +10,8 @@ import type {
   LlamaBenchRequest,
   LlamaBuildCapabilitiesManifest,
   LlamaBuildDiscoveryResponse,
-  LlamaBuildUsageResponse,
   LlamaPerplexityRequest,
   GgufMetadataInspection,
-  ModelArtifactUsageResponse,
   ModelDiscoveryResponse,
   PortStatus,
   ProcessListResponse,
@@ -53,15 +49,12 @@ export const API_ENDPOINTS = {
   readiness: "/api/readiness",
   discovery: {
     models: "/api/discovery/models",
-    modelUsage: "/api/discovery/models/usage",
     modelMetadata: (id: string) => `/api/discovery/models/${enc(id)}/metadata`,
     rescanModels: "/api/discovery/models/rescan",
     llamaBuilds: "/api/discovery/llama-builds",
-    llamaBuildUsage: "/api/discovery/llama-builds/usage",
     rescanLlamaBuilds: "/api/discovery/llama-builds/rescan",
     toolInputs: "/api/discovery/tool-inputs",
     rescanToolInputs: "/api/discovery/tool-inputs/rescan",
-    createProfile: "/api/discovery/profiles",
     llamaBuildCapabilities: (id: string) => `/api/discovery/llama-builds/${enc(id)}/capabilities`
   },
   runtime: {
@@ -194,8 +187,6 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
 
 export type {
   AppSettings,
-  CreateProfileFromDiscoveryRequest,
-  CreateProfileFromDiscoveryResponse,
   DiscoverySettingsUpdate,
   ExportProfilesResponse,
   GpuMonitoringStatus,
@@ -208,10 +199,8 @@ export type {
   LlamaBenchRequest,
   LlamaBuildCapabilitiesManifest,
   LlamaBuildDiscoveryResponse,
-  LlamaBuildUsageResponse,
   LlamaPerplexityRequest,
   GgufMetadataInspection,
-  ModelArtifactUsageResponse,
   ModelDiscoveryResponse,
   PortStatus,
   ProcessListResponse,

@@ -24,7 +24,7 @@ Follow the global OpenCode rules first. This file only adds ObsidianLM-specific 
 
 - Do not delete or reset `data`, settings, logs, auth/token data, generated user content, or service-mode files without explicit approval.
 - Do not run destructive migrations, storage wipes, service uninstall/reinstall flows, or broad cleanup commands without explicit approval.
-- Do not expose raw admin tokens, token hashes, secrets, local paths with credentials, or private runtime data in logs or responses.
+- Do not expose secrets, legacy token hashes, local paths with credentials, or private runtime data in logs or responses.
 
 ## Commands and Verification
 
@@ -39,7 +39,7 @@ Follow the global OpenCode rules first. This file only adds ObsidianLM-specific 
   - On Windows, use `npm.cmd`, not bare `npm`, when using `Start-Process`.
   - Use disposable `.tmp/` data and log directories when possible.
   - Use a non-default local test port unless the task requires a specific port.
-  - Poll a health endpoint such as `/api/auth/status` with a hard timeout.
+  - Poll a health endpoint such as `/api/status` with a hard timeout.
   - Record the PID from `Start-Process -PassThru` for later cleanup.
   - Run the required check.
   - Always stop the full process tree afterward with `Stop-Process -Id <PID> -Force`, even if the check fails.

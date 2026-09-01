@@ -140,15 +140,17 @@ test("runtime settings validate ports, ignore legacy runtime evidence, and keep 
 });
 test("jobs reject known non-model artifacts and retain safe selection details for unknown models", async (t) => {
   const { models, builds } = await fixture(t);
-  await writeFile(path.join(builds, "llama-server"), "fixture");
-  await writeFile(path.join(builds, "llama-bench"), "fixture");
+  const build = path.join(builds, "fixture-build");
+  await mkdir(build);
+  await writeFile(path.join(build, "llama-server"), "fixture");
+  await writeFile(path.join(build, "llama-bench"), "fixture");
   await writeFile(path.join(models, "vision-mmproj.gguf"), "fixture");
   await writeFile(path.join(models, "unknown.gguf"), "fixture");
   const app = await createServer();
   t.after(() => app.close());
   const base = {
     buildId: undefined,
-    benchPath: path.join(builds, "llama-bench"),
+    benchPath: path.join(build, "llama-bench"),
   };
   const rejected = await app.inject({
     method: "POST",
@@ -167,7 +169,7 @@ test("jobs reject known non-model artifacts and retain safe selection details fo
   assert.equal(allowed.statusCode, 200);
   assert.deepEqual(allowed.json().job.selection, {
     tool: "llama-bench",
-    build: "builds",
+    build: "fixture-build",
     model: "unknown.gguf",
   });
 });

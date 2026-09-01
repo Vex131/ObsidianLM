@@ -649,11 +649,14 @@ function modelReferences(snapshot: Phase15DomainSnapshot, model: Pick<Configured
   if (!artifact || !build || (model.projector && !projector)) throw errorMessage("configured model references must exist");
   if (artifact.kind !== "model" && artifact.kind !== "unknown") throw errorMessage("main artifact must be model or unknown");
   if (projector && projector.kind !== "mmproj" && projector.kind !== "unknown") throw errorMessage("projector artifact must be mmproj or unknown");
-  return { artifact, build, projector };
+  const roleConflict = artifact.metadata?.artifactKind !== undefined && !["model", "unknown"].includes(artifact.metadata.artifactKind)
+    || projector?.metadata?.artifactKind !== undefined && !["mmproj", "unknown"].includes(projector.metadata.artifactKind);
+  return { artifact, build, projector, roleConflict };
 }
 
 export function createConfiguredModelInSnapshot(snapshot: Phase15DomainSnapshot, input: ConfiguredModelCreateInput): ConfiguredModel {
-  const { artifact, build, projector } = modelReferences(snapshot, input);
+  const { artifact, build, projector, roleConflict } = modelReferences(snapshot, input);
+  if (roleConflict) throw errorMessage("artifact metadata conflicts with configured model role");
   if (artifact.referenceStatus !== "available" || !isBuildAvailable(build) || (projector && projector.referenceStatus !== "available")) throw errorMessage("new configured model references are unavailable");
   const id = createConfiguredModelId();
   const aliases = snapshot.configuredModels.map((entry) => entry.routerAlias);
@@ -667,12 +670,13 @@ export function updateConfiguredModelInSnapshot(snapshot: Phase15DomainSnapshot,
   const model = snapshot.configuredModels.find((entry) => entry.id === id);
   if (!model) throw errorMessage("configured model not found");
   const next = { ...clone(model), ...clone(patch), ...(patch.projector === null ? { projector: undefined } : {}) } as ConfiguredModel;
-  const { artifact, build, projector } = modelReferences(snapshot, next);
+  const { artifact, build, projector, roleConflict } = modelReferences(snapshot, next);
   if (patch.routerAlias !== undefined && (!isRouterAlias(patch.routerAlias) || snapshot.configuredModels.some((entry) => entry.id !== id && entry.routerAlias.toLowerCase() === patch.routerAlias!.toLowerCase()))) throw errorMessage("router alias is invalid or already in use");
   next.referenceStatus = { artifact: artifact.referenceStatus, build: isBuildAvailable(build) ? "available" : "missing" };
   const unavailable = next.referenceStatus.artifact !== "available" || next.referenceStatus.build !== "available" || (projector && projector.referenceStatus !== "available");
+  if (patch.enabled === true && roleConflict) throw errorMessage("cannot enable configured model with an artifact role conflict");
   if (next.enabled && unavailable) throw errorMessage("cannot enable unavailable configured model");
-  if (unavailable) { next.enabled = false; next.validationStatus = "invalid"; }
+  if (unavailable || roleConflict) { next.enabled = false; next.validationStatus = "invalid"; }
   Object.assign(model, next);
   return clone(model);
 }

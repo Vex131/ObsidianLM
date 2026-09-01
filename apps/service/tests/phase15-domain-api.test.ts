@@ -61,12 +61,13 @@ async function fixture(t: test.TestContext, options: CreateServerOptions = {}) {
   const model = path.join(models, "vision-Q4_K_M.gguf");
   const projector = path.join(models, "vision-mmproj-f16.gguf");
   const text = path.join(models, "text-Q8_0.gguf");
-  const server = path.join(builds, "llama-server.exe");
+  const buildFolder = path.join(builds, "fixture-build");
+  const server = path.join(buildFolder, "llama-server.exe");
   await Promise.all([
     writeFile(model, "gguf"),
     writeFile(projector, "gguf"),
     writeFile(text, "gguf"),
-    writeFile(server, "exe"),
+    mkdir(buildFolder, { recursive: true }).then(() => writeFile(server, "exe")),
   ]);
   await writeFile(
     path.join(dir, "settings.json"),
@@ -218,6 +219,51 @@ test("configured model API validates references, aliases, projector choice, and 
   assert.equal((await f.app.inject({ method: "GET", url: "/api/configured-models" })).json().configuredModels.length, 2);
 });
 
+test("artifact DTO reports installed and unknown conservative vision state", async (t) => {
+  const f = await fixture(t); const c = await catalog(f);
+  const created = await f.app.inject({ method: "POST", url: "/api/configured-models", payload: { displayName: "Vision", artifactId: c.artifact.id, buildId: c.build.id, enabled: false, projector: { artifactId: c.projector.id, selection: "explicit", validationStatus: "not_validated" } } });
+  assert.equal(created.statusCode, 201);
+  let artifacts = (await f.app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts;
+  assert.deepEqual(artifacts.find((entry: any) => entry.id === c.artifact.id).vision, { capability: "yes", module: "installed" });
+  assert.deepEqual(artifacts.find((entry: any) => entry.id === c.text.id).vision, { capability: "unknown", module: "unknown" });
+});
+
+test("definitive artifact role conflicts retain identity but become invalid", async (t) => {
+  const f = await fixture(t); const c = await catalog(f);
+  const created = await mutatePhase15Domain((snapshot) => {
+    const model = createConfiguredModelInSnapshot(snapshot, { displayName: "Historical mismatch", artifactId: c.artifact.id, buildId: c.build.id, enabled: true });
+    const artifact = snapshot.artifacts.find((entry) => entry.id === c.projector.id)!;
+    artifact.kind = "model";
+    snapshot.configuredModels.find((entry) => entry.id === model.id)!.artifactId = artifact.id;
+    return model;
+  }, f.dir);
+  const response = await f.app.inject({ method: "GET", url: "/api/model-artifacts" });
+  const artifact = response.json().artifacts.find((entry: any) => entry.id === c.projector.id);
+  assert.equal(artifact.id, c.projector.id);
+  assert.equal(artifact.role, "conflict");
+  assert.equal(artifact.selectionStatus, "invalid");
+  const model = (await loadPhase15Domain(f.dir)).configuredModels.find((entry) => entry.id === created.result.id)!;
+  assert.equal(model.enabled, false);
+  assert.equal(model.validationStatus, "invalid");
+  assert.ok(model.warnings?.includes("Artifact metadata conflicts with its configured model role."));
+  assert.equal((await f.app.inject({ method: "PATCH", url: `/api/configured-models/${model.id}`, payload: { enabled: true } })).statusCode, 400);
+  assert.equal((await f.app.inject({ method: "POST", url: "/api/configured-models/preview", payload: { existingId: model.id, draft: { displayName: model.displayName, artifactId: model.artifactId, buildId: model.buildId, enabled: true } } })).statusCode, 400);
+  assert.equal((await f.app.inject({ method: "POST", url: `/api/configured-models/${model.id}/duplicate` })).statusCode, 400);
+  const revalidated = await f.app.inject({ method: "POST", url: `/api/configured-models/${model.id}/revalidate` });
+  assert.equal(revalidated.statusCode, 200);
+  assert.equal(revalidated.json().model.enabled, false);
+  assert.equal(revalidated.json().model.validationStatus, "invalid");
+});
+
+test("Build display names are discovery-owned", async (t) => {
+  const f = await fixture(t); const c = await catalog(f);
+  const rejected = await f.app.inject({ method: "PATCH", url: `/api/builds/${c.build.id}`, payload: { displayName: "Manual name" } });
+  assert.equal(rejected.statusCode, 400);
+  const classified = await f.app.inject({ method: "PATCH", url: `/api/builds/${c.build.id}`, payload: { classification: "custom" } });
+  assert.equal(classified.statusCode, 200);
+  assert.equal(classified.json().build.displayName, "fixture-build");
+});
+
 test("auto-sync disables missing dependencies and repaired resources stay disabled", async (t) => {
   const f = await fixture(t); const c = await catalog(f);
   const created = await f.app.inject({ method: "POST", url: "/api/configured-models", payload: { displayName: "Reconcile", artifactId: c.artifact.id, buildId: c.build.id, enabled: true } }); const model = created.json().model;
@@ -228,14 +274,25 @@ test("auto-sync disables missing dependencies and repaired resources stay disabl
   assert.equal((await f.app.inject({ method: "GET", url: "/api/model-artifacts/nope" })).statusCode, 404); assert.equal((await f.app.inject({ method: "DELETE", url: "/api/builds/nope" })).statusCode, 404);
 });
 
-test("catalog sync retains a Build when its server disappears before fingerprinting", async (t) => {
+test("catalog sync keeps one stable Build when a server disappears and returns in bin", async (t) => {
   const f = await fixture(t);
   const initial = await catalog(f);
+  assert.equal(initial.build.tools.some((tool: any) => tool.kind === "server" && tool.exists), true);
   const result = await synchronizeDiscoveryCatalog({ fingerprint: async () => { throw Object.assign(new Error("gone"), { code: "ENOENT" }); } });
-  assert.equal(result.builds.length, 0);
-  assert.equal(result.brokenBuildCandidates.some((build) => build.name === initial.build.displayName), true);
+  assert.equal(result.builds.length, 1);
+  assert.deepEqual(result.brokenBuildCandidates, []);
   const retained = (await loadPhase15Domain(f.dir)).builds.find((build) => build.id === initial.build.id)!;
   assert.equal(retained.tools.some((tool) => tool.kind === "server" && tool.exists), false);
+  await rm(f.server);
+  const broken = await f.app.inject({ method: "GET", url: "/api/builds" });
+  assert.equal(broken.json().builds.filter((build: any) => build.id === initial.build.id).length, 1);
+  const moved = path.join(path.dirname(f.server), "bin", path.basename(f.server));
+  await mkdir(path.dirname(moved), { recursive: true });
+  await writeFile(moved, "restored");
+  const restored = await f.app.inject({ method: "GET", url: "/api/builds" });
+  const build = restored.json().builds.find((entry: any) => entry.id === initial.build.id)!;
+  assert.equal(build.server.locator, moved);
+  assert.equal(build.id, initial.build.id);
 });
 
 test("auto-sync requires all references and persisted eligibility cannot be forged", async (t) => {

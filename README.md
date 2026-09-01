@@ -18,7 +18,7 @@ Browser → ObsidianLM :8090 → selected build + one managed llama.cpp router
 OpenCode / Illustria / local clients → llama.cpp :8085/v1
 ```
 
-Profile compatibility start now starts the mapped Build and loads its mapped model when stopped, or switches models in place when the same Build is running. It never hides a cross-Build restart. Direct same-Build selection uses backend `switch-model` with no restart and preserves the router PID/runtime ID; explicit cross-Build selection uses backend `switch-build`/restart, performing preflight, stop, port release, target start, and target load on the same endpoint, with no automatic rollback. Runtime owns this managed router lifecycle and the Configured Model drawer. Run 8 classifies a router child as managed only from current in-memory router ownership, direct parent evidence, and the exact active Build executable path. It attributes GPU memory and child-prefixed logs only after that proof; previous and unknown processes remain read-only candidates. Run 9 makes Profiles edit authoritative Configured Models, Models distinguish configurations from persistent/discovered Artifacts, and Builds distinguish stable registered Builds from discovery. Run 10 integrates Runtime and Dashboard with direct router state.
+Profile compatibility start now starts the mapped Build and loads its mapped model when stopped, or switches models in place when the same Build is running. It never hides a cross-Build restart. Direct same-Build selection uses backend `switch-model` with no restart and preserves the router PID/runtime ID; explicit cross-Build selection uses backend `switch-build`/restart, performing preflight, stop, port release, target start, and target load on the same endpoint, with no automatic rollback. Runtime owns this managed router lifecycle and the Configured Model drawer. Run 8 classifies a router child as managed only from current in-memory router ownership, direct parent evidence, and the exact active Build executable path. It attributes GPU memory and child-prefixed logs only after that proof; previous and unknown processes remain read-only candidates. Run 9 makes Profiles edit authoritative Configured Models, Models distinguish configurations from persistent/discovered Artifacts, and Builds distinguish stable cataloged Builds from discovery. Run 10 integrates Runtime and Dashboard with direct router state.
 
 ## Package Manager
 
@@ -44,63 +44,9 @@ npm run start
 - llama.cpp API: `8085`
 - External tools such as OpenCode and Illustria should connect directly to llama.cpp, for example `http://<home-pc>:8085/v1` from another Tailscale device or `http://localhost:8085/v1` locally.
 
-## Admin Token Authentication
+## Local API Access
 
-Phase 9 adds local admin token authentication for ObsidianLM's protected UI/API controls.
-
-### First-run setup
-
-On a fresh install, `adminTokenHash` is unset in `data/settings.json`. The first browser session that opens ObsidianLM sees a setup screen and creates the admin token. The raw token is accepted only during setup, hashed by the service, and then stored as `adminTokenHash`; do not store raw tokens in settings files, docs, scripts, or URLs.
-
-The token must be at least 12 characters and cannot contain whitespace. After setup, the dashboard saves the token in that browser's `localStorage` for v1 convenience and sends it to protected API routes as a bearer token. Use **Logout** to clear the saved browser token. Logging out does not remove or rotate the server-side token hash.
-
-### Public and protected endpoints
-
-These API routes remain public so the UI can check auth state, complete first-run setup, verify a submitted token, or clear local login state:
-
-- `GET /api/status`
-- `GET /api/auth/status`
-- `POST /api/auth/setup`
-- `POST /api/auth/verify`
-- `POST /api/auth/logout`
-
-Before first setup, all other `/api/*` routes are blocked with `423 setup_required`. After `adminTokenHash` is set, all other `/api/*` routes require the configured admin token. This applies on localhost and over Tailscale; Tailscale connectivity is not treated as authentication. External tools should still connect directly to llama.cpp at its OpenAI-compatible `/v1` endpoint rather than through ObsidianLM.
-
-### Where the token hash is stored
-
-Development/built local mode stores the hash in:
-
-```text
-data/settings.json
-```
-
-Installed Windows Service Mode stores the hash in the service data directory unless overridden:
-
-```text
-%PROGRAMDATA%\ObsidianLM\data\settings.json
-```
-
-The stored value is a `scrypt:v1` hash. API responses sanitize settings and should not return the hash value.
-
-### Manual reset
-
-Use manual reset only if the admin token is lost or you intentionally want to force first-run setup again. Stop ObsidianLM first so the service cannot rewrite settings while you edit them.
-
-Local/dev mode:
-
-1. Stop the running `npm run dev` or `npm run start` process.
-2. Back up `data/settings.json`.
-3. Edit `data/settings.json` and set `adminTokenHash` to `null`, or remove only the `adminTokenHash` property.
-4. Start ObsidianLM again and complete the setup screen from a trusted browser.
-
-Windows Service Mode:
-
-1. Stop the service, for example with the existing service stop script/command.
-2. Back up `%PROGRAMDATA%\ObsidianLM\data\settings.json`.
-3. Edit that file and set `adminTokenHash` to `null`, or remove only the `adminTokenHash` property.
-4. Start the service again and complete setup from a trusted browser.
-
-Do not delete unrelated settings unless you intend to reset them. While `adminTokenHash` is unset, only the public setup/status/auth routes listed above are usable; all other `/api/*` routes return `423 setup_required` until setup is completed. Complete setup from a trusted browser before exposing the UI/API to other machines.
+ObsidianLM's local UI, API, runtime actions, and log streams do not require token setup or browser unlock. `npm run dev` starts a usable local application. Network exposure and access control are deployment responsibilities; external tools should connect directly to llama.cpp's OpenAI-compatible `/v1` endpoint.
 
 ## Phase 0 Status
 
@@ -254,9 +200,9 @@ Phase 15 Run 8 adds `runtime_system`, `router`, `router_child`, and candidate/un
 
 ## Phase 9 Status
 
-Phase 9 adds admin token authentication for protected ObsidianLM controls.
+Phase 9 historically added admin-token authentication. That product path has since been removed.
 
-Implemented:
+Historical implementation:
 
 - First-run admin token setup in the dashboard.
 - Server-side `scrypt:v1` token hashing stored as `adminTokenHash` in settings.
@@ -264,15 +210,15 @@ Implemented:
 - Public auth/status routes plus bearer-token protection for other `/api/*` routes once configured.
 - Settings sanitization so API responses do not expose the stored token hash.
 
-Not implemented in Phase 9: multi-user accounts, role-based permissions, HTTPS/TLS termination, automatic token rotation, external identity providers, or using Tailscale as a substitute for the admin token.
+These bullets are retained only as phase history and are not the current product contract.
 
 ## Phase 10 Status
 
-Phase 10 adds setup-required API blocking before first-run auth setup and initial `llama-bench` one-shot job support.
+Phase 10 historically added setup-required API blocking and initial `llama-bench` one-shot job support. The auth blocker has since been removed.
 
 Implemented:
 
-- Before an admin token is configured, public auth/status routes remain available, but protected `/api/*` routes return `423 setup_required` instead of running control actions.
+- Historical only: setup-required API blocking was implemented in Phase 10 and later removed.
 - `llama-bench` can be started from the Jobs panel/API as a one-shot tool job using a discovered `llama-bench` executable and a discovered `.gguf` model.
 - `llama-bench` jobs run through the job queue and write job logs/results separately from long-running runtime logs.
 - `llama-bench`, `llama-perplexity`, and `llama-cli` are not classified as `llama-server` runtimes during process detection.
@@ -338,7 +284,7 @@ Phase 13 adds readiness, browser smoke, and real-use validation guidance.
 
 Implemented:
 
-- `GET /api/readiness` summarizes setup state, authoritative Configured Model counts, stable registered Build counts, router-eligible Build counts, managed port conflict state, GPU monitor availability, active runtime state, storage warnings, blocking checks, warnings, and recommended next actions. Readiness counts/checks are authoritative for Configured Models, registered Builds, and router-eligible Builds; discovery remains evidence.
+- `GET /api/readiness` summarizes setup state, authoritative Configured Model counts, stable cataloged Build counts, router-eligible Build counts, managed port conflict state, GPU monitor availability, active runtime state, storage warnings, blocking checks, warnings, and recommended next actions. Readiness counts/checks are authoritative for Configured Models, cataloged Builds, and router-eligible Builds; discovery remains evidence.
 - Readiness is protected after admin setup like other control endpoints and returns sanitized count/status data instead of local absolute paths, token hashes, command lines, or raw runtime paths.
 - The dashboard includes a Readiness / Setup Checklist panel with blocking checks, warnings, discovery counts, empty-state guidance, and next actions.
 - Playwright browser smoke tests run against isolated `.tmp/e2e-data` and `.tmp/e2e-logs` on port `18090` and do not require real GGUF files, llama.cpp tools, GPU, Tailscale, or llama-server.
