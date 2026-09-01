@@ -53,6 +53,9 @@ Thumbs.db
 .serena/
 .playwright-mcp/
 
+# Design reference screenshots
+docs/design/reference/old/
+
 # Repo packing (auto-added by generate-repo-zip.bat)
 generate-repo-zip.bat
 ObsidianLM.zip

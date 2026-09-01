@@ -237,6 +237,28 @@ test("readiness counts authoritative base artifacts and usable llama-server Buil
   assert.equal(body.checks.find((item: any) => item.id === "server-builds").label, "Usable llama-server Builds");
   assert.equal(body.checks.find((item: any) => item.id === "server-builds").status, "pass");
 });
+test("readiness and Models reject a persisted base role contradicted by GGUF metadata", async (t) => {
+  const fixture = await makeFixture(t);
+  const modelPath = path.join(fixture.modelDir, "role-conflict.gguf");
+  const serverPath = path.join(fixture.buildDir, process.platform === "win32" ? "llama-server.exe" : "llama-server");
+  await Promise.all([writeFile(modelPath, "uninspected"), writeFile(serverPath, "server")]);
+  await ensureStorageFiles();
+  await saveSettings({ ...defaultSettings, modelFolders: [fixture.modelDir], llamaCppFolders: [path.join(fixture.root, "llama")], managedLlamaPort: 18095 });
+  const app = await createReadinessServer(t);
+  const artifact = (await app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts[0];
+  const build = (await app.inject({ method: "GET", url: "/api/builds" })).json().builds[0];
+  assert.equal((await app.inject({ method: "PATCH", url: `/api/model-artifacts/${artifact.id}`, payload: { kind: "model" } })).statusCode, 200);
+  assert.equal((await app.inject({ method: "POST", url: "/api/configured-models", payload: { displayName: "Historical base", artifactId: artifact.id, buildId: build.id, enabled: true } })).statusCode, 201);
+
+  await writeFile(modelPath, gguf("projector"));
+  const readiness = (await app.inject({ method: "GET", url: "/api/readiness" })).json();
+  assert.equal(readiness.counts.ggufModels, 0);
+  const reconciled = (await app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts.find((entry: any) => entry.id === artifact.id);
+  assert.equal(reconciled.kind, "model");
+  assert.equal(reconciled.metadata.artifactKind, "mmproj");
+  assert.equal(reconciled.role, "conflict");
+  assert.equal(reconciled.selectionStatus, "invalid");
+});
 test("readiness reports ready-ish discovered counts from temp folders", async (t) => {
   const fixture = await makeFixture(t);
   const modelPath = path.join(fixture.modelDir, "Tiny-Q4_K_M.gguf");

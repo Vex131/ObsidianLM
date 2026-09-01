@@ -1,5 +1,5 @@
 import { createLlamaCppBuildId, type DiscoveredLlamaCppBuild, type DiscoveredModel, type LlamaCppBuild, type ModelArtifact } from "@obsidianlm/shared";
-import { findOrRegisterLocalArtifactInSnapshot, mutatePhase15Domain, normalizeLocalResourceLocator, reconcileBuildFingerprintInSnapshot, type Phase15DomainSnapshot } from "../config/phase15-domain.js";
+import { artifactRoleMismatch, findOrRegisterLocalArtifactInSnapshot, mutatePhase15Domain, normalizeLocalResourceLocator, reconcileBuildFingerprintInSnapshot, type Phase15DomainSnapshot } from "../config/phase15-domain.js";
 import { fingerprintServerExecutable } from "../router/fingerprint.js";
 import { inspectGgufMetadata } from "./gguf-metadata.js";
 import { discoverLlamaBuilds } from "./llama-builds.js";
@@ -22,14 +22,6 @@ function reconcileArtifact(snapshot: Phase15DomainSnapshot, found: DiscoveredMod
   const storedMetadata = metadata && Object.fromEntries(Object.entries({ ...metadata, artifactKind: kind, artifactKindSource: metadata.artifactKind === "unknown" && found.artifactKindGuess !== "unknown" ? found.artifactKindSource : metadata.artifactKindSource, artifactId: artifact.id }).filter(([, value]) => value !== undefined));
   Object.assign(artifact, { referenceStatus: "available", discoveryId: found.id, discoveredAt: found.detectedAt, updatedAt: found.detectedAt, metadata: storedMetadata });
   if (!main && !projector) artifact.kind = kind;
-}
-
-function artifactRoleMismatch(snapshot: Phase15DomainSnapshot, artifact: ModelArtifact): boolean {
-  const kind = artifact.metadata?.artifactKind;
-  return kind !== undefined && kind !== "unknown" && (
-    kind !== "model" && snapshot.configuredModels.some((model) => model.artifactId === artifact.id)
-    || kind !== "mmproj" && snapshot.configuredModels.some((model) => model.projector?.artifactId === artifact.id)
-  );
 }
 
 function reconcileBuild(snapshot: Phase15DomainSnapshot, found: DiscoveredLlamaCppBuild, fingerprint: string | undefined): LlamaCppBuild {

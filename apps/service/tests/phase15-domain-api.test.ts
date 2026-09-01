@@ -18,6 +18,13 @@ import {
 import { createServer, type CreateServerOptions } from "../src/server.js";
 import type { LlamaBuildCapabilitiesManifest } from "@obsidianlm/shared";
 
+const u32 = (value: number) => { const out = Buffer.alloc(4); out.writeUInt32LE(value); return out; };
+const i32 = (value: number) => { const out = Buffer.alloc(4); out.writeInt32LE(value); return out; };
+const u64 = (value: bigint) => { const out = Buffer.alloc(8); out.writeBigUInt64LE(value); return out; };
+const ggufText = (value: string) => Buffer.concat([u64(BigInt(Buffer.byteLength(value))), Buffer.from(value)]);
+const ggufString = (key: string, value: string) => Buffer.concat([ggufText(key), i32(8), ggufText(value)]);
+const gguf = (entries: Buffer[]) => Buffer.concat([Buffer.from("GGUF"), u32(3), u64(0n), u64(BigInt(entries.length)), ...entries]);
+
 const validationManifest = (
   buildId: string,
 ): LlamaBuildCapabilitiesManifest => ({
@@ -238,6 +245,29 @@ test("artifact DTO keeps vision capability metadata-based and projector associat
   assert.equal(model.projectorAssociation.artifactId, c.projector.id);
   assert.equal(model.projectorAssociation.validationStatus, "invalid");
   assert.equal(model.validation.status, "invalid");
+});
+
+test("artifact DTO derives positive and negative vision capability from GGUF metadata", async (t) => {
+  const f = await fixture(t);
+  await Promise.all([
+    writeFile(f.model, gguf([ggufString("general.type", "model"), ggufString("general.architecture", "qwen2vl")])),
+    writeFile(f.text, gguf([ggufString("general.type", "text"), ggufString("general.architecture", "llama")])),
+  ]);
+  const artifacts = (await f.app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts;
+  assert.deepEqual(artifacts.find((entry: any) => entry.resource.locator === f.model).vision, { capability: "yes", module: "not_found" });
+  assert.deepEqual(artifacts.find((entry: any) => entry.resource.locator === f.text).vision, { capability: "no", module: "not_required" });
+});
+
+test("nearby similarly named projector is cataloged but never associated automatically", async (t) => {
+  const f = await fixture(t); const c = await catalog(f);
+  const created = await f.app.inject({ method: "POST", url: "/api/configured-models", payload: { displayName: "Unpaired vision", artifactId: c.artifact.id, buildId: c.build.id, enabled: false } });
+  assert.equal(created.statusCode, 201);
+  const artifacts = (await f.app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts;
+  assert.equal(artifacts.find((entry: any) => entry.id === c.projector.id).kind, "mmproj");
+  assert.deepEqual(artifacts.find((entry: any) => entry.id === c.artifact.id).vision, { capability: "unknown", module: "unknown" });
+  const model = (await f.app.inject({ method: "GET", url: `/api/configured-models/${created.json().model.id}` })).json().model;
+  assert.equal(model.projectorAssociation, undefined);
+  assert.equal(model.projector, undefined);
 });
 
 test("first sync reconciles a missing legacy custom-bin Build without duplicating its identity", async (t) => {

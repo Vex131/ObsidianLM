@@ -45,10 +45,6 @@ async function makeFixture(t: TestContext) {
   });
   return { root, dataDir, logsDir, modelDir, buildDir };
 }
-async function configureAdminToken(): Promise<void> {
-  await ensureStorageFiles();
-  await saveSettings({ ...defaultSettings });
-}
 async function configureDiscovery(t: TestContext) {
   const fixture = await makeFixture(t);
   const modelPath = path.join(fixture.modelDir, "Tiny-Q4_K_M.gguf");

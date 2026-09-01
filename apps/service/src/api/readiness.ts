@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { isBuildEligibleForManagedInference, type DiscoveryWarning, type ReadinessCheck, type ReadinessResponse } from "@obsidianlm/shared";
 import { getStorageWarnings, loadProfilesReadOnly, loadSettingsReadOnly } from "../config/storage.js";
+import { isArtifactEligibleAsBaseModel, loadPhase15Domain } from "../config/phase15-domain.js";
 import { synchronizeDiscoveryCatalog } from "../discovery/catalog-sync.js";
 import { discoverToolInputs } from "../discovery/tool-inputs.js";
 import { getGpuMonitoringStatus, type GpuMonitorOptions } from "../monitoring/gpu-monitor.js";
@@ -41,7 +42,7 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
     const settings = await loadSettingsReadOnly();
     const [catalog, toolInputs, profiles] = await Promise.all([synchronizeDiscoveryCatalog(), discoverToolInputs(settings), loadProfilesReadOnly()]);
     const models = { models: catalog.models, warnings: [] }; const builds = { builds: catalog.builds, warnings: [] };
-    const domain = await (await import("../config/phase15-domain.js")).loadPhase15Domain();
+    const domain = await loadPhase15Domain();
     const routerState = runtimeManager.getRouterState();
     const port = await detectPort(settings.managedLlamaPort, "127.0.0.1");
     const portStatus = classifyPortStatus(port, routerState.pid);
@@ -50,7 +51,7 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
     const runtimeActive = ["starting", "running", "stopping"].includes(routerState.status);
     const activeProfile = routerState.compatibilityProfileId ? profiles.find((profile) => profile.id === routerState.compatibilityProfileId) ?? null : null;
     const eligibleBuilds = domain.builds.filter(isBuildEligibleForManagedInference);
-    const baseModelCount = domain.artifacts.filter((artifact) => artifact.referenceStatus === "available" && (artifact.kind === "model" || artifact.kind === "unknown")).length;
+    const baseModelCount = domain.artifacts.filter((artifact) => isArtifactEligibleAsBaseModel(domain, artifact)).length;
     const serverBuildCount = domain.builds.filter((build) => build.tools.some((tool) => tool.kind === "server" && tool.exists)).length;
     const benchCount = builds.builds.reduce((count, build) => count + build.tools.filter((tool) => tool.kind === "bench" && tool.exists).length, 0);
     const perplexityCount = builds.builds.reduce((count, build) => count + build.tools.filter((tool) => tool.kind === "perplexity" && tool.exists).length, 0);

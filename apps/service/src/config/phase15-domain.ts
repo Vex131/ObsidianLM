@@ -33,6 +33,20 @@ export interface Phase15DomainSnapshot {
   compatibilityBindings: LegacyProfileCompatibilityBinding[];
 }
 
+export function artifactRoleMismatch(snapshot: Phase15DomainSnapshot, artifact: ModelArtifact): boolean {
+  const kind = artifact.metadata?.artifactKind;
+  return kind !== undefined && kind !== "unknown" && (
+    kind !== "model" && snapshot.configuredModels.some((model) => model.artifactId === artifact.id)
+    || kind !== "mmproj" && snapshot.configuredModels.some((model) => model.projector?.artifactId === artifact.id)
+  );
+}
+
+export function isArtifactEligibleAsBaseModel(snapshot: Phase15DomainSnapshot, artifact: ModelArtifact): boolean {
+  const metadataKind = artifact.metadata?.artifactKind;
+  const kind = metadataKind && metadataKind !== "unknown" ? metadataKind : artifact.kind;
+  return artifact.referenceStatus === "available" && (kind === "model" || kind === "unknown") && !artifactRoleMismatch(snapshot, artifact);
+}
+
 interface Phase15DomainSnapshotV1 extends Omit<Phase15DomainSnapshot, "schemaVersion" | "compatibilityBindings"> {
   schemaVersion: typeof PROFILE_MIGRATION_TARGET_VERSION;
 }
@@ -629,17 +643,6 @@ export async function deleteArtifactWithDependents(artifactId: string, dataDir =
 
 export async function findOrRegisterLegacyBuild(serverLocator: string, dataDir = getDataDir()): Promise<LlamaCppBuild> {
   const committed = await mutatePhase15Domain((snapshot) => findOrRegisterLegacyBuildInSnapshot(snapshot, serverLocator), dataDir);
-  return clone(committed.result);
-}
-
-export async function patchBuildDisplayNameAndClassification(buildId: string, patch: Pick<LlamaCppBuild, "displayName" | "classification">, dataDir = getDataDir()): Promise<LlamaCppBuild> {
-  const committed = await mutatePhase15Domain((snapshot) => {
-    const build = snapshot.builds.find((entry) => entry.id === buildId);
-    if (!build) throw errorMessage("build not found");
-    build.displayName = patch.displayName;
-    build.classification = patch.classification;
-    return build;
-  }, dataDir);
   return clone(committed.result);
 }
 

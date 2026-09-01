@@ -655,7 +655,7 @@ Must include:
 
 Goal: distinguish discovered local model artifacts from configured model presets.
 
-Implemented behavior: Models displays GGUF artifacts discovered in configured model folders. It distinguishes primary models from projector, adapter, importance-matrix, and other/unknown GGUF files using explicit filename hints first and authoritative whitelisted GGUF metadata after lazy inspection. The selected-artifact inspector performs bounded header/KV inspection without loading tensor data or starting llama.cpp, shows Configured Model relationships and router observation, and can open an unsaved Profiles draft with the artifact preselected.
+Implemented behavior: Models displays GGUF artifacts discovered in configured model folders. Definitive whitelisted GGUF metadata is authoritative for classification; filename heuristics provide fallback or supporting evidence when metadata is inconclusive. Catalog synchronization stores the effective classification evidence. If authoritative metadata conflicts with a configured base-Model or projector role, synchronization retains the stable Artifact identity but marks the role invalid. The selected-artifact inspector performs bounded header/KV inspection without loading tensor data or starting llama.cpp, shows Configured Model relationships and router observation, and can open an unsaved Profiles draft with the artifact preselected.
 
 Discovery IDs remain path-derived and do not survive a move or folder rename. Projector matches are candidates only; Models does not persist model/projector relationships. Configured router models, aliases, presets, and explicit switching are current Phase 15 contracts; switching UI remains Runs 9–10 work.
 

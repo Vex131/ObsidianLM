@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
     "lint": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "node --test"
+    "test": "node --test --import tsx tests/**/*.test.ts"
   },
   "dependencies": {
     "@obsidianlm/shared": "0.1.0",
@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "svelte-check": "^4.1.4",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
 }
