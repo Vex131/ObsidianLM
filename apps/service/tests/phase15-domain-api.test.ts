@@ -219,13 +219,69 @@ test("configured model API validates references, aliases, projector choice, and 
   assert.equal((await f.app.inject({ method: "GET", url: "/api/configured-models" })).json().configuredModels.length, 2);
 });
 
-test("artifact DTO reports installed and unknown conservative vision state", async (t) => {
+test("artifact DTO keeps vision capability metadata-based and projector associations current", async (t) => {
   const f = await fixture(t); const c = await catalog(f);
+  let artifacts = (await f.app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts;
+  assert.deepEqual(artifacts.find((entry: any) => entry.id === c.artifact.id).vision, { capability: "unknown", module: "unknown" });
   const created = await f.app.inject({ method: "POST", url: "/api/configured-models", payload: { displayName: "Vision", artifactId: c.artifact.id, buildId: c.build.id, enabled: false, projector: { artifactId: c.projector.id, selection: "explicit", validationStatus: "not_validated" } } });
   assert.equal(created.statusCode, 201);
-  let artifacts = (await f.app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts;
-  assert.deepEqual(artifacts.find((entry: any) => entry.id === c.artifact.id).vision, { capability: "yes", module: "installed" });
+  artifacts = (await f.app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts;
+  assert.deepEqual(artifacts.find((entry: any) => entry.id === c.artifact.id).vision, { capability: "unknown", module: "installed" });
   assert.deepEqual(artifacts.find((entry: any) => entry.id === c.text.id).vision, { capability: "unknown", module: "unknown" });
+  await rm(f.projector);
+  artifacts = (await f.app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts;
+  assert.deepEqual(artifacts.find((entry: any) => entry.id === c.artifact.id).vision, { capability: "unknown", module: "not_found" });
+  const missingProjector = artifacts.find((entry: any) => entry.id === c.projector.id);
+  assert.equal(missingProjector.id, c.projector.id);
+  assert.equal(missingProjector.referenceStatus, "missing");
+  const model = (await f.app.inject({ method: "GET", url: "/api/configured-models" })).json().configuredModels.find((entry: any) => entry.id === created.json().model.id);
+  assert.equal(model.projectorAssociation.artifactId, c.projector.id);
+  assert.equal(model.projectorAssociation.validationStatus, "invalid");
+  assert.equal(model.validation.status, "invalid");
+});
+
+test("first sync reconciles a missing legacy custom-bin Build without duplicating its identity", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "obsidianlm-phase15-legacy-bin-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const models = path.join(dir, "models");
+  const builds = path.join(dir, "builds");
+  const buildFolder = path.join(builds, "qwen-custom");
+  const server = path.join(buildFolder, "bin", process.platform === "win32" ? "llama-server.exe" : "llama-server");
+  const model = path.join(models, "qwen.gguf");
+  await Promise.all([mkdir(models, { recursive: true }), mkdir(path.dirname(server), { recursive: true })]);
+  await writeFile(model, "gguf");
+  await writeFile(path.join(dir, "settings.json"), JSON.stringify({ ...defaultSettings, modelFolders: [models], llamaCppFolders: [builds] }));
+  await writeFile(path.join(dir, "profiles.json"), JSON.stringify([{ id: "legacy-qwen", name: "Legacy Qwen", runtimeType: "llama.cpp", providerKind: "server", buildPath: server, modelPath: model, host: "127.0.0.1", port: 18085 }]));
+  const oldData = process.env.OBSIDIANLM_DATA_DIR;
+  const oldLogs = process.env.OBSIDIANLM_LOG_DIR;
+  process.env.OBSIDIANLM_DATA_DIR = dir;
+  process.env.OBSIDIANLM_LOG_DIR = path.join(dir, "logs");
+  t.after(() => {
+    if (oldData === undefined) delete process.env.OBSIDIANLM_DATA_DIR; else process.env.OBSIDIANLM_DATA_DIR = oldData;
+    if (oldLogs === undefined) delete process.env.OBSIDIANLM_LOG_DIR; else process.env.OBSIDIANLM_LOG_DIR = oldLogs;
+  });
+  const app = await createServer();
+  t.after(() => app.close());
+  let response = await app.inject({ method: "GET", url: "/api/builds" });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().builds.length, 1);
+  const legacyBuild = response.json().builds[0];
+  assert.equal(legacyBuild.resource.locator, buildFolder);
+  assert.equal(legacyBuild.tools.some((tool: any) => tool.kind === "server" && tool.exists), false);
+  let snapshot = await loadPhase15Domain(dir);
+  const configured = snapshot.configuredModels[0]!;
+  assert.equal(configured.buildId, legacyBuild.id);
+  assert.equal(configured.referenceStatus.build, "missing");
+  assert.equal(configured.validationStatus, "invalid");
+  await writeFile(server, "restored");
+  response = await app.inject({ method: "GET", url: "/api/builds" });
+  assert.equal(response.json().builds.length, 1);
+  assert.equal(response.json().builds[0].id, legacyBuild.id);
+  assert.equal(response.json().builds[0].server.locator, server);
+  assert.equal(response.json().builds[0].tools.some((tool: any) => tool.kind === "server" && tool.exists), true);
+  snapshot = await loadPhase15Domain(dir);
+  assert.equal(snapshot.configuredModels[0]!.buildId, legacyBuild.id);
+  assert.equal(snapshot.configuredModels[0]!.referenceStatus.build, "available");
 });
 
 test("definitive artifact role conflicts retain identity but become invalid", async (t) => {

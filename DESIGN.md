@@ -1164,7 +1164,7 @@ Goal: configure low-frequency app and service settings.
 
 Must include:
 
-- Auth/session controls.
+- Clear local-access status without credential, token-setup, or browser-unlock controls.
 - Known Nodes, active Node selection, capability/version state, and safe connection removal in Phase 16.
 - Service mode metadata.
 - Data/log directory mode.

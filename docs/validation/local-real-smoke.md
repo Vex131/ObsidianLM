@@ -27,7 +27,7 @@
 10. Confirm configured-model dependencies and the active Build marker match the authoritative domain; any Profile marker is legacy compatibility projection only.
 11. Use **Use in Profiles** and confirm a new unsaved draft opens with Build selected and Model empty.
 12. Confirm inspection did not start a listener, load a model, run bench/perplexity, or materially change GPU VRAM.
-13. For an eligible Build, start through the managed Runtime controls and record the exact Run 5 argv: registered server executable, `--host 0.0.0.0`, managed `--port`, generated `--models-preset`, `--models-max 1`, and the positive autoload flag proven by Build help. Confirm no `--model` or `--models-dir` is passed.
+13. For an eligible Build, start through the managed Runtime controls and record the exact Run 5 argv: resolved/available server executable, `--host 0.0.0.0`, managed `--port`, generated `--models-preset`, `--models-max 1`, and the positive autoload flag proven by Build help. Confirm no `--model` or `--models-dir` is passed.
 14. Confirm the router uses the controlled per-Build cache/environment, preflights the managed port, and never kills or adopts an external/unknown owner.
 15. Confirm startup requires healthy `/health` and strict `/models` reconciliation; initial external or unknown catalog entries block startup.
 16. Confirm `router-runtime-state.json` is current lifecycle authority and `runtime-state.json` remains preserved legacy evidence. Profile start is a temporary Build-selection hint and loads no model; restart reuses the same Build.
@@ -43,7 +43,7 @@
 ## Logs Page
 
 1. Start a managed runtime and confirm historical stdout, stderr, and system entries appear.
-2. Interrupt and restore the browser connection; confirm authenticated streaming reconnects without duplicate unbounded history.
+2. Interrupt and restore the browser connection; confirm SSE reconnects without an Authorization header or duplicate unbounded history.
 3. In Windows service mode, confirm bounded wrapper files appear under Service without exposing arbitrary paths.
 4. Confirm **Clear visible** only clears the browser buffer and a refresh can restore persisted history.
 
@@ -59,7 +59,7 @@
 1. Update model, llama.cpp build, and tool-input folders; save, then confirm Models, Builds, and Jobs discover the intended machine-local resources.
 2. While the managed runtime is stopped, change the managed port to a valid free port and confirm the saved setting and current port observation.
 3. While the runtime is active, confirm changing the managed port is blocked and unrelated folder settings remain editable.
-4. Verify setup, browser unlock, and browser lock without exposing the raw token or server-side hash.
+4. Confirm Settings is immediately usable and requires no credential or bootstrap step.
 
 ## System Page
 

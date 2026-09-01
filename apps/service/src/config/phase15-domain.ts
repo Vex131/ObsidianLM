@@ -94,6 +94,17 @@ function resource(locator: string) {
   return { owner: { scope: "local" as const }, locator };
 }
 
+function legacyPathApi(locator: string): typeof path.win32 | typeof path.posix {
+  return /^(?:[A-Za-z]:[\\/]|\\\\)|\\/u.test(locator) ? path.win32 : path.posix;
+}
+
+function legacyBuildResourceFolder(serverLocator: string): string {
+  const pathApi = legacyPathApi(serverLocator);
+  const serverName = pathApi.basename(serverLocator).toLowerCase();
+  const serverFolder = pathApi.dirname(serverLocator);
+  return /^llama-server(?:\.exe)?$/u.test(serverName) && pathApi.basename(serverFolder).toLowerCase() === "bin" ? pathApi.dirname(serverFolder) : serverFolder;
+}
+
 function isLlamaArgs(value: unknown): boolean {
   if (value === undefined) return true;
   if (!isRecord(value)) return false;
@@ -361,15 +372,16 @@ async function createSnapshot(profiles: LlamaCppProfile[], sourceRevision: strin
   const buildByKey = new Map<string, LlamaCppBuild>();
   const modelEntries = await Promise.all(profiles.map(async (profile) => {
     const modelKey = normalizeLocalResourceLocator(profile.modelPath);
-    const buildKey = normalizeLocalResourceLocator(profile.buildPath);
+    const buildFolder = legacyBuildResourceFolder(profile.buildPath);
+    const buildKey = normalizeLocalResourceLocator(buildFolder);
     const [artifactStatus, buildStatus] = await Promise.all([referenceStatus(profile.modelPath, inspect), referenceStatus(profile.buildPath, inspect)]);
     const artifactId = createModelArtifactId(`legacy-model:${modelKey}`);
     const buildId = createLlamaCppBuildId(`legacy-build:${buildKey}`);
-    return { profile, modelKey, buildKey, artifactId, buildId, artifactStatus, buildStatus };
+    return { profile, modelKey, buildFolder, buildKey, artifactId, buildId, artifactStatus, buildStatus };
   }));
-  for (const { profile, modelKey, buildKey, artifactId, buildId, artifactStatus, buildStatus } of modelEntries) {
+  for (const { profile, modelKey, buildFolder, buildKey, artifactId, buildId, artifactStatus, buildStatus } of modelEntries) {
     if (!artifactByKey.has(modelKey)) artifactByKey.set(modelKey, { schemaVersion: MODEL_CONFIGURATION_SCHEMA_VERSION, id: artifactId, resource: resource(profile.modelPath), kind: "model", referenceStatus: artifactStatus });
-    if (!buildByKey.has(buildKey)) buildByKey.set(buildKey, { schemaVersion: 1, id: buildId, displayName: path.basename(profile.buildPath) || profile.buildPath, resource: resource(path.dirname(profile.buildPath)), server: resource(profile.buildPath), tools: [{ kind: "server", fileName: path.basename(profile.buildPath), path: profile.buildPath, exists: buildStatus === "available" }], classification: "unknown", managedInferenceEligibility: "not_validated", warnings: [], failures: [] });
+    if (!buildByKey.has(buildKey)) buildByKey.set(buildKey, { schemaVersion: 1, id: buildId, displayName: legacyPathApi(buildFolder).basename(buildFolder) || buildFolder, resource: resource(buildFolder), server: resource(profile.buildPath), tools: [{ kind: "server", fileName: legacyPathApi(profile.buildPath).basename(profile.buildPath), path: profile.buildPath, exists: buildStatus === "available" }], classification: "unknown", managedInferenceEligibility: "not_validated", warnings: [], failures: [] });
   }
   const aliases: string[] = [];
   const configuredModels: ConfiguredModel[] = modelEntries.map(({ profile, artifactId, buildId, artifactStatus, buildStatus }) => {
@@ -543,7 +555,8 @@ export function findOrRegisterLocalArtifactInSnapshot(snapshot: Phase15DomainSna
 }
 
 export function findOrRegisterLegacyBuildInSnapshot(snapshot: Phase15DomainSnapshot, serverLocator: string, referenceStatus: "available" | "missing" | "unknown" = "unknown"): LlamaCppBuild {
-  const existing = snapshot.builds.find((build) => build.server.owner.scope === "local" && normalizeLocalResourceLocator(build.server.locator) === normalizeLocalResourceLocator(serverLocator));
+  const buildFolder = legacyBuildResourceFolder(serverLocator);
+  const existing = snapshot.builds.find((build) => (build.resource.owner.scope === "local" && normalizeLocalResourceLocator(build.resource.locator) === normalizeLocalResourceLocator(buildFolder)) || (build.server.owner.scope === "local" && normalizeLocalResourceLocator(build.server.locator) === normalizeLocalResourceLocator(serverLocator)));
   if (existing) {
     if (referenceStatus !== "unknown") {
       const server = existing.tools.find((tool) => tool.kind === "server" && normalizeLocalResourceLocator(tool.path) === normalizeLocalResourceLocator(serverLocator));
@@ -552,12 +565,12 @@ export function findOrRegisterLegacyBuildInSnapshot(snapshot: Phase15DomainSnaps
     }
     return clone(existing);
   }
-  const build: LlamaCppBuild = { schemaVersion: 1, id: createLlamaCppBuildId(), displayName: path.basename(serverLocator) || serverLocator, resource: resource(path.dirname(serverLocator)), server: resource(serverLocator), tools: [{ kind: "server", fileName: path.basename(serverLocator), path: serverLocator, exists: referenceStatus === "available" }], classification: "unknown", managedInferenceEligibility: "not_validated", warnings: [], failures: [] };
+  const build: LlamaCppBuild = { schemaVersion: 1, id: createLlamaCppBuildId(normalizeLocalResourceLocator(buildFolder)), displayName: legacyPathApi(buildFolder).basename(buildFolder) || buildFolder, resource: resource(buildFolder), server: resource(serverLocator), tools: [{ kind: "server", fileName: legacyPathApi(serverLocator).basename(serverLocator), path: serverLocator, exists: referenceStatus === "available" }], classification: "unknown", managedInferenceEligibility: "not_validated", warnings: [], failures: [] };
   snapshot.builds.push(build);
   return clone(build);
 }
 
-export function reconcileBuildFingerprintInSnapshot(snapshot: Phase15DomainSnapshot, buildId: string, fingerprint: string | undefined, reason = "Router validation was invalidated because the registered server executable changed or disappeared."): LlamaCppBuild {
+export function reconcileBuildFingerprintInSnapshot(snapshot: Phase15DomainSnapshot, buildId: string, fingerprint: string | undefined, reason = "Router validation was invalidated because the resolved server executable changed or disappeared."): LlamaCppBuild {
   const build = snapshot.builds.find((entry) => entry.id === buildId);
   if (!build) throw errorMessage("build not found");
   const changed = build.serverFingerprint !== undefined && build.serverFingerprint !== fingerprint;

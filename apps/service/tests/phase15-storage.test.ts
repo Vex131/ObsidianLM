@@ -48,12 +48,12 @@ async function fixture(t: test.TestContext) {
   const model = path.join(models, "shared.gguf");
   const custom = path.join(models, "custom.gguf");
   const build = path.join(builds, "llama-server.exe");
-  const otherBuild = path.join(builds, "other-server.exe");
+  const otherBuild = path.join(builds, "other", "llama-server.exe");
   await Promise.all([
     writeFile(model, "model"),
     writeFile(custom, "custom"),
     writeFile(build, "build"),
-    writeFile(otherBuild, "other"),
+    mkdir(path.dirname(otherBuild), { recursive: true }).then(() => writeFile(otherBuild, "other")),
   ]);
   return { dir, model, custom, build, otherBuild };
 }
@@ -225,6 +225,38 @@ test("Phase 15 v2 ignores changed profiles and does not rewrite or create anothe
     (await names(f.dir, /^profiles\.json\.phase15-.*\.bak$/)).length,
     backupCount,
   );
+});
+
+test("Phase 15 derives legacy Build identity from root and bin llama-server layouts", async (t) => {
+  const f = await fixture(t);
+  const buildFolder = path.join(f.dir, "custom-build");
+  const rootServer = path.join(buildFolder, process.platform === "win32" ? "llama-server.exe" : "llama-server");
+  const binServer = path.join(buildFolder, "bin", path.basename(rootServer));
+  const missingCustomBin = path.join(f.dir, "missing-custom", "bin", path.basename(rootServer));
+  await mkdir(path.dirname(rootServer), { recursive: true });
+  await writeFile(rootServer, "server");
+  await writeFile(path.join(f.dir, "profiles.json"), JSON.stringify([
+    profile("root", "Root", f.model, rootServer),
+    profile("bin", "Bin", f.custom, binServer),
+    profile("missing", "Missing custom", f.model, missingCustomBin),
+  ]));
+  await migratePhase15Domain(f.dir);
+  let snapshot = await json(f.dir, "phase15-domain.json") as any;
+  const mapping = (id: string) => snapshot.migration.mappings.find((entry: any) => entry.legacyProfileId === id)!;
+  assert.equal(snapshot.builds.length, 2);
+  assert.equal(mapping("root").buildId, mapping("bin").buildId);
+  const rootBuild = snapshot.builds.find((entry: any) => entry.id === mapping("root").buildId)!;
+  assert.equal(rootBuild.resource.locator, buildFolder);
+  assert.equal(rootBuild.server.locator, binServer);
+  assert.equal(rootBuild.displayName, path.basename(buildFolder));
+  assert.equal(snapshot.configuredModels.find((entry: any) => entry.id === mapping("missing").configuredModelId).referenceStatus.build, "missing");
+  const missingBuildId = mapping("missing").buildId;
+  await mkdir(path.dirname(missingCustomBin), { recursive: true });
+  await writeFile(missingCustomBin, "restored");
+  await rm(path.join(f.dir, "phase15-domain.json"));
+  await migratePhase15Domain(f.dir);
+  snapshot = await json(f.dir, "phase15-domain.json") as any;
+  assert.equal(snapshot.migration.mappings.find((entry: any) => entry.legacyProfileId === "missing").buildId, missingBuildId);
 });
 
 test("Phase 15 upgrades an exact v1 store atomically and only once", async (t) => {

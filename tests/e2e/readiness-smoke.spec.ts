@@ -3,9 +3,12 @@ import { expect, test, type Page } from "@playwright/test";
 async function collectConsoleErrors(page: Page): Promise<string[]> {
   const errors: string[] = [];
   page.on("console", (message) => {
-    if (message.type() === "error") {
+    if (message.type() === "error" && !message.text().startsWith("Failed to load resource:")) {
       errors.push(message.text());
     }
+  });
+  page.on("response", (response) => {
+    if (response.status() >= 400) errors.push(`${response.status()} ${new URL(response.url()).pathname}`);
   });
   page.on("pageerror", (error) => {
     errors.push(error.message);

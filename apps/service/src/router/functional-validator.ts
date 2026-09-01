@@ -80,13 +80,13 @@ export async function validateFunctionalRouterBuild(buildId: string, configuredM
     const locator = build.server.locator;
     let probeFingerprint: string;
     try { probeFingerprint = await fingerprint(locator); } catch {
-      const committed = await mutate((snapshot) => reconcileBuildFingerprintInSnapshot(snapshot, build.id, undefined, "Router validation was invalidated because the registered server executable is missing."));
+      const committed = await mutate((snapshot) => reconcileBuildFingerprintInSnapshot(snapshot, build.id, undefined, "Router validation was invalidated because the resolved server executable is missing."));
       throw new RouterValidationError("prerequisite", `The resolved llama-server executable is unavailable; Build ${committed.result.id} remains not validated.`);
     }
     const manifest = await probeStatic(build);
     const postStaticFingerprint = await fingerprint(locator).catch(() => undefined);
     if (postStaticFingerprint !== probeFingerprint) {
-      await mutate((snapshot) => reconcileBuildFingerprintInSnapshot(snapshot, build.id, postStaticFingerprint, "Router validation was interrupted because the registered server executable changed during static preflight."));
+      await mutate((snapshot) => reconcileBuildFingerprintInSnapshot(snapshot, build.id, postStaticFingerprint, "Router validation was interrupted because the resolved server executable changed during static preflight."));
       throw new RouterValidationError("conflict", "Build executable changed during static preflight.");
     }
     await mutate((snapshot) => {
@@ -151,7 +151,7 @@ async function commitResult(buildId: string, locator: string, probeFingerprint: 
     const latest = snapshot.builds.find((entry) => entry.id === buildId);
     if (!latest) throw new RouterValidationError("not_found", "Build not found.");
     if (latest.server.owner.scope !== "local" || latest.server.locator !== locator || currentFingerprint !== probeFingerprint) {
-      reconcileBuildFingerprintInSnapshot(snapshot, buildId, currentFingerprint, "Router validation result was discarded because the registered server executable changed during validation.");
+      reconcileBuildFingerprintInSnapshot(snapshot, buildId, currentFingerprint, "Router validation result was discarded because the resolved server executable changed during validation.");
       return { build: snapshot.builds.find((entry) => entry.id === buildId)!, stale: true };
     }
     latest.serverFingerprint = probeFingerprint;

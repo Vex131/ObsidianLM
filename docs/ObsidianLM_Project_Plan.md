@@ -95,7 +95,7 @@ ObsidianLM UI/API: 8090
 llama.cpp API:     8085
 ```
 
-Clients should normally use `http://<home-pc>:8085/v1`. Tailscale connectivity does not replace ObsidianLM's admin-token authentication.
+Clients should normally use `http://<home-pc>:8085/v1`. Tailscale is transport connectivity; current local ObsidianLM UI/API/SSE use no admin-token setup or Authorization header.
 
 ## 4. llama.cpp Router Decision
 
@@ -548,8 +548,8 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 5. **RuntimeManager router support:** **Implemented in Run 6.** Launch one router, validate `/health` and strictly reconcile `/models`, stop safely, recover startup state, and retain managed port ownership rules.
 6. **Model and Build switching:** **Implemented in Run 7.** Same-Build selection uses `POST /models/load` and bounded `/models` observation without restarting the router or issuing normal unload requests. Explicit cross-Build selection preflights the target before stopping the source, verifies exit and port release, revalidates and starts the target on the stable endpoint, then loads the requested model. There is no automatic rollback.
 7. **Process/GPU/log awareness:** **Implemented in Run 8.** Current children require direct ancestry and exact active-Build executable evidence; alias/port metadata maps only proven children through the launch-time alias map. GPU and forwarded-log attribution reuse that proof. Previous/unknown processes remain read-only and no child control authority was added.
-8. **Profiles/Models/Builds UI:** **Implemented in Run 9.** Profiles edits authoritative Configured Models; Models separates Configured Models from persistent/discovered Artifacts and uses Router Runtime for live model state; Builds separates stable registered Builds from discovery and exposes validation, dependencies, preset generation, and launch previews. Same-Build model loading and cross-Build restart actions are explicit.
-9. **Runtime/Dashboard integration:** **Implemented in Run 10.** App shell, Runtime, and Dashboard use `RouterRuntimeState` directly. Runtime owns managed router lifecycle, active router configuration, actual launch command, and Configured Model drawer; Dashboard owns the high-level active Build/loaded-model/resource summary. Run 8 GPU/process/log attribution is integrated read-only. Readiness counts/checks use authoritative Configured Models, stable registered Builds, and router-eligible Builds; discovery remains evidence.
+8. **Profiles/Models/Builds UI:** **Implemented in Run 9.** Profiles edits authoritative Configured Models; Models separates Configured Models from persistent/discovered Artifacts and uses Router Runtime for live model state; Builds separates stable cataloged Builds from discovery and exposes validation, dependencies, preset generation, and launch previews. Same-Build model loading and cross-Build restart actions are explicit.
+9. **Runtime/Dashboard integration:** **Implemented in Run 10.** App shell, Runtime, and Dashboard use `RouterRuntimeState` directly. Runtime owns managed router lifecycle, active router configuration, actual launch command, and Configured Model drawer; Dashboard owns the high-level active Build/loaded-model/resource summary. Run 8 GPU/process/log attribution is integrated read-only. Readiness counts/checks use authoritative Configured Models, stable cataloged Builds, and router-eligible Builds; discovery remains evidence.
 10. **Real-machine certification and closure:** **Run 11 remains.** Validate official, custom, and compatibility builds; same-build autoload/eviction; cross-build restart; multimodal/text-only configurations; service restart; failure recovery; and direct client access.
 
 ### Safety requirements
@@ -561,7 +561,7 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 - Prevent cache-, directory-, or environment-visible models outside the configured catalog from silently becoming normal managed models.
 - Back up existing data before migration and fail without partial destructive conversion.
 - Keep secrets out of presets, command previews, logs, and API responses.
-- Preserve direct-client data-plane access and ObsidianLM admin authentication.
+- Preserve direct-client data-plane access; current local ObsidianLM UI/API/SSE require no admin-token setup or Authorization header.
 - Keep one-shot jobs independent from router lifecycle.
 
 ### Explicit non-goals

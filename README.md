@@ -239,7 +239,7 @@ Implemented:
 
 - `GET /api/runtime/health` checks the active llama.cpp server profile by calling `/v1/models` with a bounded timeout. Local health checks map profile host `0.0.0.0` to `127.0.0.1`.
 - `POST /api/runtime/test-chat` sends one small non-streaming diagnostic request to `/v1/chat/completions` with bounded prompt length, `maxTokens`, and timeout.
-- Runtime health and test chat are protected after admin setup like other runtime controls.
+- Runtime health and test chat are available directly from the local UI/API; no admin-token setup or Authorization header is required.
 - The dashboard includes a runtime diagnostics card for health status, latency, endpoint, errors, and a manual test-chat panel. Test chat does not auto-run on refresh.
 - `saveRuntimeState()` now uses the same temp-file plus rename pattern as other JSON writes.
 - If `settings.json`, `profiles.json`, `runtime-state.json`, or `jobs.json` contains invalid JSON, startup backs it up as `<name>.invalid-<timestamp>.bak`, recreates a safe default, and surfaces a warning in `GET /api/status`.
@@ -285,7 +285,7 @@ Phase 13 adds readiness, browser smoke, and real-use validation guidance.
 Implemented:
 
 - `GET /api/readiness` summarizes setup state, authoritative Configured Model counts, stable cataloged Build counts, router-eligible Build counts, managed port conflict state, GPU monitor availability, active runtime state, storage warnings, blocking checks, warnings, and recommended next actions. Readiness counts/checks are authoritative for Configured Models, cataloged Builds, and router-eligible Builds; discovery remains evidence.
-- Readiness is protected after admin setup like other control endpoints and returns sanitized count/status data instead of local absolute paths, token hashes, command lines, or raw runtime paths.
+- Readiness returns sanitized count/status data instead of local absolute paths, token hashes, command lines, or raw runtime paths; local UI/API access does not require an admin token or Authorization header.
 - The dashboard includes a Readiness / Setup Checklist panel with blocking checks, warnings, discovery counts, empty-state guidance, and next actions.
 - Playwright browser smoke tests run against isolated `.tmp/e2e-data` and `.tmp/e2e-logs` on port `18090` and do not require real GGUF files, llama.cpp tools, GPU, Tailscale, or llama-server.
 - Root scripts: `npm run test:e2e`, `npm run test:e2e:headed`, and `npm run test:e2e:debug`.
@@ -309,7 +309,7 @@ Follow `docs/validation/local-real-smoke.md` for the manual checklist before rel
 
 ## Phase 14 Status
 
-Phase 14 is complete. The operator console now has focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Visible navigation contains no placeholder page. Build discovery remains bounded, Jobs remain one-shot tools, runtime SSE stays bearer-authenticated, and process/telemetry surfaces remain read-only for unknown or external processes.
+Phase 14 is complete. The operator console now has focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Visible navigation contains no placeholder page. Build discovery remains bounded, Jobs remain one-shot tools, runtime SSE reconnects without Authorization headers, and process/telemetry surfaces remain read-only for unknown or external processes.
 
 Phase 14's profile-bound behavior remains historical compatibility behavior. Phase 15 uses a Build/router runtime; `activeProfileId` and `/api/profiles` are compatibility surfaces only. `router-runtime-state.json` is current lifecycle authority. `runtime-state.json` is preserved legacy evidence and is not rewritten by the router lifecycle.
 
@@ -331,7 +331,7 @@ one active llama.cpp router on :8085
 generated model presets
 ```
 
-The current Run 5 launch argv is the exact registered server executable followed by `--host 0.0.0.0 --port <managed-port> --models-preset <data>/generated/llama-router/<build-id>.ini --models-max 1` and the positive autoload flag proven by that Build's help. It does not pass `--models-dir` or `--model`. Generated INI files are derived artifacts; authoritative structured configuration remains in ObsidianLM. The router uses a controlled per-Build cache/environment.
+The current Run 5 launch argv is the exact resolved/available server executable followed by `--host 0.0.0.0 --port <managed-port> --models-preset <data>/generated/llama-router/<build-id>.ini --models-max 1` and the positive autoload flag proven by that Build's help. It does not pass `--models-dir` or `--model`. Generated INI files are derived artifacts; authoritative structured configuration remains in ObsidianLM. The router uses a controlled per-Build cache/environment.
 
 One router uses one `llama-server` executable/build family for its model children. `POST /api/runtime/switch-model` resolves the persisted router alias, calls llama.cpp `POST /models/load`, and polls `/models`; the same PID, Runtime ID, command, and endpoint survive. llama.cpp owns residency, LRU eviction, and `models-max=1`; ObsidianLM does not issue a normal unload. `POST /api/runtime/switch-build` preflights the target Build/preset before source shutdown, verifies source exit and port release, revalidates and starts the target on the same managed port, then loads the requested model. There is no automatic source rollback; if only target model loading fails, the healthy target router remains running. No transparent request-driven cross-build proxying, alternate production port, overlapping router, automatic build update, or unknown-process killing is used.
 

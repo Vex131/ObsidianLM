@@ -33,12 +33,13 @@ export async function fetchDashboardData(): Promise<DashboardData> {
   const catalog = runtime?.routerState.status === "running"
     ? await optionalFetch<{ routerState: RouterRuntimeResponse["routerState"] }>(API_ENDPOINTS.runtime.catalog)
     : null;
+  const running = runtime?.routerState.status === "running";
   const [command, logs, gpuStatus, readiness, runtimeHealth, processes] = await Promise.all([
-    optionalFetch<{ command: CommandSpec }>(API_ENDPOINTS.runtime.command),
+    running ? optionalFetch<{ command: CommandSpec }>(API_ENDPOINTS.runtime.command) : null,
     optionalFetch<RuntimeLogsResponse>(API_ENDPOINTS.runtime.logs(24)),
     optionalFetch<GpuMonitoringStatus>(API_ENDPOINTS.monitoring.gpu),
     optionalFetch<ReadinessResponse>(API_ENDPOINTS.readiness),
-    optionalFetch<RuntimeHealthResponse>(API_ENDPOINTS.runtime.health),
+    running ? optionalFetch<RuntimeHealthResponse>(API_ENDPOINTS.runtime.health) : null,
     optionalFetch<ProcessListResponse>(API_ENDPOINTS.processes.llama)
   ]);
   return {

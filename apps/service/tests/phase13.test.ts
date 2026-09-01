@@ -15,6 +15,11 @@ import { discoverLlamaBuilds } from "../src/discovery/llama-builds.js";
 import { discoverModels } from "../src/discovery/models.js";
 import { registerStatusRoutes } from "../src/api/status.js";
 import { createServer } from "../src/server.js";
+const u32 = (value: number) => { const out = Buffer.alloc(4); out.writeUInt32LE(value); return out; };
+const u64 = (value: bigint) => { const out = Buffer.alloc(8); out.writeBigUInt64LE(value); return out; };
+const ggufText = (value: string) => Buffer.concat([u64(BigInt(Buffer.byteLength(value))), Buffer.from(value)]);
+const ggufType = (value: string) => Buffer.concat([ggufText("general.type"), u32(8), ggufText(value)]);
+const gguf = (type: string) => Buffer.concat([Buffer.from("GGUF"), u32(3), u64(0n), u64(1n), ggufType(type)]);
 function setOrDeleteEnv(name: string, value: string | undefined): void {
   if (value === undefined) {
     delete process.env[name];
@@ -203,6 +208,34 @@ test("readiness summarizes partially configured discovery without exposing local
     bodyText,
     new RegExp(fixture.root.replace(/[\\^$.*+?()[\]{}|]/gu, "\\$&"), "u"),
   );
+});
+test("readiness counts authoritative base artifacts and usable llama-server Builds", async (t) => {
+  const fixture = await makeFixture(t);
+  const server = path.join(fixture.buildDir, process.platform === "win32" ? "llama-server.exe" : "llama-server");
+  const cli = path.join(fixture.buildDir, process.platform === "win32" ? "llama-cli.exe" : "llama-cli");
+  await Promise.all([
+    writeFile(path.join(fixture.modelDir, "base.gguf"), gguf("model")),
+    writeFile(path.join(fixture.modelDir, "ambiguous-name.gguf"), gguf("projector")),
+    writeFile(cli, "cli"),
+  ]);
+  await ensureStorageFiles();
+  await saveSettings({ ...defaultSettings, modelFolders: [fixture.modelDir], llamaCppFolders: [path.join(fixture.root, "llama")], managedLlamaPort: 18094 });
+  const app = await createReadinessServer(t);
+  const brokenOnly = await app.inject({ method: "GET", url: "/api/readiness" });
+  assert.equal(brokenOnly.statusCode, 200);
+  let body = brokenOnly.json();
+  assert.equal(body.counts.discoveredArtifacts, 2);
+  assert.equal(body.counts.ggufModels, 1);
+  assert.equal(body.counts.discoveredBuilds, 1);
+  assert.equal(body.counts.serverBuilds, 0);
+  assert.equal(body.checks.find((item: any) => item.id === "server-builds").status, "block");
+  await writeFile(server, "server");
+  const restored = await app.inject({ method: "GET", url: "/api/readiness" });
+  assert.equal(restored.statusCode, 200);
+  body = restored.json();
+  assert.equal(body.counts.serverBuilds, 1);
+  assert.equal(body.checks.find((item: any) => item.id === "server-builds").label, "Usable llama-server Builds");
+  assert.equal(body.checks.find((item: any) => item.id === "server-builds").status, "pass");
 });
 test("readiness reports ready-ish discovered counts from temp folders", async (t) => {
   const fixture = await makeFixture(t);

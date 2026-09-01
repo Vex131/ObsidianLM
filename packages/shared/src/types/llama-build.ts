@@ -50,7 +50,7 @@ export interface LlamaCppBuild {
   classification: LlamaCppBuildClassification;
   staticEvidence?: LlamaCppBuildStaticEvidence;
   functionalEvidence?: LlamaCppBuildFunctionalEvidence;
-  /** Latest observed fingerprint of the registered server executable. */
+  /** Latest observed fingerprint of the resolved server executable. */
   serverFingerprint?: string;
   managedInferenceEligibility: BuildValidationState;
   validatedAt?: string;

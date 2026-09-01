@@ -19,7 +19,8 @@ function reconcileArtifact(snapshot: Phase15DomainSnapshot, found: DiscoveredMod
   const main = snapshot.configuredModels.some((model) => model.artifactId === artifact.id);
   const projector = snapshot.configuredModels.some((model) => model.projector?.artifactId === artifact.id);
   const kind = metadata?.artifactKind === "unknown" ? found.artifactKindGuess ?? "unknown" : metadata?.artifactKind ?? found.artifactKindGuess ?? "unknown";
-  Object.assign(artifact, { referenceStatus: "available", discoveryId: found.id, discoveredAt: found.detectedAt, updatedAt: found.detectedAt, metadata: metadata && { ...metadata, artifactKind: kind, artifactKindSource: metadata.artifactKind === "unknown" && found.artifactKindGuess !== "unknown" ? found.artifactKindSource : metadata.artifactKindSource, artifactId: artifact.id } });
+  const storedMetadata = metadata && Object.fromEntries(Object.entries({ ...metadata, artifactKind: kind, artifactKindSource: metadata.artifactKind === "unknown" && found.artifactKindGuess !== "unknown" ? found.artifactKindSource : metadata.artifactKindSource, artifactId: artifact.id }).filter(([, value]) => value !== undefined));
+  Object.assign(artifact, { referenceStatus: "available", discoveryId: found.id, discoveredAt: found.detectedAt, updatedAt: found.detectedAt, metadata: storedMetadata });
   if (!main && !projector) artifact.kind = kind;
 }
 
