@@ -725,6 +725,19 @@ test("external catalog entries, remote ownership, concurrency, and stale fingerp
   });
   assert.equal(result.outcome, "ineligible");
   assert.equal(result.build.functionalEvidence?.catalogBoundaryVerified, false);
+  const builtinDefault = dependencies();
+  const allowed = await validateFunctionalRouterBuild(buildId, undefined, {
+    ...builtinDefault,
+    probe: async () => ({
+      ...(await eligibleProbe()),
+      models: [
+        { id: alias, status: "unloaded" },
+        { id: "default", status: "unloaded", source: "preset" },
+      ],
+    }),
+  });
+  assert.equal(allowed.outcome, "eligible");
+  assert.equal(allowed.build.functionalEvidence?.catalogBoundaryVerified, true);
   const missingExpected = await validateFunctionalRouterBuild(
     buildId,
     undefined,

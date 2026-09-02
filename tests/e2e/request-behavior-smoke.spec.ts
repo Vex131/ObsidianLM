@@ -25,7 +25,7 @@ test("idle navigation has one cheap status loop and no setup-required request st
   await page.goto("/#dashboard");
   for (const label of ["Runtime", "Profiles", "Models", "Builds", "Jobs", "Logs", "Telemetry", "Settings", "System", "Dashboard"]) {
     await page.getByRole("link", { name: new RegExp(`^${label}$`) }).click();
-    await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
+    await expect(page.locator("h1.page-title", { hasText: label })).toBeVisible();
   }
   await page.waitForTimeout(30_000);
 

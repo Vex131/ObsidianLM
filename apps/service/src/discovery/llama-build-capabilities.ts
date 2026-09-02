@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import type { DiscoveredLlamaCppBuild, DiscoveredLlamaCppTool, DiscoveryWarning, LlamaBuildCapabilitiesManifest, LlamaBuildDeviceCapability, LlamaBuildFlagCapability, LlamaBuildOrigin, LlamaBuildRouterAssessment, LlamaBuildVersionInfo } from "@obsidianlm/shared";
 import { fingerprintServerExecutable } from "../router/fingerprint.js";
 
-const probeTimeoutMs = 5_000;
+const probeTimeoutMs = 15_000;
 const maxProbeOutputBytes = 128 * 1024;
 const capabilityCache = new Map<string, LlamaBuildCapabilitiesManifest>();
 

@@ -3,7 +3,7 @@ import type { ConfiguredModel, LlamaBuildCapabilitiesManifest, LlamaCppBuild, Ll
 import { loadPhase15Domain, mutatePhase15Domain, reconcileBuildFingerprintInSnapshot, type Phase15DomainSnapshot } from "../config/phase15-domain.js";
 import { loadSettingsReadOnly } from "../config/storage.js";
 import { getLlamaBuildCapabilitiesForServer } from "../discovery/llama-build-capabilities.js";
-import { reconcileRouterCatalog } from "./catalog.js";
+import { reconcileRouterCatalog, catalogHasDisallowedEntries } from "./catalog.js";
 import { fingerprintServerExecutable } from "./fingerprint.js";
 import { runRouterProbe, type RouterProbeInput, type RouterProbeResult } from "./probe-runner.js";
 import { routerAutoloadArgument } from "./autoload-policy.js";
@@ -123,7 +123,8 @@ export async function validateFunctionalRouterBuild(buildId: string, configuredM
     const catalog = probeResult.models === undefined ? undefined : reconcileRouterCatalog(probeResult.models, [{ routerAlias: selected.model.routerAlias, configuredModelId: selected.model.id }], now().toISOString());
     const expected = catalog?.entries.find((entry) => entry.ownership === "managed" && entry.configuredModelId === selected.model.id);
     const modelsVerified = probeResult.modelsVerified && expected !== undefined;
-    const catalogBoundaryVerified = catalog?.reconciliationState === "reconciled" && catalog.entries.length === 1 && expected?.state === "unloaded";
+    const managedCount = catalog?.entries.filter((entry) => entry.ownership === "managed").length ?? 0;
+    const catalogBoundaryVerified = catalog?.reconciliationState === "reconciled" && !catalogHasDisallowedEntries(catalog.entries) && managedCount === 1 && expected?.state === "unloaded";
     const requiredBehaviorVerified = probeResult.classification === "eligible" && probeResult.presetAccepted && probeResult.healthVerified && modelsVerified && catalogBoundaryVerified;
     const state = requiredBehaviorVerified ? "eligible" : probeResult.classification === "failed" ? "failed" : "ineligible";
     const finalEvidence = evidence(state, probeFingerprint, attemptedAt, {

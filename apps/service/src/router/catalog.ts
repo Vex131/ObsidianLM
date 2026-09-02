@@ -63,3 +63,16 @@ export function reconcileRouterCatalog(raw: unknown, expected: readonly Expected
   const mismatch = missing.length > 0 || warnings.some((warning) => /Duplicate|Ambiguous|no usable identifier|not an object/u.test(warning));
   return { endpoint: "/models", observedAt, entries, reconciliationState: mismatch ? "mismatch" : "reconciled", warnings: [...new Set(warnings)].sort() };
 }
+
+/** llama.cpp router builds may expose a built-in unloaded `default` preset slot alongside managed aliases. */
+export function isAllowedExternalCatalogEntry(entry: RouterCatalogEntry): boolean {
+  const source = entry.rawEvidence && typeof entry.rawEvidence === "object" && "source" in entry.rawEvidence ? entry.rawEvidence.source : undefined;
+  return entry.ownership === "external"
+    && entry.routerIdentifier === "default"
+    && entry.state === "unloaded"
+    && source === "preset";
+}
+
+export function catalogHasDisallowedEntries(entries: readonly RouterCatalogEntry[]): boolean {
+  return entries.some((entry) => entry.ownership === "unknown" || (entry.ownership === "external" && !isAllowedExternalCatalogEntry(entry)));
+}

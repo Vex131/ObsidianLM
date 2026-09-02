@@ -31,7 +31,7 @@
 14. Confirm the router uses the controlled per-Build cache/environment, preflights the managed port, and never kills or adopts an external/unknown owner.
 15. Confirm startup requires healthy `/health` and strict `/models` reconciliation; initial external or unknown catalog entries block startup.
 16. Confirm `router-runtime-state.json` is current lifecycle authority and `runtime-state.json` remains preserved legacy evidence. Profile start is a temporary Build-selection hint and loads no model; restart reuses the same Build.
-17. Do not claim same-build model switching or cross-Build/model switching (Run 7), GPU child/log attribution (Run 8), or Phase 15 completion.
+17. Do not claim same-build model switching or cross-Build/model switching (Run 7), GPU child/log attribution (Run 8), or Phase 15 completion. For Run 11 real-machine certification, see [phase15-run11.md](./phase15-run11.md).
 
 ## Jobs Page
 

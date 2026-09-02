@@ -31,6 +31,7 @@ temp/
 
 # Local runtime data
 data/*.json
+notes/
 !data/*.example.json
 
 # Local AI assets - do not commit models or runtime builds

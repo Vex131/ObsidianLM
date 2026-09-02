@@ -31,7 +31,7 @@ import { loadRouterRuntimeState, saveRouterRuntimeState } from "../config/storag
 import { detectPort } from "../process/port-detector.js";
 import { detectLlamaServerProcesses } from "../process/process-detector.js";
 import { classifyRouterProcesses } from "../process/process-awareness.js";
-import { reconcileRouterCatalog, type ExpectedRouterModel } from "../router/catalog.js";
+import { reconcileRouterCatalog, catalogHasDisallowedEntries, type ExpectedRouterModel } from "../router/catalog.js";
 import { createManagedRouterEnvironment } from "../router/environment.js";
 import { analyzeRouterPreset, buildRouterLaunchPreview, generateRouterPreset, RouterPresetError, type RouterPresetAnalysis } from "../router/preset-generator.js";
 import { createRouterClient, type RouterClient } from "../router/runtime-client.js";
@@ -383,6 +383,10 @@ export class RuntimeManager {
       await this.persist();
       return this.result(false, this.routerState.message!, ["Graceful router stop timed out."], "stop_timeout");
     }
+    const stopDeadline = Date.now() + 2_000;
+    while (this.child === child && Date.now() < stopDeadline) {
+      await (this.options.sleep ?? delay)(50);
+    }
     if (this.child === child) await this.handleExit(child, child.exitCode, child.signalCode);
     const released = await this.waitForPortRelease(this.routerState.port, 2_000);
     if (!released) {
@@ -625,7 +629,7 @@ export class RuntimeManager {
     const model = domain.configuredModels.find((entry) => entry.id === configuredModelId);
     if (!model) throw new RuntimeSwitchError("not_found", "Configured Model not found.");
     if (!model.enabled) throw new RuntimeSwitchError("configured_model_disabled", "The target Configured Model is disabled.");
-    if (model.validationStatus !== "valid" || model.referenceStatus.artifact !== "available" || model.referenceStatus.build !== "available") throw new RuntimeSwitchError("prerequisite", "The target Configured Model is not structurally valid and available.");
+    if (model.validationStatus === "invalid" || model.referenceStatus.artifact !== "available" || model.referenceStatus.build !== "available") throw new RuntimeSwitchError("prerequisite", "The target Configured Model is not structurally valid and available.");
     const build = domain.builds.find((entry) => entry.id === model.buildId);
     if (!build) throw new RuntimeSwitchError("prerequisite", "The target Configured Model does not reference a cataloged Build.");
     if (build.server.owner.scope !== "local") throw new RuntimeSwitchError("unsupported_scope", "Node-owned Builds cannot be executed by this local Controller.");
@@ -634,7 +638,7 @@ export class RuntimeManager {
 
   private catalogMismatch(catalog: NonNullable<RouterRuntimeState["catalog"]>, expected: ExpectedRouterModel[]): string | null {
     if (catalog.reconciliationState !== "reconciled") return catalog.warnings.at(-1) ?? "Router catalog did not reconcile.";
-    if (catalog.entries.some((entry) => entry.ownership !== "managed")) return "Router catalog contains an external or unknown entry.";
+    if (catalogHasDisallowedEntries(catalog.entries)) return "Router catalog contains an external or unknown entry.";
     const managed = new Set(catalog.entries.filter((entry) => entry.ownership === "managed").map((entry) => entry.configuredModelId));
     return expected.some((model) => !managed.has(model.configuredModelId)) ? "Router catalog is missing an expected managed alias." : null;
   }
@@ -658,7 +662,11 @@ export class RuntimeManager {
       const onExit = (): void => { clearTimeout(timer); resolve(true); };
       const timer = setTimeout(() => { child.off("exit", onExit); resolve(child.exitCode !== null); }, timeoutMs);
       child.once("exit", onExit);
-      child.kill("SIGTERM");
+      try {
+        if (!child.kill("SIGTERM")) onExit();
+      } catch {
+        onExit();
+      }
       if (child.exitCode !== null) onExit();
     });
   }
