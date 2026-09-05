@@ -130,6 +130,7 @@ export {
   createLlamaCppBuildId,
   createModelArtifactId,
   createRouterAlias,
+  isConfiguredModelEligibleForManagedRuntime,
   isRouterAlias
 } from "./types/model-configuration.js";
 export type {

@@ -2,9 +2,9 @@
 
 Run 11 validates Build/router lifecycle, model and Build switching, process/GPU/log awareness, and deployment behavior on real hardware. Automated tests cover contracts; this checklist covers what only real machines can prove.
 
-**Phase 15 is not complete until Track B passes and evidence is recorded.**
+**Run 11 status (2026-09-05, ID-reconciled 2026-09-05):** Track 0 green. Track A complete with A13 Defer, A7 N/A, A15 Skip. Track B remapped from personal evidence (`notes/run11-evidence.md`, gitignored): B1/B2/B4/B7/B9 Pass; **B5 Partial** (small-model `models-max=1` only — full VRAM pressure not exercised); **B6 N/A** (no mmproj); **B8 N/A** (SSH tunnel not exercised; Tailscale B7 certified instead); **B10 Skip** (WinSW absent); **B3 and B11 not recorded under correct matrix IDs** — do not treat as Pass. Personal evidence originally used shifted B-check numbers; this summary uses the matrix definitions below.
 
-For page-level smoke without claiming Phase 15 completion, see [local-real-smoke.md](./local-real-smoke.md).
+For page-level smoke without re-running full certification, see [local-real-smoke.md](./local-real-smoke.md).
 
 ## Machine roles
 
@@ -96,17 +96,40 @@ ssh -N -o BatchMode=yes -o IdentitiesOnly=yes -o ServerAliveInterval=30 ^
 | B10 | Service recovery | Home | | Failed start recoverable; reboot auto-start if applicable |
 | B11 | External catalog boundary | Home | | Cache/env models do not become managed silently |
 
+### Evidence ID reconciliation
+
+Personal evidence originally labeled some Track B rows with shifted IDs. Content remapped to this matrix:
+
+| Evidence label (personal log) | Actual matrix ID | Recorded result |
+|-------------------------------|------------------|-----------------|
+| B3 (models-max=1 / small models) | **B5** | Partial |
+| B5 (no mmproj) | **B6** | N/A |
+| B6 (Tailscale UI/v1) | **B7** | Pass |
+| B7 (ineligible build refused) | **B9** | Pass |
+| B8 (WinSW absent) | **B10** | Skip |
+| — | **B3** | Not recorded under correct ID |
+| — | **B8** | Not exercised (Tailscale used); treated as N/A |
+| — | **B11** | Not recorded under correct ID |
+
+Do not upgrade Partial/N/A/Skip/unrecorded checks to Pass.
+
 ## Closure gate
 
-Phase 15 complete when:
+Phase 15 **implementation** (Builder Runs 1–10) is complete independently of Run 11.
+
+Phase 15 **Run 11 certification** is complete when:
 
 1. Track 0 green
-2. Track A: all checks Pass (A13 = Defer, not Fail)
-3. Track B: all checks Pass or documented N/A
-4. Personal evidence log complete
+2. Track A: all checks Pass (A13 = Defer, not Fail; A7 may be N/A; A15 may be Skip if WinSW absent)
+3. Track B: each check is Pass, documented N/A, documented Skip (service/WinSW), or a specifically documented non-blocking exception
+4. Personal evidence log complete (gitignored is fine)
 5. Status docs updated: README, [ObsidianLM_Project_Plan.md](../ObsidianLM_Project_Plan.md) §17, [phase15-contract-foundation.md](../phase15-contract-foundation.md)
 
-Do **not** mark Phase 15 complete from unit/e2e tests alone.
+**Non-blocking exception (B5):** Partial is accepted for B5 when `models-max=1` same-build unload/switch is observed on small models but realistic multi-GB VRAM pressure is not exercised. This does **not** authorize renaming Partial to Pass.
+
+**Current certification outcome:** Track 0 + Track A satisfy the gate. Track B does **not** yet satisfy a full Pass/N/A/Skip matrix because **B3** and **B11** lack evidence under correct IDs. Documented residuals that are allowed by policy: B5 Partial (exception above), B6 N/A, B8 N/A, B10 Skip. Therefore **Run 11 full certification remains incomplete**; Phase 15 product foundation remains complete through Run 10 with Run 11 partially evidenced.
+
+Do **not** mark full Run 11 certification complete from unit/e2e tests alone, and do **not** mark it complete while B3/B11 remain unverified.
 
 ## SSH inventory script (personal)
 

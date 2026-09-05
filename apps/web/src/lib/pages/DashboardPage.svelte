@@ -19,6 +19,7 @@
     inferLogTone,
     vramPercent
   } from "../dashboard/dashboard-format";
+  import { visionCapabilityKind } from "../vision";
   export let routerRuntime: RouterRuntimeResponse | null = null;
 
   type HealthTone = "ok" | "warn" | "error" | "muted";
@@ -285,7 +286,7 @@
             <div class="kv-list">
                <div class="kv-row"><span>Name</span><span>{activeModelLabel ?? "—"}</span></div>
               <div class="kv-row"><span>Alias</span><span>{activeModel?.routerAlias ?? "—"}</span></div>
-              <div class="kv-row"><span>Text / Vision</span><span>{activeModel?.projector ? "Vision" : activeModel ? "Text" : "—"}</span></div>
+              <div class="kv-row"><span>Text / Vision</span><span>{activeModel ? visionCapabilityKind(activeModel.artifact?.vision?.capability) : "—"}</span></div>
               <div class="kv-row"><span>Context</span><span>{formatNumber(activeModel?.artifact?.metadata?.trainedContext ?? llamaArgs?.ctxSize)}</span></div>
               <div class="kv-row"><span>GPU offload</span><span>{gpuLayersLabel()}</span></div>
               <div class="kv-row"><span>KV cache</span><span>{kvCacheLabel()}</span></div>

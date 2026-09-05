@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { isBuildEligibleForManagedInference, type DiscoveryWarning, type ReadinessCheck, type ReadinessResponse } from "@obsidianlm/shared";
+import { isBuildEligibleForManagedInference, isConfiguredModelEligibleForManagedRuntime, type DiscoveryWarning, type ReadinessCheck, type ReadinessResponse } from "@obsidianlm/shared";
 import { getStorageWarnings, loadProfilesReadOnly, loadSettingsReadOnly } from "../config/storage.js";
 import { isArtifactEligibleAsBaseModel, loadPhase15Domain } from "../config/phase15-domain.js";
 import { synchronizeDiscoveryCatalog } from "../discovery/catalog-sync.js";
@@ -51,6 +51,7 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
     const runtimeActive = ["starting", "running", "stopping"].includes(routerState.status);
     const activeProfile = routerState.compatibilityProfileId ? profiles.find((profile) => profile.id === routerState.compatibilityProfileId) ?? null : null;
     const eligibleBuilds = domain.builds.filter(isBuildEligibleForManagedInference);
+    const eligibleConfiguredModels = domain.configuredModels.filter(isConfiguredModelEligibleForManagedRuntime);
     const baseModelCount = domain.artifacts.filter((artifact) => isArtifactEligibleAsBaseModel(domain, artifact)).length;
     const serverBuildCount = domain.builds.filter((build) => build.tools.some((tool) => tool.kind === "server" && tool.exists)).length;
     const benchCount = builds.builds.reduce((count, build) => count + build.tools.filter((tool) => tool.kind === "bench" && tool.exists).length, 0);
@@ -67,7 +68,7 @@ export async function registerReadinessRoutes(app: FastifyInstance, runtimeManag
       check("llama-perplexity", "llama-perplexity tools", perplexityCount > 0 ? "pass" : "warning", perplexityCount > 0 ? `${perplexityCount} llama-perplexity tool(s) discovered.` : "Add or build llama-perplexity before running perplexity validation.", perplexityCount),
       check("tool-input-folders", "Tool input folders", settings.toolInputFolders.length > 0 ? "pass" : "warning", settings.toolInputFolders.length > 0 ? "At least one tool input folder is configured." : "Configure toolInputFolders before llama-perplexity validation."),
       check("tool-inputs", "Tool inputs", toolInputs.files.length > 0 ? "pass" : "warning", toolInputs.files.length > 0 ? `${toolInputs.files.length} tool input file(s) discovered.` : "Add a small local .txt, .raw, .jsonl, or .md input and rescan before llama-perplexity validation.", toolInputs.files.length),
-       check("configured-models", "Configured Models", domain.configuredModels.length > 0 ? "pass" : "block", domain.configuredModels.length > 0 ? `${domain.configuredModels.length} configured model(s).` : "Configure a discovered model before starting runtime validation.", domain.configuredModels.length),
+       check("configured-models", "Configured Models", eligibleConfiguredModels.length > 0 ? "pass" : "block", eligibleConfiguredModels.length > 0 ? `${eligibleConfiguredModels.length} eligible configured model(s).` : "Enable at least one valid Configured Model with available model and Build references before starting runtime validation.", eligibleConfiguredModels.length),
        check("discovered-builds", "Builds discovered", domain.builds.length > 0 ? "pass" : "block", domain.builds.length > 0 ? `${domain.builds.length} Build(s) discovered.` : "Add a llama.cpp Build to a configured discovery root.", domain.builds.length),
        check("eligible-builds", "Router-capable/eligible Builds", eligibleBuilds.length > 0 ? "pass" : "block", eligibleBuilds.length > 0 ? `${eligibleBuilds.length} Build(s) are eligible for managed router inference.` : "Validate a discovered Build for managed router inference.", eligibleBuilds.length),
       check("managed-port", "Managed port", portStatus.conflict ? "block" : "pass", portStatus.conflict ? portStatus.conflictMessage ?? "Managed llama.cpp port is already in use by another process." : `Managed llama.cpp port ${settings.managedLlamaPort} is available or owned by the current managed runtime.`),

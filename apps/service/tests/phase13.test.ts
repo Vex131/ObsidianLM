@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import Fastify from "fastify";
-import { defaultSettings, type RuntimeProfile } from "@obsidianlm/shared";
+import { defaultSettings, isConfiguredModelEligibleForManagedRuntime, type RuntimeProfile } from "@obsidianlm/shared";
 import {
   ensureStorageFiles,
   saveProfiles,
@@ -523,5 +523,95 @@ test("readiness blocks missing configured models and ineligible Builds", async (
       .blockingChecks.some(
         (item: { id: string }) => item.id === "eligible-builds",
       ),
+  );
+});
+
+test("readiness requires an eligible enabled Configured Model", async (t) => {
+  const disabledOnly = await createPhase15ReadinessFixture(t, {
+    configuredModel: true,
+    eligibleBuild: true,
+  });
+  const listed = (
+    await disabledOnly.app.inject({ method: "GET", url: "/api/configured-models" })
+  ).json().configuredModels;
+  assert.equal(listed.length, 1);
+  assert.equal(
+    (
+      await disabledOnly.app.inject({
+        method: "PATCH",
+        url: `/api/configured-models/${listed[0].id}`,
+        payload: { enabled: false },
+      })
+    ).statusCode,
+    200,
+  );
+  const disabledReadiness = (
+    await disabledOnly.app.inject({ method: "GET", url: "/api/readiness" })
+  ).json();
+  assert.equal(disabledReadiness.ok, false);
+  assert.ok(
+    disabledReadiness.blockingChecks.some(
+      (item: { id: string }) => item.id === "configured-models",
+    ),
+  );
+  assert.equal(
+    disabledReadiness.checks.find(
+      (item: { id: string }) => item.id === "configured-models",
+    )?.status,
+    "block",
+  );
+
+  const invalidOnly = await createPhase15ReadinessFixture(t, {
+    configuredModel: true,
+    eligibleBuild: true,
+  });
+  const invalidListed = (
+    await invalidOnly.app.inject({ method: "GET", url: "/api/configured-models" })
+  ).json().configuredModels;
+  await rm(invalidListed[0].artifact.resource.locator);
+  await mutatePhase15Domain((snapshot) => {
+    const model = snapshot.configuredModels.find(
+      (entry) => entry.id === invalidListed[0].id,
+    )!;
+    // Keep enabled until sync; readiness sync must still treat the model as ineligible.
+    model.enabled = true;
+    model.validationStatus = "invalid";
+  });
+  const invalidReadiness = (
+    await invalidOnly.app.inject({ method: "GET", url: "/api/readiness" })
+  ).json();
+  assert.equal(invalidReadiness.ok, false);
+  assert.ok(
+    invalidReadiness.blockingChecks.some(
+      (item: { id: string }) => item.id === "configured-models",
+    ),
+  );
+  assert.equal(
+    isConfiguredModelEligibleForManagedRuntime({
+      schemaVersion: 1,
+      id: "model_invalid",
+      displayName: "Invalid",
+      routerAlias: "invalid" as never,
+      artifactId: "artifact_x" as never,
+      buildId: "build_x" as never,
+      enabled: true,
+      referenceStatus: { artifact: "available", build: "available" },
+      validationStatus: "invalid",
+    }),
+    false,
+  );
+
+  const eligible = await createPhase15ReadinessFixture(t, {
+    configuredModel: true,
+    eligibleBuild: true,
+  });
+  const eligibleReadiness = (
+    await eligible.app.inject({ method: "GET", url: "/api/readiness" })
+  ).json();
+  assert.equal(
+    eligibleReadiness.checks.find(
+      (item: { id: string }) => item.id === "configured-models",
+    )?.status,
+    "pass",
   );
 });

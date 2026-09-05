@@ -258,6 +258,48 @@ test("artifact DTO derives positive and negative vision capability from GGUF met
   assert.deepEqual(artifacts.find((entry: any) => entry.resource.locator === f.text).vision, { capability: "no", module: "not_required" });
 });
 
+test("configured-model DTO exposes metadata vision capability independent of projector", async (t) => {
+  const f = await fixture(t);
+  await Promise.all([
+    writeFile(f.model, gguf([ggufString("general.type", "model"), ggufString("general.architecture", "qwen2vl")])),
+    writeFile(f.text, gguf([ggufString("general.type", "text"), ggufString("general.architecture", "llama")])),
+  ]);
+  const artifacts = (await f.app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts;
+  const builds = (await f.app.inject({ method: "GET", url: "/api/builds" })).json().builds;
+  const visionArtifact = artifacts.find((entry: any) => entry.resource.locator === f.model)!;
+  const textArtifact = artifacts.find((entry: any) => entry.resource.locator === f.text)!;
+  const projectorArtifact = artifacts.find((entry: any) => entry.resource.locator === f.projector)!;
+  const build = builds.find((entry: any) => entry.server.locator === f.server)!;
+
+  const unpairedId = (await f.app.inject({ method: "POST", url: "/api/configured-models", payload: { displayName: "Vision unpaired", artifactId: visionArtifact.id, buildId: build.id, enabled: false } })).json().model.id;
+  const unpaired = (await f.app.inject({ method: "GET", url: `/api/configured-models/${unpairedId}` })).json().model;
+  assert.deepEqual(unpaired.artifact.vision, { capability: "yes", module: "not_found" });
+  assert.equal(unpaired.projector, undefined);
+
+  const withProjectorId = (await f.app.inject({ method: "POST", url: "/api/configured-models", payload: { displayName: "Vision paired", artifactId: visionArtifact.id, buildId: build.id, enabled: false, projector: { artifactId: projectorArtifact.id, selection: "explicit", validationStatus: "not_validated" } } })).json().model.id;
+  const withProjector = (await f.app.inject({ method: "GET", url: `/api/configured-models/${withProjectorId}` })).json().model;
+  assert.deepEqual(withProjector.artifact.vision, { capability: "yes", module: "installed" });
+  assert.equal(withProjector.projector.id, projectorArtifact.id);
+  assert.equal(withProjector.artifact.vision.capability, unpaired.artifact.vision.capability);
+
+  // Text-only general.type yields capability "no" (and kind "other"); assert via artifact authority shared by configured-model DTOs.
+  assert.deepEqual(textArtifact.vision, { capability: "no", module: "not_required" });
+  const refreshedText = (await f.app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts.find((entry: any) => entry.id === textArtifact.id);
+  assert.deepEqual(refreshedText.vision, { capability: "no", module: "not_required" });
+
+  const unknownBase = await fixture(t);
+  const unknownArtifacts = (await unknownBase.app.inject({ method: "GET", url: "/api/model-artifacts" })).json().artifacts;
+  const unknownBuilds = (await unknownBase.app.inject({ method: "GET", url: "/api/builds" })).json().builds;
+  const unknownModel = unknownArtifacts.find((entry: any) => entry.resource.locator === unknownBase.model)!;
+  const unknownProjector = unknownArtifacts.find((entry: any) => entry.resource.locator === unknownBase.projector)!;
+  const unknownBuild = unknownBuilds.find((entry: any) => entry.server.locator === unknownBase.server)!;
+  const createdUnknownId = (await unknownBase.app.inject({ method: "POST", url: "/api/configured-models", payload: { displayName: "Unknown base projector", artifactId: unknownModel.id, buildId: unknownBuild.id, enabled: false, projector: { artifactId: unknownProjector.id, selection: "explicit", validationStatus: "not_validated" } } })).json().model.id;
+  const createdUnknown = (await unknownBase.app.inject({ method: "GET", url: `/api/configured-models/${createdUnknownId}` })).json().model;
+  assert.equal(createdUnknown.artifact.vision.capability, "unknown");
+  assert.equal(createdUnknown.artifact.vision.module, "installed");
+  assert.equal(createdUnknown.projector.id, unknownProjector.id);
+});
+
 test("nearby similarly named projector is cataloged but never associated automatically", async (t) => {
   const f = await fixture(t); const c = await catalog(f);
   const created = await f.app.inject({ method: "POST", url: "/api/configured-models", payload: { displayName: "Unpaired vision", artifactId: c.artifact.id, buildId: c.build.id, enabled: false } });

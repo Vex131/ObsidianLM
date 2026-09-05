@@ -18,7 +18,11 @@ test("real discovery keeps broken Builds visible but excludes them from Profiles
   await expect(brokenRow).toBeVisible();
   await expect(brokenRow).toContainText("llama-server.exe not found (possibly broken build)");
 
+  const profilesBuildsLoaded = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/builds" && response.request().method() === "GET" && response.ok()
+  );
   await page.goto("/#profiles");
+  await profilesBuildsLoaded;
   await expect(page.getByRole("button", { name: "+ New profile" })).toBeVisible();
   const discovered = await page.request.get("/api/builds").then((response) => response.json()) as { builds: Array<{ resource: { locator: string }; tools: Array<{ kind: string; exists: boolean }> }> };
   expect(discovered.builds.some((entry) => entry.resource.locator.endsWith("valid-build") && entry.tools.some((tool) => tool.kind === "server" && tool.exists))).toBe(true);

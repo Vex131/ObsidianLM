@@ -100,6 +100,14 @@ export function isRouterAlias(value: string): value is RouterAlias {
   return value.length <= MAX_ROUTER_ALIAS_LENGTH && ROUTER_ALIAS_PATTERN.test(value);
 }
 
+/** Enabled + structurally usable for managed preset/runtime participation (not build eligibility). */
+export function isConfiguredModelEligibleForManagedRuntime(model: ConfiguredModel): boolean {
+  return model.enabled
+    && model.validationStatus !== "invalid"
+    && model.referenceStatus.artifact === "available"
+    && model.referenceStatus.build === "available";
+}
+
 export function createRouterAlias(displayName: string, configuredModelId: ConfiguredModelId, existingAliases: Iterable<string> = []): RouterAlias {
   const used = new Set(Array.from(existingAliases, (alias) => alias.toLowerCase()));
   const normalized = displayName

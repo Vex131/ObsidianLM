@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const artifact = { id: "artifact-1", discoveryId: "discovered-model", resource: { owner: { scope: "local" }, locator: "C:/models/vision.gguf" }, kind: "model", role: "base", selectionStatus: "available", referenceStatus: "available", configuredModelIds: ["configured-1"] };
-const projector = { id: "artifact-mmproj", discoveryId: "discovered-projector", resource: { owner: { scope: "local" }, locator: "C:/models/mmproj.gguf" }, kind: "mmproj", role: "projector", selectionStatus: "available", referenceStatus: "available", configuredModelIds: ["configured-1"] };
-const unknownSupport = { id: "artifact-unknown-support", resource: { owner: { scope: "local" }, locator: "C:/models/unknown-projector.gguf" }, kind: "unknown", role: "unassigned", selectionStatus: "available", referenceStatus: "available", configuredModelIds: [] };
-const mismatched = { id: "artifact-mismatched", resource: { owner: { scope: "local" }, locator: "C:/models/mismatched.gguf" }, kind: "model", role: "conflict", selectionStatus: "invalid", referenceStatus: "available", configuredModelIds: [] };
-const missing = { id: "artifact-missing", resource: { owner: { scope: "local" }, locator: "C:/models/missing.gguf" }, kind: "model", role: "base", selectionStatus: "invalid", referenceStatus: "missing", configuredModelIds: ["configured-1"] };
+const artifact = { id: "artifact-1", discoveryId: "discovered-model", resource: { owner: { scope: "local" }, locator: "C:/models/vision.gguf" }, kind: "model", role: "base", selectionStatus: "available", referenceStatus: "available", configuredModelIds: ["configured-1"], vision: { capability: "yes", module: "installed" } };
+const projector = { id: "artifact-mmproj", discoveryId: "discovered-projector", resource: { owner: { scope: "local" }, locator: "C:/models/mmproj.gguf" }, kind: "mmproj", role: "projector", selectionStatus: "available", referenceStatus: "available", configuredModelIds: ["configured-1"], vision: { capability: "unknown", module: "unknown" } };
+const unknownSupport = { id: "artifact-unknown-support", resource: { owner: { scope: "local" }, locator: "C:/models/unknown-projector.gguf" }, kind: "unknown", role: "unassigned", selectionStatus: "available", referenceStatus: "available", configuredModelIds: [], vision: { capability: "unknown", module: "unknown" } };
+const mismatched = { id: "artifact-mismatched", resource: { owner: { scope: "local" }, locator: "C:/models/mismatched.gguf" }, kind: "model", role: "conflict", selectionStatus: "invalid", referenceStatus: "available", configuredModelIds: [], vision: { capability: "unknown", module: "unknown" } };
+const missing = { id: "artifact-missing", resource: { owner: { scope: "local" }, locator: "C:/models/missing.gguf" }, kind: "model", role: "base", selectionStatus: "invalid", referenceStatus: "missing", configuredModelIds: ["configured-1"], vision: { capability: "unknown", module: "unknown" } };
 const build = { id: "build-1", discoveryId: "discovered-build", displayName: "Fixture llama.cpp", resource: { owner: { scope: "local" }, locator: "C:/roots/valid-build" }, server: { owner: { scope: "local" }, locator: "C:/roots/valid-build/llama-server.exe" }, classification: "custom", tools: [{ kind: "server", fileName: "llama-server.exe", path: "C:/roots/valid-build/llama-server.exe", exists: true }], managedInferenceEligibility: "eligible", configuredModelIds: ["configured-1"], validationInProgress: false, staticEvidence: { routerFlags: { status: "candidate" }, warnings: [], assessedAt: "2026-08-28T00:00:00Z" }, functionalEvidence: { state: "eligible", launchAttempted: true, presetAccepted: true, healthVerified: true, modelsVerified: true, catalogBoundaryVerified: true, requiredBehaviorVerified: true, warnings: [], failures: [] } };
 const alternateBuild = { ...build, id: "build-2", discoveryId: "alternate-build", displayName: "Alternate llama.cpp", resource: { owner: { scope: "local" }, locator: "C:/other/alternate-build" }, server: { owner: { scope: "local" }, locator: "C:/other/alternate-build/llama-server.exe" }, configuredModelIds: [] };
 const brokenBuild = { ...build, id: "build-broken", discoveryId: "broken-build", resource: { owner: { scope: "local" }, locator: "C:/roots/broken-build" }, server: { owner: { scope: "local" }, locator: "C:/roots/broken-build/llama-server.exe" }, tools: [] };
@@ -49,7 +49,7 @@ test("Profiles uses configured-model routes and presents the reference editor co
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto("/#profiles");
   await expect(page.getByRole("heading", { name: "Profiles", exact: true, level: 1 })).toBeVisible();
-  await expect(page.getByText("vision · 4K context")).toBeVisible();
+  await expect(page.getByText("Vision · 4K context")).toBeVisible();
   await expect(page.getByLabel("Router alias")).toHaveValue("vision");
   await expect(page.getByLabel("Display name")).toHaveValue("Vision profile");
   await expect(page.locator(".resource-grid select").first()).toHaveValue(artifact.id);
@@ -59,6 +59,8 @@ test("Profiles uses configured-model routes and presents the reference editor co
   await expect(page.locator(".resource-grid select").first()).not.toContainText("mismatched");
   await expect(page.locator(".resource-grid select").first()).not.toContainText("missing");
   await expect(page.getByLabel("Projector / MMProj")).toContainText("mmproj");
+  await expect(page.getByText(/Capability Vision · module Installed/)).toBeVisible();
+  await expect(page.getByLabel("Projector / MMProj")).toContainText("None · no projector");
   await expect(page.getByLabel("llama.cpp Build")).toContainText("valid-build");
   await expect(page.getByLabel("llama.cpp Build")).not.toContainText("broken-build");
   await expect(page.getByText("Unsupported legacy value preserved.")).toBeVisible();

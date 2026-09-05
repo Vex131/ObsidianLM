@@ -321,7 +321,7 @@ The implemented Phase 15 foundation establishes schema-v2 authority and explicit
 
 Run 6 adds production router launch and managed environment use after Run 4 validation and Run 5 preset generation. Run 7 adds model and Build switching. Run 8 integrates read-only GPU/process/log attribution. Run 9 adds the configuration-facing console. Run 10 integrates direct `RouterRuntimeState` into App shell, Runtime, and Dashboard. Static Build evidence/classification remains independent of managed eligibility.
 
-The implemented router integration uses llama.cpp's built-in router/preset capability while preserving ObsidianLM's conservative single-managed-runtime policy. Run 11 remains real-machine/build compatibility and failure-path certification and closure:
+The implemented router integration uses llama.cpp's built-in router/preset capability while preserving ObsidianLM's conservative single-managed-runtime policy. Run 11 real-machine certification is partially evidenced (laptop Track A + home PC Track B with documented residuals); full matrix closure remains open for B3/B11 — see `docs/validation/phase15-run11.md` and personal evidence logs.
 
 ```text
 ObsidianLM

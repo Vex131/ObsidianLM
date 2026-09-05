@@ -25,7 +25,8 @@ export interface ModelArtifactDetailResponse {
 }
 
 export interface ConfiguredModelDetails extends Omit<ConfiguredModel, "projector"> {
-  artifact?: ModelArtifact;
+  /** List-item artifact authority including metadata-derived vision.capability / vision.module. */
+  artifact?: ModelArtifactListItem;
   build?: LlamaCppBuild;
   projector?: ModelArtifact;
   projectorAssociation?: ConfiguredModel["projector"];

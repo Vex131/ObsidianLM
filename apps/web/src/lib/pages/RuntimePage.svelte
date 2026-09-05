@@ -8,6 +8,7 @@
   import { createCompletionAwarePoller, type CompletionAwarePoller } from "../polling";
   import { formatNumber, formatTimestamp, inferLogTone } from "../dashboard/dashboard-format";
   import { configuredModelActionLabel, configuredModelActionMessage, runConfiguredModelAction } from "../components/configured-model-runtime-action";
+  import { visionModeSummary } from "../vision";
 
   export let routerRuntime: RouterRuntimeResponse | null = null;
 
@@ -137,7 +138,7 @@
   }
 
   function modelKind(model: ConfiguredModelDetails) {
-    return model.projector ? `Vision · explicit projector ${model.projector.resource.locator}` : "Text";
+    return visionModeSummary(model.artifact?.vision?.capability, model.projector?.resource.locator);
   }
 
   function logLabel(log: RuntimeLogEntry) {

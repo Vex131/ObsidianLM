@@ -11,7 +11,7 @@
 
 ObsidianLM is **not** primarily a chat app and should not look like LM Studio. It is a focused operator console for starting, stopping, validating, monitoring, and switching local AI runtime configuration safely.
 
-**Architecture status:** the current implementation uses one selected Build and one managed llama.cpp router. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence. App shell, Runtime, and Dashboard read `RouterRuntimeState` directly and do not rely on an active Profile. Run 7 implements same-Build model loading through llama.cpp's management API without a router restart, plus explicit preflight/stop/release/start/load cross-Build replacement on the stable endpoint. Run 8 adds conservative read-only router-child process, GPU, and forwarded-log attribution without child lifecycle authority. Run 9 assigns configuration-facing responsibility as follows: Profiles edits authoritative Configured Models; Models shows Configured Model/Artifact relationships and router-reported model state; Builds owns stable Build readiness, dependencies, and generated artifacts. Run 10 assigns Runtime ownership of managed router lifecycle and the Configured Model drawer, and Dashboard ownership of high-level active Build/loaded-model/resource summary. Profile compatibility actions load only stopped or same-Build targets and never hide a cross-Build restart; cross-Build replacement has no automatic rollback. `/api/profiles` and `activeProfileId` remain compatibility only. Do not claim Phase 15 complete.
+**Architecture status:** the current implementation uses one selected Build and one managed llama.cpp router. `router-runtime-state.json` is current lifecycle authority; `runtime-state.json` is preserved legacy evidence. App shell, Runtime, and Dashboard read `RouterRuntimeState` directly and do not rely on an active Profile. Run 7 implements same-Build model loading through llama.cpp's management API without a router restart, plus explicit preflight/stop/release/start/load cross-Build replacement on the stable endpoint. Run 8 adds conservative read-only router-child process, GPU, and forwarded-log attribution without child lifecycle authority. Run 9 assigns configuration-facing responsibility as follows: Profiles edits authoritative Configured Models; Models shows Configured Model/Artifact relationships and router-reported model state; Builds owns stable Build readiness, dependencies, and generated artifacts. Run 10 assigns Runtime ownership of managed router lifecycle and the Configured Model drawer, and Dashboard ownership of high-level active Build/loaded-model/resource summary. Profile compatibility actions load only stopped or same-Build targets and never hide a cross-Build restart; cross-Build replacement has no automatic rollback. `/api/profiles` and `activeProfileId` remain compatibility only. Phase 15 product foundation (Runs 1–10) is complete; Run 11 full certification remains incomplete pending B3/B11 evidence — see `docs/validation/phase15-run11.md`.
 
 ### Design Direction
 
@@ -657,7 +657,7 @@ Goal: distinguish discovered local model artifacts from configured model presets
 
 Implemented behavior: Models displays GGUF artifacts discovered in configured model folders. Definitive whitelisted GGUF metadata is authoritative for classification; filename heuristics provide fallback or supporting evidence when metadata is inconclusive. Catalog synchronization stores the effective classification evidence. If authoritative metadata conflicts with a configured base-Model or projector role, synchronization retains the stable Artifact identity but marks the role invalid. The selected-artifact inspector performs bounded header/KV inspection without loading tensor data or starting llama.cpp, shows Configured Model relationships and router observation, and can open an unsaved Profiles draft with the artifact preselected.
 
-Discovery IDs remain path-derived and do not survive a move or folder rename. Projector matches are candidates only; Models does not persist model/projector relationships. Configured router models, aliases, presets, and explicit switching are current Phase 15 contracts; switching UI remains Runs 9–10 work.
+Discovery IDs remain path-derived and do not survive a move or folder rename. Projector matches are candidates only; Models does not persist model/projector relationships. Configured router models, aliases, presets, and explicit switching are current Phase 15 contracts (Runs 9–10 UI included).
 
 Current and forward-looking requirements:
 
@@ -833,7 +833,7 @@ Before completing UI work, check:
 
 The dashboard reference in `docs/design/reference/obsidianlm-dashboard.html` supersedes earlier Phase 14 shell dimensions where they conflict. The current priority is to keep the interface aligned with this real operator-console baseline.
 
-Phase 14 is complete. Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System are focused operator-console pages. Existing reference copy that says `profile` or `managed server` may describe legacy compatibility surfaces; current runtime state is Build/router based. Run 10 integration is implemented; Phase 15 remains in progress.
+Phase 14 is complete. Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System are focused operator-console pages. Existing reference copy that says `profile` or `managed server` may describe legacy compatibility surfaces; current runtime state is Build/router based. Runs 9–10 configuration and Runtime/Dashboard integration are implemented. Phase 15 product foundation (Runs 1–10) is complete; Run 11 real-machine certification remains incomplete pending B3/B11 evidence under correct matrix IDs (see `docs/validation/phase15-run11.md`).
 
 ### Approved Reference Screens
 
@@ -1140,7 +1140,7 @@ Must include:
 - Copy visible.
 - Clear visible.
 - Current source distinctions for managed runtime stdout/stderr/system entries, persisted job logs, and bounded service-wrapper files.
-- Router lifecycle and router/child origin metadata are current Phase 15 backend contracts; their UI integration remains Runs 9–10, and remote Node-labelled streams remain Phase 16 work.
+- Router lifecycle and router/child origin metadata are current Phase 15 contracts with Runtime/Dashboard/Logs UI integration from Runs 8–10; remote Node-labelled streams remain Phase 16 work.
 
 ### 16.8 Telemetry / Processes
 

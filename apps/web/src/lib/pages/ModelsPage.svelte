@@ -3,14 +3,15 @@
   import type { ModelArtifactListItem, ModelArtifactListResponse } from "@obsidianlm/shared";
   import PageHeader from "../components/PageHeader.svelte";
   import { API_ENDPOINTS, fetchJson } from "../api";
+  import { visionCapabilityYesNo, visionModuleLabel } from "../vision";
 
   type ArtifactAuthority = ModelArtifactListItem & { vision: { capability: "yes" | "no" | "unknown"; module: "installed" | "not_found" | "not_required" | "unknown" }; role: "base" | "projector" | "conflict" | "unassigned"; selectionStatus: "available" | "invalid" };
   let artifacts: ArtifactAuthority[] = [], selected = "", query = "", message = "";
   const supportName = (artifact: ArtifactAuthority) => /(?:mmproj|projector|adapter|lora|imatrix)/i.test(artifact.resource.locator);
   const primary = (artifact: ArtifactAuthority) => artifact.role !== "conflict" && (artifact.kind === "model" || (artifact.kind === "unknown" && !supportName(artifact)));
   const name = (artifact: ArtifactAuthority) => (artifact.metadata?.displayName ?? artifact.resource.locator.split(/[\\/]/).pop() ?? artifact.id).replace(/\.gguf$/i, "");
-  const visionCapable = (artifact: ArtifactAuthority) => ({ yes: "Yes", no: "No", unknown: "Unknown" }[artifact.vision.capability]);
-  const visionModule = (artifact: ArtifactAuthority) => ({ installed: "Installed", not_found: "Not found", not_required: "Not required", unknown: "Unknown" }[artifact.vision.module]);
+  const visionCapable = (artifact: ArtifactAuthority) => visionCapabilityYesNo(artifact.vision.capability);
+  const visionModule = (artifact: ArtifactAuthority) => visionModuleLabel(artifact.vision.module);
   $: rows = artifacts.filter(primary).filter((artifact) => `${name(artifact)} ${artifact.resource.locator}`.toLowerCase().includes(query.toLowerCase()));
   $: current = rows.find((artifact) => artifact.id === selected) ?? null;
   async function load() {

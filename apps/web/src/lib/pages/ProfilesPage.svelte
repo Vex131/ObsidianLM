@@ -18,6 +18,7 @@
   import ConfiguredModelRuntimeAction from "../components/ConfiguredModelRuntimeAction.svelte";
   import { API_ENDPOINTS, fetchJson } from "../api";
   import { capabilityFor, curatedFields, genericFlags, type CuratedField } from "../profiles/registry";
+  import { visionCapabilityKind, visionModuleLabel } from "../vision";
 
   type ArgValue = string | number | boolean | string[] | undefined;
   type Draft = {
@@ -407,7 +408,7 @@
         {#each filteredModels as model}
           <button class:active={selected?.id === model.id} class="profile-card" type="button" on:click={() => select(model)}>
             <span class="profile-card-top"><span class="profile-name"><i></i><strong>{model.displayName}</strong></span><span class="status-badge">{modelState(model)}</span></span>
-            <span class="profile-meta">{model.projector ? "vision" : "text"} · {formatContext(model.llamaArgs?.ctxSize)}</span>
+            <span class="profile-meta">{visionCapabilityKind(model.artifact?.vision?.capability)} · {formatContext(model.llamaArgs?.ctxSize)}</span>
             <span class="profile-meta">{model.build?.displayName ?? "Missing Build"}</span>
           </button>
         {:else}
@@ -463,7 +464,7 @@
             <div class="config-body resource-grid">
               <label class="field">Model<select bind:value={draft.artifactId}><option value="">Select model</option>{#each primaryArtifacts as artifact}<option value={artifact.id}>{artifactName(artifact)}</option>{/each}</select><small>{selectedArtifact ? artifactName(selectedArtifact) : "No model selected"}</small></label>
               <label class="field">llama.cpp Build<select bind:value={draft.buildId} on:change={() => capabilities(draft.buildId)}><option value="">Select Build</option>{#each availableBuilds as build}<option value={build.id}>{buildLabel(build)}</option>{/each}</select><small>{selectedBuild ? buildLabel(selectedBuild) : "No Build selected"}</small></label>
-              <label class="field">Projector / MMProj<select bind:value={draft.projectorId}><option value="">None · text only</option>{#each projectors as artifact}<option value={artifact.id}>{artifactName(artifact)}</option>{/each}</select><small>{selectedProjector ? `Explicit projector · ${selectedProjector.referenceStatus}` : "Text-only configuration"}</small></label>
+              <label class="field">Projector / MMProj<select bind:value={draft.projectorId}><option value="">None · no projector</option>{#each projectors as artifact}<option value={artifact.id}>{artifactName(artifact)}</option>{/each}</select><small>{selectedArtifact ? `Capability ${visionCapabilityKind(selectedArtifact.vision?.capability)} · module ${visionModuleLabel(selectedArtifact.vision?.module)}` : "Select a model to see vision capability"}{selectedProjector ? ` · explicit projector ${selectedProjector.referenceStatus}` : " · no projector associated"}</small></label>
               <div class="resource-links"><a href="#models">Open Models</a><a href="#builds">Open Builds</a></div>
             </div>
           </section>
