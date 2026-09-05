@@ -8,7 +8,7 @@ This document separates three things that earlier revisions mixed together:
 
 - **Completed foundation/history:** Phases 0-13 are implemented. Their original single-model runtime architecture was valid for those phases.
 - **Completed UI restructure:** Phase 14 provides focused Dashboard, Runtime, Profiles, Models, Builds, Jobs, Logs, Telemetry, Settings, and System pages. Its discovery view reports static router CLI evidence.
-- **Phase 15 foundation:** Builder Run 10 adds Runtime/Dashboard integration to the Build/router lifecycle, model switching, process/GPU/log awareness, and configuration-facing console. Phase 15 product foundation (Runs 1–10) is complete. Run 11 certification is partially evidenced (see `docs/validation/phase15-run11.md`); full Track B matrix closure remains open for B3/B11. Phase 16 MVP implementation plan is in `docs/phase16-mvp-implementation.md` (Controller-only + one Node for status/discovery/router lifecycle); no Phase 16 code is implied by this status line alone.
+- **Phase 15:** Builder Run 10 completed Runtime/Dashboard integration to the Build/router lifecycle, model switching, process/GPU/log awareness, and configuration-facing console. Run 11 real-machine certification is complete, including corrected-ID Home PC evidence for B3 and B11; documented B5 Partial, B6/B8 N/A, and B10 Skip outcomes remain non-blocking under the certification policy. Phase 15 is fully certified. Phase 16 MVP implementation plan is in `docs/phase16-mvp-implementation.md` (Controller-only + one Node for status/discovery/router lifecycle); no Phase 16 code is implied by this status line alone.
 
 The legacy compatibility surface still stores a model-bound launch profile:
 
@@ -520,7 +520,7 @@ Phase 14 remains a UI restructuring phase. It does not implement the router, mig
 
 ## 17. Phase 15 - llama.cpp Router Integration
 
-**Status:** Product foundation complete through Builder Run 10. Run 11 real-machine certification is partially evidenced (Track 0 + Track A complete; Track B residuals and unverified B3/B11 — see `docs/validation/phase15-run11.md`).
+**Status:** Complete. Product foundation is complete through Builder Run 10, and Run 11 real-machine certification is complete. Track B retains documented non-blocking B5 Partial, B6/B8 N/A, and B10 Skip outcomes; B3 and B11 passed under their correct matrix IDs (see `docs/validation/phase15-run11.md`).
 
 ### Goal
 
@@ -550,7 +550,7 @@ Phase 15 abstractions must not bake in unnecessary same-host assumptions. Build 
 7. **Process/GPU/log awareness:** **Implemented in Run 8.** Current children require direct ancestry and exact active-Build executable evidence; alias/port metadata maps only proven children through the launch-time alias map. GPU and forwarded-log attribution reuse that proof. Previous/unknown processes remain read-only and no child control authority was added.
 8. **Profiles/Models/Builds UI:** **Implemented in Run 9.** Profiles edits authoritative Configured Models; Models separates Configured Models from persistent/discovered Artifacts and uses Router Runtime for live model state; Builds separates stable cataloged Builds from discovery and exposes validation, dependencies, preset generation, and launch previews. Same-Build model loading and cross-Build restart actions are explicit.
 9. **Runtime/Dashboard integration:** **Implemented in Run 10.** App shell, Runtime, and Dashboard use `RouterRuntimeState` directly. Runtime owns managed router lifecycle, active router configuration, actual launch command, and Configured Model drawer; Dashboard owns the high-level active Build/loaded-model/resource summary. Run 8 GPU/process/log attribution is integrated read-only. Readiness counts/checks use authoritative Configured Models, stable cataloged Builds, and router-eligible Builds; discovery remains evidence.
-10. **Real-machine certification and closure:** **Partial (Run 11).** Validated official/compatibility GPU builds, same-build switch, cross-build replacement, GPU telemetry attribution, Tailscale client path, ineligible-build refusal, and direct `/v1` access on home PC; Windows service smoke skipped (WinSW absent / B10 Skip, A15 Skip); multimodal N/A (B6); VRAM pressure Partial (B5, small models); SSH tunnel N/A (B8, Tailscale used); **B3 duplicated-GGUF and B11 external-catalog boundary not evidenced under correct matrix IDs**.
+10. **Real-machine certification and closure:** **Complete (Run 11).** Validated official/compatibility GPU builds, same-build switch, cross-build replacement, GPU telemetry attribution, Tailscale client path, ineligible-build refusal, direct `/v1` access, duplicated-GGUF identity across distinct Configured Models/Builds (B3), and the external llama.cpp catalog authority boundary (B11) on the Home PC. Windows service smoke remains skipped (WinSW absent / B10 Skip, A15 Skip); multimodal is N/A (B6); VRAM pressure remains Partial under the accepted small-model exception (B5); SSH tunnel is N/A (B8, Tailscale used).
 
 ### Safety requirements
 
@@ -857,4 +857,4 @@ These remain implementation-time design decisions and are not resolved by this c
 
 ## 22. Next Step
 
-Phase 14 is complete. Phase 15 product foundation is complete through Builder Run 10; Run 11 full certification remains incomplete pending B3/B11 evidence (`docs/validation/phase15-run11.md`). Next: Phase 16 MVP per `docs/phase16-mvp-implementation.md` (Controller-only + one remote Node for status, discovery, and router start/stop/restart).
+Phase 14 is complete. Phase 15 is fully certified: the product foundation is complete through Builder Run 10 and Run 11 real-machine certification is complete (`docs/validation/phase15-run11.md`). Next: Phase 16 MVP per `docs/phase16-mvp-implementation.md` (Controller-only + one remote Node for status, discovery, and router start/stop/restart).

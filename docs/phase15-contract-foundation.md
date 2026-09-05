@@ -1,6 +1,6 @@
 # Phase 15 Contract Foundation
 
-Builder Runs 1-10 add the versioned domain contract, storage, legacy Profile migration, persistent model/build foundations, bounded functional Build validation, the production derived-preset pipeline, Build/router lifecycle integration, explicit model/Build switching, conservative process/GPU/log awareness, the configuration-facing operator console, and direct Runtime/Dashboard integration. Phase 15 product foundation is complete through Run 10. Run 11 real-machine certification is partially evidenced (Track 0 + Track A complete; Track B has documented residuals and unverified B3/B11 under correct matrix IDs) — see `docs/validation/phase15-run11.md`.
+Builder Runs 1-10 add the versioned domain contract, storage, legacy Profile migration, persistent model/build foundations, bounded functional Build validation, the production derived-preset pipeline, Build/router lifecycle integration, explicit model/Build switching, conservative process/GPU/log awareness, the configuration-facing operator console, and direct Runtime/Dashboard integration. Phase 15 product foundation is complete through Run 10, and Run 11 real-machine certification is complete. Track B retains documented non-blocking B5 Partial, B6/B8 N/A, and B10 Skip outcomes; B3 and B11 passed under their correct matrix IDs — see `docs/validation/phase15-run11.md`.
 
 ## Terms and authority
 

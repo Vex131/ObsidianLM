@@ -2,7 +2,7 @@
 
 Run 11 validates Build/router lifecycle, model and Build switching, process/GPU/log awareness, and deployment behavior on real hardware. Automated tests cover contracts; this checklist covers what only real machines can prove.
 
-**Run 11 status (2026-09-05, ID-reconciled 2026-09-05):** Track 0 green. Track A complete with A13 Defer, A7 N/A, A15 Skip. Track B remapped from personal evidence (`notes/run11-evidence.md`, gitignored): B1/B2/B4/B7/B9 Pass; **B5 Partial** (small-model `models-max=1` only — full VRAM pressure not exercised); **B6 N/A** (no mmproj); **B8 N/A** (SSH tunnel not exercised; Tailscale B7 certified instead); **B10 Skip** (WinSW absent); **B3 and B11 not recorded under correct matrix IDs** — do not treat as Pass. Personal evidence originally used shifted B-check numbers; this summary uses the matrix definitions below.
+**Run 11 status (2026-09-05, ID-reconciled and completed 2026-09-05):** Track 0 green. Track A complete with A13 Defer, A7 N/A, A15 Skip. Track B remapped from personal evidence (`notes/run11-evidence.md`, gitignored): B1/B2/B3/B4/B7/B9/B11 Pass; **B5 Partial** (small-model `models-max=1` only — full VRAM pressure not exercised); **B6 N/A** (no mmproj); **B8 N/A** (SSH tunnel not exercised; Tailscale B7 certified instead); **B10 Skip** (WinSW absent). B3 and B11 were certified under their correct matrix IDs on the Home PC against the real configured Models and Builds roots. Personal evidence originally used shifted B-check numbers; this summary uses the matrix definitions below.
 
 For page-level smoke without re-running full certification, see [local-real-smoke.md](./local-real-smoke.md).
 
@@ -107,11 +107,11 @@ Personal evidence originally labeled some Track B rows with shifted IDs. Content
 | B6 (Tailscale UI/v1) | **B7** | Pass |
 | B7 (ineligible build refused) | **B9** | Pass |
 | B8 (WinSW absent) | **B10** | Skip |
-| — | **B3** | Not recorded under correct ID |
+| B3 (duplicated GGUF configs, corrected-ID certification) | **B3** | Pass |
 | — | **B8** | Not exercised (Tailscale used); treated as N/A |
-| — | **B11** | Not recorded under correct ID |
+| B11 (external catalog boundary, corrected-ID certification) | **B11** | Pass |
 
-Do not upgrade Partial/N/A/Skip/unrecorded checks to Pass.
+Do not upgrade Partial/N/A/Skip checks to Pass.
 
 ## Closure gate
 
@@ -127,9 +127,9 @@ Phase 15 **Run 11 certification** is complete when:
 
 **Non-blocking exception (B5):** Partial is accepted for B5 when `models-max=1` same-build unload/switch is observed on small models but realistic multi-GB VRAM pressure is not exercised. This does **not** authorize renaming Partial to Pass.
 
-**Current certification outcome:** Track 0 + Track A satisfy the gate. Track B does **not** yet satisfy a full Pass/N/A/Skip matrix because **B3** and **B11** lack evidence under correct IDs. Documented residuals that are allowed by policy: B5 Partial (exception above), B6 N/A, B8 N/A, B10 Skip. Therefore **Run 11 full certification remains incomplete**; Phase 15 product foundation remains complete through Run 10 with Run 11 partially evidenced.
+**Current certification outcome (2026-09-05):** Track 0, Track A, and Track B satisfy the gate. Home PC evidence records B3 Pass for one real GGUF Artifact retained across two distinct Configured Model and eligible Build identities, and B11 Pass after a real Build exposed an external hardlinked model through `LLAMA_ARG_MODELS_DIR` while ObsidianLM neither discovered nor persisted it and reconciled only its managed preset catalog. Documented residuals allowed by policy remain B5 Partial (exception above), B6 N/A, B8 N/A, and B10 Skip. **Phase 15 Run 11 full certification is COMPLETE. Phase 15 is fully certified.**
 
-Do **not** mark full Run 11 certification complete from unit/e2e tests alone, and do **not** mark it complete while B3/B11 remain unverified.
+Full Run 11 certification is based on the real-machine evidence log, not unit/e2e tests alone.
 
 ## SSH inventory script (personal)
 
